@@ -1,0 +1,82 @@
+on: 
+  push:
+    branches:
+      - 'client/**'
+  pull_request:
+    branches: 
+      - main
+
+name: Continuous integration
+
+jobs:
+  check-client:
+    name: Check client
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      - uses: actions-rs/toolchain@v1
+        with:
+          profile: minimal
+          toolchain: stable
+          override: true
+          args: --manifest-path client/Cargo.toml
+
+      - uses: actions-rs/cargo@v1
+        with:
+          command: check
+          args: --manifest-path client/Cargo.toml
+
+
+  test-client:
+    name: Test Suite client
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      - uses: actions-rs/toolchain@v1
+        with:
+          profile: minimal
+          toolchain: stable
+          override: true
+          args: --manifest-path client/Cargo.toml
+          
+      - uses: actions-rs/cargo@v1
+        with:
+          command: test
+          args: --manifest-path client/Cargo.toml
+
+
+  fmt-client:
+    name: Rustfmt client
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      - uses: actions-rs/toolchain@v1
+        with:
+          profile: minimal
+          toolchain: stable
+          override: true
+          args: --manifest-path client/Cargo.toml
+
+      - run: rustup component add rustfmt
+      - uses: actions-rs/cargo@v1
+        with:
+          command: fmt
+          args: --manifest-path client/Cargo.toml --all -- --check 
+
+  clippy-client:
+    name: Clippy client
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      - uses: actions-rs/toolchain@v1
+        with:
+          profile: minimal
+          toolchain: stable
+          override: true
+          args: --manifest-path client/Cargo.toml
+
+      - run: rustup component add clippy
+      - uses: actions-rs/cargo@v1
+        with:
+          command: clippy
+          args: --manifest-path client/Cargo.toml -- -D warnings 
