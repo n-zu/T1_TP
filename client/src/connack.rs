@@ -1,3 +1,4 @@
+#![allow(unused)]
 use std::io::Read;
 use std::result::Result;
 
@@ -111,7 +112,20 @@ mod tests {
 
     #[test]
     fn test_should_raise_wrong_encoding_error_at_first_byte() {
-        let v: Vec<u8> = vec![145, 3];
+        let v: Vec<u8> = vec![145];
+        let mut stream = Cursor::new(v);
+        let result = Connack::read_from(&mut stream).unwrap_err();
+        assert_eq!(
+            result,
+            ConnackError::WrongEncoding(
+                "First byte doesn't follow MQTT 3.1.1 protocol".to_string()
+            )
+        );
+    }
+
+    #[test]
+    fn test_should_raise_wrong_encoding_error_at_empty_reading() {
+        let v: Vec<u8> = vec![];
         let mut stream = Cursor::new(v);
         let result = Connack::read_from(&mut stream).unwrap_err();
         assert_eq!(
