@@ -231,5 +231,5 @@ mod tests {
         };
         assert_eq!(result, connack_expected);
         Ok(())
-    }
+
 }

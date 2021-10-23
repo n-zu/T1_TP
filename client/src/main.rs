@@ -1,13 +1,17 @@
+use client::Client;
+
+use crate::connect::Connect;
+mod client;
+
+mod connect;
+
 mod connack;
 
-fn main() {
-    println!("Hello, world!");
-}
+fn main() -> Result<(), String> {
+    let mut client = Client::new("localhost:80").map_err(|err| -> String { err.to_string() })?;
 
-#[cfg(test)]
-mod tests {
-    #[test]
-    fn test_sample_client() {
-        assert_eq!(1, 1)
-    }
+    client.connect(Connect::new())?;
+
+    println!("Conexion exitosa");
+    Ok(())
 }
