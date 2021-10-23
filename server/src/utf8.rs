@@ -13,31 +13,26 @@ impl Field {
 
     pub fn new_from_stream<T: Read>(stream: &mut T) -> Option<Self> {
         let mut buf: [u8; 2] = [0; 2];
-        stream.read_exact(&mut buf).unwrap();
-        let mut buf_u32: [u8; 8] = [0; 8];
-        buf_u32[6] = buf[0];
-        buf_u32[7] = buf[1];
+        stream.read_exact(&mut buf).ok()?;
 
-        let size = usize::from_be_bytes(buf_u32);
+        let size = u16::from_be_bytes(buf) as usize;
         let mut buf_string = vec![0; size];
         if stream.read_exact(&mut buf_string).is_err() {
             return None;
         }
-        let value = std::str::from_utf8(&buf_string).unwrap();
+        
+        let value = std::str::from_utf8(&buf_string).ok()?;
         Some(Self {
             value: value.to_owned(),
         })
     }
 
     pub fn encode(&self) -> Vec<u8> {
-        let mut bytes = Vec::new();
-        let len_bytes = self.value.len().to_be_bytes();
-        for i in len_bytes.len() - 2..len_bytes.len() {
-            bytes.push(len_bytes[i]);
-        }
+        let mut bytes = Vec::from(self.value.len().to_be_bytes());
+        bytes.drain(0..bytes.len() - 2);
 
         for byte in self.value.as_bytes() {
-            println!("{}", byte);
+            //println!("{}", byte);
             bytes.push(*byte);
         }
         bytes

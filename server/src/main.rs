@@ -27,14 +27,14 @@ struct Client {
 
 impl Read for Client {
     fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
-        return self.stream.read(buf);
+        self.stream.read(buf)
     }
 }
 
 impl Client {
     fn new(stream: TcpStream) -> Client {
         Client {
-            stream: stream,
+            stream,
             connected: false,
         }
     }
@@ -78,8 +78,9 @@ fn handle_packet(headers: [u8; 2], client: &mut Client) {
             match connect::Connect::new(headers, client) {
                 Ok(packet) => {
                     let _rta = packet.response();
-                }, Err(_err) => {
-                    //errror
+                }
+                Err(_err) => {
+                    //error
                 }
             }
         }
@@ -135,7 +136,7 @@ fn start_server(listener: TcpListener) {
 
     wait_for_packets(stop, receiver);
     if let Err(_err) = handler.join() {
-        //blabla
+        // error
     }
 }
 
@@ -154,7 +155,6 @@ fn main() {
         }
         None => {
             println!("Error cargando configuración de {}", args[1]);
-            return;
         }
     }
 }
