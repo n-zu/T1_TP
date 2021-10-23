@@ -1,5 +1,5 @@
 use std::{
-    io::{self, Read, Write},
+    io::{self, Write},
     net::TcpStream,
 };
 
@@ -22,12 +22,14 @@ impl Client {
             .write_all(&connect.encode())
             .map_err(|err| -> String { err.to_string() })?;
 
-        let mut buf = [0; 2];
-        self.stream
-            .read_exact(&mut buf)
-            .map_err(|err| -> String { err.to_string() })?;
-
-        Connack::new(buf, &mut self.stream)?;
+        match Connack::read_from(&mut self.stream) {
+            Ok(connack_packet) => {
+                println!("Llego bien el connack packet, {:?}", connack_packet);
+            }
+            Err(err) => {
+                println!("Error: {:?}", err);
+            }
+        }
 
         Ok(())
     }
