@@ -36,17 +36,36 @@ impl Connack {
     /// Si el return_code no es 0, entonces se devuelve un ConnackError especifico correspondiente
     /// al estandar de MQTT
     pub fn read_from(stream: &mut impl Read) -> Result<Connack, ConnackError> {
-        let mut buffer = [0u8; 1];
+        let buffer = [0u8; 1];
+        Connack::verify_first_byte_control_packet(buffer, stream)?;
+        Connack::verify_remaining_length(buffer, stream)?;
+        let session_present = Connack::verify_session_present_flag(buffer, stream)?;
+        let return_code = Connack::verify_return_code(buffer, stream)?;
+        Ok(Self {
+            return_code,
+            session_present,
+        })
+    }
 
-        // first byte packet control type
+    fn verify_first_byte_control_packet(
+        mut buffer: [u8; 1],
+        stream: &mut impl Read,
+    ) -> Result<(), ConnackError> {
         stream.read_exact(&mut buffer);
         let first_byte_control_packet_type = u8::from_be_bytes(buffer);
         if first_byte_control_packet_type != CONNACK_FIXED_FIRST_BYTE {
-            return Err(ConnackError::WrongEncoding(
+            Err(ConnackError::WrongEncoding(
                 "First byte doesn't follow MQTT 3.1.1 protocol".to_string(),
-            ));
+            ))
+        } else {
+            Ok(())
         }
-        // remaining length
+    }
+
+    fn verify_remaining_length(
+        mut buffer: [u8; 1],
+        stream: &mut impl Read,
+    ) -> Result<(), ConnackError> {
         stream.read_exact(&mut buffer);
         let remaining_length = u8::from_be_bytes(buffer);
         if remaining_length != CONNACK_FIXED_REMAINING_LENGTH {
@@ -54,17 +73,24 @@ impl Connack {
                 "Remaining length doesn't follow MQTT 3.1.1 protocol".to_string(),
             ));
         }
-        // connack flag
+        Ok(())
+    }
+
+    fn verify_session_present_flag(
+        mut buffer: [u8; 1],
+        stream: &mut impl Read,
+    ) -> Result<u8, ConnackError> {
         stream.read_exact(&mut buffer);
         let session_present = u8::from_be_bytes(buffer);
-
         if session_present != 1 && session_present != 0 {
             return Err(ConnackError::WrongEncoding(
                 "Unknown session present flag for MQTT 3.1.1 protocol".to_string(),
             ));
         }
+        Ok(session_present)
+    }
 
-        //connect return code
+    fn verify_return_code(mut buffer: [u8; 1], stream: &mut impl Read) -> Result<u8, ConnackError> {
         stream.read_exact(&mut buffer);
         let return_code = u8::from_be_bytes(buffer);
         match return_code {
@@ -73,10 +99,7 @@ impl Connack {
             CONNACK_SERVER_UNAVAILABLE => Err(ConnackError::ServerUnavailable),
             CONNACK_BAD_USER_NAME_OR_PASSWORD => Err(ConnackError::BadUserNameOrPassword),
             CONNACK_NOT_AUTHORIZED => Err(ConnackError::NotAuthorized),
-            _ => Ok(Self {
-                return_code,
-                session_present,
-            }),
+            _ => Ok(0),
         }
     }
 }
@@ -169,8 +192,8 @@ mod tests {
     }
 
     #[test]
-    fn test_should_return_valid_connack_packet_with_session_present_0() -> Result<(), ConnackError>
-    {
+    fn test_should_return_valid_connack_packet_with_session_present_0_and_return_code_0(
+    ) -> Result<(), ConnackError> {
         let v: Vec<u8> = vec![32, 2, 0, 0];
         let mut stream = Cursor::new(v);
         let result = Connack::read_from(&mut stream)?;
@@ -183,8 +206,8 @@ mod tests {
     }
 
     #[test]
-    fn test_should_return_valid_connack_packet_with_session_present_1() -> Result<(), ConnackError>
-    {
+    fn test_should_return_valid_connack_packet_with_session_present_1_and_return_code_0(
+    ) -> Result<(), ConnackError> {
         let v: Vec<u8> = vec![32, 2, 1, 0];
         let mut stream = Cursor::new(v);
         let result = Connack::read_from(&mut stream)?;
