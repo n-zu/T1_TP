@@ -20,7 +20,7 @@ impl Field {
         if stream.read_exact(&mut buf_string).is_err() {
             return None;
         }
-        
+
         let value = std::str::from_utf8(&buf_string).ok()?;
         Some(Self {
             value: value.to_owned(),

@@ -99,7 +99,6 @@ pub fn read_packet_bytes(
     Ok(Cursor::new(vec))
 }
 
-
 #[cfg(test)]
 mod tests {
     use std::io::Cursor;
@@ -110,7 +109,7 @@ mod tests {
     #[test]
     fn test_decode_short() {
         let fixed_header = [0, 10];
-        let remaining : Vec<u8> = (0u8..10u8).collect();
+        let remaining: Vec<u8> = (0u8..10u8).collect();
 
         let mut stream = Cursor::new(remaining.clone());
         let result = read_packet_bytes(fixed_header, &mut stream);
@@ -122,8 +121,8 @@ mod tests {
     fn test_decode_2_length_bytes() {
         let fixed_header = [0, 0b10000101]; // 5 + continuation bit en primer bit de largo
         let mut vector = vec![1u8]; // 1 en segundo byte de largo
-        // Total: 128 * 1 + 5 = 133
-        let remaining : Vec<u8> = (0u8..133u8).collect(); // 133 bytes
+                                    // Total: 128 * 1 + 5 = 133
+        let remaining: Vec<u8> = (0u8..133u8).collect(); // 133 bytes
         vector.append(&mut remaining.clone());
 
         let mut stream = Cursor::new(vector);
@@ -161,5 +160,4 @@ mod tests {
 
         assert!(result.is_err());
     }
-
 }

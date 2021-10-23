@@ -45,8 +45,8 @@ fn wait_for_connections(
     stop: Arc<AtomicBool>,
     client_sender: Sender<Client>,
 ) {
-    if let Err(_error) = listener.set_nonblocking(true) {
-        //println!("Error configurando socket: {}", error.to_string());
+    if let Err(error) = listener.set_nonblocking(true) {
+        println!("Error configurando socket: {}", error.to_string());
         stop.store(true, atomic::Ordering::Relaxed);
         return;
     }
@@ -56,15 +56,15 @@ fn wait_for_connections(
             Err(error) if error.kind() == io::ErrorKind::WouldBlock => {
                 thread::sleep(SLEEP_DUR);
             }
-            Err(_error) => {
-                //println!("Error aceptando conexión: {}", error.to_string());
+            Err(error) => {
+                println!("Error aceptando conexión: {}", error.to_string());
             }
-            Ok((stream, _addr)) => {
-                //println!("Conectando con {}", addr.to_string());
+            Ok((stream, addr)) => {
+                println!("Conectando con {}", addr.to_string());
                 if let Err(_err) = stream.set_nonblocking(true) {
-                    //error 1
+                    println!("Error estableciendo socket como no bloqueante");
                 } else if let Err(_err) = client_sender.send(Client::new(stream)) {
-                    //error 2
+                    println!("Error enviando cliente");
                 }
             }
         }
@@ -74,16 +74,14 @@ fn wait_for_connections(
 fn handle_packet(headers: [u8; 2], client: &mut Client) {
     let codigo = headers[0] >> 4;
     match codigo {
-        1 => {
-            match connect::Connect::new(headers, client) {
-                Ok(packet) => {
-                    let _rta = packet.response();
-                }
-                Err(_err) => {
-                    //error
-                }
+        1 => match connect::Connect::new(headers, client) {
+            Ok(packet) => {
+                let _rta = packet.response();
             }
-        }
+            Err(err) => {
+                println!("Error parseando Connect packet: {}", err.to_string());
+            }
+        },
         2 => println!("Pendiente implementación"),
         3 => println!("Pendiente implementación"),
         4 => println!("Pendiente implementación"),
@@ -115,8 +113,8 @@ fn wait_for_packets(stop: Arc<AtomicBool>, receiver: Receiver<Client>) {
                 Err(error) if error.kind() == io::ErrorKind::WouldBlock => {
                     continue;
                 }
-                Err(_err) => {
-                    //error
+                Err(err) => {
+                    println!("Error recibiendo bytes de stream: {}", err.to_string());
                 }
             }
         }
@@ -136,7 +134,7 @@ fn start_server(listener: TcpListener) {
 
     wait_for_packets(stop, receiver);
     if let Err(_err) = handler.join() {
-        // error
+        println!("Error uniendo threads")
     }
 }
 

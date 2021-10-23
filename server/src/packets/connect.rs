@@ -170,7 +170,7 @@ impl Connect {
         ret.get_clientid(&mut bytes)?;
         ret.get_will_data(&mut bytes)?;
         ret.get_auth(&mut bytes)?;
-        
+
         let mut buf = [0u8; 1];
         match bytes.read(&mut buf) {
             Ok(1) | Err(_) => {
@@ -179,7 +179,7 @@ impl Connect {
             }
             Ok(_) => (), // No sobro, perfecto
         }
-        
+
         Ok(ret)
     }
 
@@ -223,11 +223,9 @@ mod tests {
 
     use super::utf8::Field;
     use super::ErrorKind;
-    use crate::{
-        connect::{
-            Connect, CLEAN_SESSION, PASSWORD_FLAG, RESERVED, USERNAME_FLAG, WILL_FLAG, WILL_QOS_0,
-            WILL_QOS_1, WILL_RETAIN,
-        }
+    use crate::connect::{
+        Connect, CLEAN_SESSION, PASSWORD_FLAG, RESERVED, USERNAME_FLAG, WILL_FLAG, WILL_QOS_0,
+        WILL_QOS_1, WILL_RETAIN,
     };
     use std::io::Cursor;
 
