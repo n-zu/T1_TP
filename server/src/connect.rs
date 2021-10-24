@@ -1,13 +1,11 @@
 use std::io::Read;
 
-use self::packet_reader::{ErrorKind, PacketError};
-mod packet_reader;
-#[path = "../utf8.rs"]
-mod utf8;
-use crate::{
-    connack::{Connack, CONNACK_CONNECTION_ACCEPTED},
-    connect::utf8::Field,
+use packets::{
+    packet_reader::{self, ErrorKind, PacketError},
+    utf8::Field,
 };
+
+use crate::connack::{Connack, CONNACK_CONNECTION_ACCEPTED};
 
 /*
 const MAX_PAYLOAD_FIELD_LEN: usize = 65535;
@@ -238,8 +236,8 @@ impl Connect {
 #[cfg(test)]
 mod tests {
 
-    use super::utf8::Field;
     use super::ErrorKind;
+    use super::Field;
     use crate::connect::{
         Connect, CLEAN_SESSION, PASSWORD_FLAG, RESERVED, USERNAME_FLAG, WILL_FLAG, WILL_QOS_0,
         WILL_QOS_1, WILL_RETAIN,

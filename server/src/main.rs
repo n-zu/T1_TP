@@ -13,12 +13,9 @@ use std::{
 
 #[allow(dead_code)]
 mod config;
-#[allow(dead_code)]
-#[path = "packets/connect.rs"]
-mod connect;
-
-#[path = "packets/connack.rs"]
 mod connack;
+#[allow(dead_code)]
+mod connect;
 
 const SLEEP_DUR: Duration = Duration::from_secs(2);
 

@@ -1,6 +1,6 @@
 use std::io::Read;
 
-pub(crate) struct Field {
+pub struct Field {
     pub value: String,
 }
 
@@ -43,7 +43,7 @@ impl Field {
 mod tests {
     use std::io::Cursor;
 
-    use crate::connect::utf8::Field;
+    use super::Field;
 
     #[test]
     fn test_decode() {

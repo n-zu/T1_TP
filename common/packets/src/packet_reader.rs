@@ -22,6 +22,12 @@ pub struct PacketError {
     kind: ErrorKind,
 }
 
+impl Default for PacketError {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 const DEFAULT_MSG: &str = "Invalid packet encoding";
 
 impl PacketError {
