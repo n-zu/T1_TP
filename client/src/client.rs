@@ -18,7 +18,7 @@ impl Client {
 
     pub fn connect(&mut self, connect: Connect) -> Result<(), PacketError> {
         self.stream.write_all(&connect.encode())?;
-
+        println!("Mandando connect");
         match Connack::read_from(&mut self.stream) {
             Ok(connack_packet) => {
                 println!("Llego bien el connack packet, {:?}", connack_packet);

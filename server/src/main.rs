@@ -1,6 +1,6 @@
 use std::{
     env,
-    io::{self, Read},
+    io::{self, Read, Write},
     net::{TcpListener, TcpStream},
     sync::{
         atomic::{self, AtomicBool},
@@ -28,6 +28,16 @@ struct Client {
 impl Read for Client {
     fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
         self.stream.read(buf)
+    }
+}
+
+impl Write for Client {
+    fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
+        self.stream.write(buf)
+    }
+
+    fn flush(&mut self) -> io::Result<()> {
+        self.stream.flush()
     }
 }
 
@@ -72,11 +82,14 @@ fn wait_for_connections(
 }
 #[allow(dead_code)]
 fn handle_packet(headers: [u8; 2], client: &mut Client) {
+    println!("ASD");
     let codigo = headers[0] >> 4;
     match codigo {
         1 => match connect::Connect::new(headers, client) {
             Ok(packet) => {
-                let _rta = packet.response().encode();
+                let rta = packet.response().encode();
+                client.write_all(&rta).unwrap();
+                println!("mandadao CONNACK con {}", packet.client_id());
             }
             Err(err) => {
                 println!("Error parseando Connect packet: {}", err.to_string());
@@ -103,18 +116,29 @@ fn wait_for_packets(stop: Arc<AtomicBool>, receiver: Receiver<Client>) {
     let mut clients = Vec::new();
     while !stop.load(atomic::Ordering::Relaxed) {
         while let Ok(client) = receiver.try_recv() {
+            println!("Agregado cliente");
             clients.push(client);
         }
 
         for client in clients.iter_mut() {
             let mut buf = [0u8, 2];
             match client.read_exact(&mut buf) {
-                Ok(_size) => {}
+                Ok(_size) => {
+                    handle_packet(buf, client);
+                }
                 Err(error) if error.kind() == io::ErrorKind::WouldBlock => {
                     continue;
                 }
+                Err(error) if error.kind() == io::ErrorKind::UnexpectedEof => {
+                    println!("Cliente se desconecto sin avisar");
+                }
+
                 Err(err) => {
-                    println!("Error recibiendo bytes de stream: {}", err.to_string());
+                    println!(
+                        "Error recibiendo bytes de stream: {}\n Kind: {:?}",
+                        err.to_string(),
+                        err.kind()
+                    );
                 }
             }
         }
@@ -154,13 +178,5 @@ fn main() {
         None => {
             println!("Error cargando configuración de {}", args[1]);
         }
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    #[test]
-    fn test_sample_server() {
-        assert_eq!(1, 1)
     }
 }
