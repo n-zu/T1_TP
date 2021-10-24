@@ -248,11 +248,11 @@ mod tests {
 
     #[test]
     fn test_keep_alive() {
-        let mut v = Field::new_from_string("MQTT").encode();
+        let mut v = Field::new_from_string("MQTT").unwrap().encode();
         v.push(4u8); // Nivel
         v.push(0u8); //Flags
         v.append(&mut vec![16u8, 60u8]); //Keep alive
-        v.append(&mut Field::new_from_string("id").encode());
+        v.append(&mut Field::new_from_string("id").unwrap().encode());
 
         let headers = [HEADER_1, v.len() as u8];
         let mut bytes = Cursor::new(v);
@@ -265,11 +265,11 @@ mod tests {
 
     #[test]
     fn test_invalid_protocol() {
-        let mut v = Field::new_from_string("Not MQTT").encode();
+        let mut v = Field::new_from_string("Not MQTT").unwrap().encode();
         v.push(4u8); // Nivel
         v.push(0u8); //Flags
         v.append(&mut vec![0u8, 60u8]); //Keep alive
-        v.append(&mut Field::new_from_string("id").encode());
+        v.append(&mut Field::new_from_string("id").unwrap().encode());
 
         let headers = [HEADER_1, v.len() as u8];
         let mut bytes = Cursor::new(v);
@@ -282,11 +282,11 @@ mod tests {
 
     #[test]
     fn test_invalid_protocol_level() {
-        let mut v = Field::new_from_string("MQTT").encode();
+        let mut v = Field::new_from_string("MQTT").unwrap().encode();
         v.push(7u8); // Nivel
         v.push(0u8); //Flags
         v.append(&mut vec![0u8, 60u8]); //Keep alive
-        v.append(&mut Field::new_from_string("id").encode());
+        v.append(&mut Field::new_from_string("id").unwrap().encode());
 
         let headers = [HEADER_1, v.len() as u8];
         let mut bytes = Cursor::new(v);
@@ -299,11 +299,11 @@ mod tests {
 
     #[test]
     fn test_invalid_reserved_flag() {
-        let mut v = Field::new_from_string("MQTT").encode();
+        let mut v = Field::new_from_string("MQTT").unwrap().encode();
         v.push(4u8); // Nivel
         v.push(RESERVED); //Flags
         v.append(&mut vec![0u8, 60u8]); //Keep alive
-        v.append(&mut Field::new_from_string("id").encode());
+        v.append(&mut Field::new_from_string("id").unwrap().encode());
 
         let headers = [HEADER_1, v.len() as u8];
         let mut bytes = Cursor::new(v);
@@ -316,10 +316,10 @@ mod tests {
 
     #[test]
     fn test_will_flag_0_topic_message_1() {
-        let mut v = Field::new_from_string("MQTT").encode();
+        let mut v = Field::new_from_string("MQTT").unwrap().encode();
         v.push(4u8); // Nivel
         v.push(WILL_QOS_0 | WILL_QOS_1 | WILL_RETAIN); //Flags
-        v.append(&mut Field::new_from_string("id").encode());
+        v.append(&mut Field::new_from_string("id").unwrap().encode());
         v.append(&mut vec![0u8, 60u8]); //Keep alive
 
         let headers = [HEADER_1, v.len() as u8];
@@ -333,11 +333,11 @@ mod tests {
 
     #[test]
     fn test_username_missing_but_needed() {
-        let mut v = Field::new_from_string("MQTT").encode();
+        let mut v = Field::new_from_string("MQTT").unwrap().encode();
         v.push(4u8); // Nivel
         v.push(USERNAME_FLAG); //Flags
         v.append(&mut vec![0u8, 60u8]); //Keep alive
-        v.append(&mut Field::new_from_string("id").encode());
+        v.append(&mut Field::new_from_string("id").unwrap().encode());
 
         let headers = [HEADER_1, v.len() as u8];
         let mut bytes = Cursor::new(v);
@@ -347,12 +347,12 @@ mod tests {
 
     #[test]
     fn test_username_present_but_shouldnt() {
-        let mut v = Field::new_from_string("MQTT").encode();
+        let mut v = Field::new_from_string("MQTT").unwrap().encode();
         v.push(4u8); // Nivel
         v.push(0); //Flags
         v.append(&mut vec![0u8, 60u8]); //Keep alive
-        v.append(&mut Field::new_from_string("id").encode());
-        v.append(&mut Field::new_from_string("unNombre").encode());
+        v.append(&mut Field::new_from_string("id").unwrap().encode());
+        v.append(&mut Field::new_from_string("unNombre").unwrap().encode());
 
         let headers = [HEADER_1, v.len() as u8];
         let mut bytes = Cursor::new(v);
@@ -362,11 +362,11 @@ mod tests {
 
     #[test]
     fn test_connect_clean_session() {
-        let mut v = Field::new_from_string("MQTT").encode();
+        let mut v = Field::new_from_string("MQTT").unwrap().encode();
         v.push(4u8); // Nivel
         v.push(CLEAN_SESSION); //Flags
         v.append(&mut vec![0u8, 60u8]); //Keep alive
-        v.append(&mut Field::new_from_string("id").encode());
+        v.append(&mut Field::new_from_string("id").unwrap().encode());
 
         let headers = [HEADER_1, v.len() as u8];
         let mut bytes = Cursor::new(v);
@@ -376,13 +376,13 @@ mod tests {
 
     #[test]
     fn test_will_flag() {
-        let mut v = Field::new_from_string("MQTT").encode();
+        let mut v = Field::new_from_string("MQTT").unwrap().encode();
         v.push(4u8); // Nivel
         v.push(WILL_FLAG | WILL_RETAIN); //Flags
         v.append(&mut vec![0u8, 60u8]); //Keep alive
-        v.append(&mut Field::new_from_string("id").encode());
-        v.append(&mut Field::new_from_string("soyUnTopic").encode());
-        v.append(&mut Field::new_from_string("soyUnMensaje").encode());
+        v.append(&mut Field::new_from_string("id").unwrap().encode());
+        v.append(&mut Field::new_from_string("soyUnTopic").unwrap().encode());
+        v.append(&mut Field::new_from_string("soyUnMensaje").unwrap().encode());
 
         let headers = [HEADER_1, v.len() as u8];
         let mut bytes = Cursor::new(v);
@@ -396,15 +396,15 @@ mod tests {
 
     #[test]
     fn test_will_flag_username_password() {
-        let mut v = Field::new_from_string("MQTT").encode();
+        let mut v = Field::new_from_string("MQTT").unwrap().encode();
         v.push(4u8); // Nivel
         v.push(WILL_FLAG | WILL_RETAIN | USERNAME_FLAG | PASSWORD_FLAG); //Flags
         v.append(&mut vec![0u8, 60u8]); //Keep alive
-        v.append(&mut Field::new_from_string("id").encode());
-        v.append(&mut Field::new_from_string("soyUnTopic").encode());
-        v.append(&mut Field::new_from_string("soyUnMensaje").encode());
-        v.append(&mut Field::new_from_string("siAlguienLeeEstoFelicitaciones").encode());
-        v.append(&mut Field::new_from_string("contraseñaSuperSecreta").encode());
+        v.append(&mut Field::new_from_string("id").unwrap().encode());
+        v.append(&mut Field::new_from_string("soyUnTopic").unwrap().encode());
+        v.append(&mut Field::new_from_string("soyUnMensaje").unwrap().encode());
+        v.append(&mut Field::new_from_string("siAlguienLeeEstoFelicitaciones").unwrap().encode());
+        v.append(&mut Field::new_from_string("contraseñaSuperSecreta").unwrap().encode());
 
         let headers = [HEADER_1, v.len() as u8];
         let mut bytes = Cursor::new(v);

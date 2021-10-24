@@ -75,6 +75,12 @@ impl From<io::Error> for PacketError {
     }
 }
 
+impl From<PacketError> for String {
+    fn from(error: PacketError) -> Self {
+        error.to_string()
+    }
+}
+
 fn get_remaining(stream: &mut impl Read, byte: u8) -> Result<usize, PacketError> {
     let mut i: u8 = 1;
     let mut buf = [byte];

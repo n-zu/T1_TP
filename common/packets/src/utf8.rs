@@ -1,14 +1,21 @@
 use std::io::Read;
 
+const MAX_FIELD_LEN: usize = 665535;
+
+use crate::packet_reader::PacketError;
+
 pub struct Field {
     pub value: String,
 }
 
 impl Field {
-    pub fn new_from_string(value: &str) -> Self {
-        Self {
-            value: value.to_owned(),
+    pub fn new_from_string(value: &str) -> Result<Self, PacketError> {
+        if value.len() > MAX_FIELD_LEN {
+            return Err(PacketError::new_msg("Largo del paquete excedido"));
         }
+        Ok(Self {
+            value: value.to_owned(),
+        })
     }
 
     pub fn new_from_stream<T: Read>(stream: &mut T) -> Option<Self> {
