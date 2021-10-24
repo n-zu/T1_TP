@@ -1,3 +1,5 @@
+all: fmt test clippy
+
 fmt:
 	(cd client; cargo fmt)
 	(cd server; cargo fmt)
