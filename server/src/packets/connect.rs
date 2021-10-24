@@ -4,7 +4,10 @@ use self::packet_reader::{ErrorKind, PacketError};
 mod packet_reader;
 #[path = "../utf8.rs"]
 mod utf8;
-use crate::connect::utf8::Field;
+use crate::{
+    connack::{Connack, CONNACK_CONNECTION_ACCEPTED},
+    connect::utf8::Field,
+};
 
 /*
 const MAX_PAYLOAD_FIELD_LEN: usize = 65535;
@@ -45,6 +48,8 @@ pub struct Connect {
     password: Option<String>,
     last_will: Option<LastWill>,
     keep_alive: u16,
+
+    response: Connack,
 }
 
 const PROTOCOL_LEVEL: u8 = 4;
@@ -122,6 +127,18 @@ impl Connect {
             },
             last_will: Connect::get_will(buf)?,
             keep_alive: 0,
+            response: Connack::new(
+                if buf[0] & CLEAN_SESSION == 0
+                // & server has persistant session
+                {
+                    1
+                } else {
+                    0
+                }, // TODO - When handling persistant sessions
+                // If the Server accepts a connection with CleanSession set to 0,
+                // the value set in Session Present depends on whether the Server already has stored Session state for the supplied client ID
+                CONNACK_CONNECTION_ACCEPTED,
+            ),
         })
     }
 
@@ -183,8 +200,8 @@ impl Connect {
         Ok(ret)
     }
 
-    pub fn response(&self) {
-        //TODO
+    pub fn response(&self) -> &Connack {
+        &self.response
     }
 
     /// Get a reference to the connect's client id.

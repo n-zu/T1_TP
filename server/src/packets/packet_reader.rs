@@ -104,7 +104,6 @@ mod tests {
     use std::io::Cursor;
 
     use super::read_packet_bytes;
-    use std::io::repeat;
 
     #[test]
     fn test_decode_short() {

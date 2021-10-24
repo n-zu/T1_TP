@@ -17,6 +17,9 @@ mod config;
 #[path = "packets/connect.rs"]
 mod connect;
 
+#[path = "packets/connack.rs"]
+mod connack;
+
 const SLEEP_DUR: Duration = Duration::from_secs(2);
 
 #[allow(dead_code)]
@@ -76,7 +79,7 @@ fn handle_packet(headers: [u8; 2], client: &mut Client) {
     match codigo {
         1 => match connect::Connect::new(headers, client) {
             Ok(packet) => {
-                let _rta = packet.response();
+                let _rta = packet.response().encode();
             }
             Err(err) => {
                 println!("Error parseando Connect packet: {}", err.to_string());
