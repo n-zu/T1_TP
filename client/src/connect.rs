@@ -1,13 +1,9 @@
 #![allow(dead_code)]
 
+use std::io::Read;
 
-use std::{
-    io::{Read},
-};
-
-use packets::utf8::Field;
 use packets::packet_reader::PacketError;
-
+use packets::utf8::Field;
 
 const ENCODED_LEN_MAX_BYTES: usize = 4;
 
@@ -150,12 +146,17 @@ impl Connect {
 }
 
 impl LastWill {
-    fn new(retain: bool, qos: QoSLevel, topic: &str, message: &str) -> Result<LastWill, PacketError> {
+    fn new(
+        retain: bool,
+        qos: QoSLevel,
+        topic: &str,
+        message: &str,
+    ) -> Result<LastWill, PacketError> {
         Ok(Self {
             retain,
             qos,
             topic: Field::new_from_string(topic)?,
-            message: Field::new_from_string(message)?
+            message: Field::new_from_string(message)?,
         })
     }
 }
@@ -200,7 +201,7 @@ impl ConnectBuilder {
                 "Se intento crear un paquete con user_name pero sin password",
             ));
         }
-        
+
         Ok(self.connect)
     }
 }
@@ -229,8 +230,6 @@ fn get_remaining(stream: &mut impl Read, byte: u8) -> Result<usize, PacketError>
 
 #[cfg(test)]
 mod tests {
-    use crate::connect::{LastWill, QoSLevel};
-
     use super::ConnectBuilder;
 
     #[test]
@@ -283,23 +282,7 @@ mod tests {
             .unwrap();
         assert_eq!(
             packet.encode(),
-            [16, 16, 0, 4, 77, 81, 84, 84, 4, 0, 0, 13, 0, 4, 114, 117, 115, 116]
-        )
-    }
-
-    #[test]
-    fn test_last_will() {
-        let packet = ConnectBuilder::new("rust", 25, false)
-            .unwrap()
-            .last_will(LastWill::new(true, QoSLevel::QoSLevel1, "Topic", "Message").unwrap())
-            .build()
-            .unwrap();
-        assert_eq!(
-            packet.encode(),
-            [
-                16, 32, 0, 4, 77, 81, 84, 84, 4, 44, 0, 13, 0, 4, 114, 117, 115, 116,
-                0, 5, 84, 111, 112, 105, 99, 0, 7, 77, 101, 115, 115, 97, 103, 101
-            ]
+            [16, 16, 0, 4, 77, 81, 84, 84, 4, 0, 0, 25, 0, 4, 114, 117, 115, 116]
         )
     }
 }

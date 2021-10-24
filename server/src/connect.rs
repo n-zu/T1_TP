@@ -403,8 +403,16 @@ mod tests {
         v.append(&mut Field::new_from_string("id").unwrap().encode());
         v.append(&mut Field::new_from_string("soyUnTopic").unwrap().encode());
         v.append(&mut Field::new_from_string("soyUnMensaje").unwrap().encode());
-        v.append(&mut Field::new_from_string("siAlguienLeeEstoFelicitaciones").unwrap().encode());
-        v.append(&mut Field::new_from_string("contraseñaSuperSecreta").unwrap().encode());
+        v.append(
+            &mut Field::new_from_string("siAlguienLeeEstoFelicitaciones")
+                .unwrap()
+                .encode(),
+        );
+        v.append(
+            &mut Field::new_from_string("contraseñaSuperSecreta")
+                .unwrap()
+                .encode(),
+        );
 
         let headers = [HEADER_1, v.len() as u8];
         let mut bytes = Cursor::new(v);

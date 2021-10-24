@@ -64,7 +64,7 @@ mod tests {
     fn test_encode() {
         let bytes: [u8; 11] = [0, 9, 116, 101, 115, 116, 32, 48, 49, 50, 51];
         let msg = "test 0123";
-        let field = Field::new_from_string(msg);
+        let field = Field::new_from_string(msg).unwrap();
         assert_eq!(field.encode(), bytes);
     }
 }
