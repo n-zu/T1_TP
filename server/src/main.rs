@@ -17,6 +17,9 @@ mod connack;
 #[allow(dead_code)]
 mod connect;
 
+#[allow(dead_code, unused_imports)]
+mod server;
+
 const SLEEP_DUR: Duration = Duration::from_secs(2);
 
 #[allow(dead_code)]
@@ -82,7 +85,6 @@ fn wait_for_connections(
 }
 #[allow(dead_code)]
 fn handle_packet(headers: [u8; 2], client: &mut Client) {
-    println!("ASD");
     let codigo = headers[0] >> 4;
     match codigo {
         1 => match connect::Connect::new(headers, client) {
