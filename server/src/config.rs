@@ -19,17 +19,17 @@ pub struct Config {
 impl Config {
     /// Crea un struct Config a partir de la informacion
     /// que se encuentran en el archivo de configuracion
-    /// 
+    ///
     /// # Arguments
-    /// 
+    ///
     /// * `path` - Ruta del archivo que contiene la informacion.
     /// El formato del archivo es 'campo=valor' (sin espacios)
     /// en el siguiente orden: port, dump_path, dump_time, log_path
-    /// 
+    ///
     /// # Returns
-    /// 
+    ///
     /// * `Option<Config>` - Struct con la configuracion del servidor.
-    /// 
+    ///
     /// # Errors
     /// Si no existe el archivo o el formato es invalido, devuelve None
     pub fn new(path: &str) -> Option<Config> {
@@ -38,13 +38,13 @@ impl Config {
     }
 
     /// Crea un struct Config a partir de un archivo de configuracion
-    /// 
+    ///
     /// # Arguments
-    /// 
+    ///
     /// * `config_file` - Archivo de configuracion
-    /// 
+    ///
     /// # Return
-    /// 
+    ///
     /// * `Option<Config>` - Struct con la configuracion del servidor
     pub fn new_from_file<F: Read>(config_file: F) -> Option<Config> {
         let mut buffered = BufReader::new(config_file);
@@ -69,7 +69,7 @@ impl Config {
     pub fn port(&self) -> u16 {
         self.port
     }
-    
+
     /// Devuelve el path del archivo sobre el cual se realizara un dump
     pub fn dump_path(&self) -> &str {
         &self.dump_path
@@ -114,10 +114,11 @@ mod tests {
     #[test]
     fn valid_file() {
         let cursor = Cursor::new(
-"port=8080
+            "port=8080
 dump_path=foo.txt
 dump_time=10
-log_path=bar.txt");
+log_path=bar.txt",
+        );
 
         let config = Config::new_from_file(cursor).unwrap();
         assert_eq!(config.port(), 8080);
@@ -129,10 +130,11 @@ log_path=bar.txt");
     #[test]
     fn invalid_key() {
         let cursor = Cursor::new(
-"invalid_key=8080
+            "invalid_key=8080
 dump_path=foo.txt
 dump_time=10
-log_path=bar.txt");
+log_path=bar.txt",
+        );
 
         assert!(Config::new_from_file(cursor).is_none());
     }
@@ -140,10 +142,11 @@ log_path=bar.txt");
     #[test]
     fn invalid_order() {
         let cursor = Cursor::new(
-"port=8080
+            "port=8080
 dump_time=10
 dump_path=foo.txt
-log_path=bar.txt");
+log_path=bar.txt",
+        );
 
         assert!(Config::new_from_file(cursor).is_none());
     }
@@ -151,11 +154,12 @@ log_path=bar.txt");
     #[test]
     fn invalid_value() {
         let cursor = Cursor::new(
-"port=WWWW
+            "port=WWWW
 dump_path=foo.txt
 dump_time=10
-log_path=bar.txt");
-            
+log_path=bar.txt",
+        );
+
         assert!(Config::new_from_file(cursor).is_none());
     }
 }
