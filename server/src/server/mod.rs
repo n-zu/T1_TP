@@ -3,6 +3,7 @@
 use core::panic;
 use std::{
     collections::HashMap,
+    fmt,
     io::{self, Read, Write},
     net::{SocketAddr, TcpListener, TcpStream},
     sync::{
@@ -23,6 +24,57 @@ use crate::{
 const MPSC_BUF_SIZE: usize = 256;
 const SLEEP_DUR: Duration = Duration::from_secs(2);
 
+#[derive(Debug)]
+struct ServerError {
+    msg: String,
+    kind: ServerErrorKind,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum ServerErrorKind {
+    FirstPacketWasNotConnect,
+    Other,
+    _NonExhaustive,
+}
+
+impl fmt::Display for ServerError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{}", self.msg)
+    }
+}
+
+impl std::error::Error for ServerError {
+    fn description(&self) -> &str {
+        &self.msg
+    }
+}
+
+impl From<io::Error> for ServerError {
+    fn from(error: io::Error) -> Self {
+        ServerError::new_msg(&error.to_string())
+    }
+}
+
+impl ServerError {
+    pub fn new_msg(msg: &str) -> ServerError {
+        ServerError {
+            msg: msg.to_string(),
+            kind: ServerErrorKind::Other,
+        }
+    }
+
+    pub fn new_kind(msg: &str, kind: ServerErrorKind) -> ServerError {
+        ServerError {
+            msg: msg.to_string(),
+            kind,
+        }
+    }
+
+    pub fn kind(&self) -> ServerErrorKind {
+        self.kind
+    }
+}
+
 enum Packet {
     ConnectType(Connect),
     ConnackType(Connack),
@@ -38,6 +90,7 @@ struct Client {
 }
 
 struct ClientData {
+    id: String,
     outgoing: Mutex<TcpStream>,
 }
 
@@ -54,10 +107,15 @@ impl Read for Client {
 }
 
 impl ClientData {
-    fn new(outgoing: TcpStream) -> Self {
+    fn new(id: &str, outgoing: TcpStream) -> Self {
         Self {
+            id: id.to_owned(),
             outgoing: Mutex::new(outgoing),
         }
+    }
+
+    fn id(&self) -> &str {
+        &self.id
     }
 }
 
@@ -120,6 +178,16 @@ impl Server {
 
     fn handle_connect(&self, packet: Connect, mut stream: TcpStream) {
         let id = packet.client_id();
+        if self.client_datas.lock().unwrap().get(id).is_some() {
+            // Desconexion
+        } else {
+            let client_data = ClientData::new(id, stream.try_clone().unwrap());
+            self.client_datas
+                .lock()
+                .unwrap()
+                .insert(id.to_owned(), client_data)
+                .unwrap();
+        }
         stream
             .write_all(&packet.response().to_owned().encode())
             .unwrap();
@@ -133,8 +201,31 @@ impl Server {
         }
     }
 
+    fn connect_new_client(&self, connect: Connect, stream: &TcpStream) -> Result<ClientData, ServerError> {
+        let client_data = ClientData::new(connect.client_id(), stream.try_clone().unwrap());
+        Ok(client_data)
+    }
+
+    fn wait_for_connect(&self, stream: &mut TcpStream) -> Result<ClientData, ServerError> {
+        println!("Esperando connect");
+        if let Ok(packet) = self.receive_packet(stream) {
+            if let Packet::ConnectType(connect) = packet {
+                return self.connect_new_client(connect, stream);
+            } else {
+                return Err(ServerError::new_kind(
+                    "Primer paquete recibido no es CONNECT",
+                    ServerErrorKind::FirstPacketWasNotConnect,
+                ));
+            }
+        } else {
+            return Err(ServerError::new_msg("Error recibiendo el primer paquete"));
+        }
+    }
+
     fn manage_client(self: Arc<Self>, mut stream: TcpStream, _addr: SocketAddr) {
         let mut handlers = vec![];
+        let client_data = self.wait_for_connect(&mut stream).unwrap();
+        let id = client_data.id();
         loop {
             match self.receive_packet(&mut stream) {
                 Ok(packet) => {
@@ -246,7 +337,6 @@ mod tests {
     use crate::server::{Client, MPSC_BUF_SIZE};
 
     use super::{Packet, Server};
-
     /*
     #[test]
     fn test() {
