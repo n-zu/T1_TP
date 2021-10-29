@@ -16,6 +16,8 @@ mod config;
 mod connack;
 #[allow(dead_code)]
 mod connect;
+#[allow(dead_code)]
+mod topic_handler;
 
 const SLEEP_DUR: Duration = Duration::from_secs(2);
 
