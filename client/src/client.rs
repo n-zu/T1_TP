@@ -1,3 +1,5 @@
+use std::thread;
+use std::time::Duration;
 use std::{io::Write, net::TcpStream};
 
 use packets::packet_reader::PacketError;
@@ -19,6 +21,7 @@ impl Client {
     pub fn connect(&mut self, connect: Connect) -> Result<(), PacketError> {
         self.stream.write_all(&connect.encode())?;
         println!("Mandando connect");
+        thread::sleep(Duration::from_millis(5));
         match Connack::read_from(&mut self.stream) {
             Ok(connack_packet) => {
                 println!("Llego bien el connack packet, {:?}", connack_packet);
