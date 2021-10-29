@@ -73,7 +73,7 @@ impl Server {
     fn read_packet(&self, headers: [u8; 2], stream: &mut TcpStream) -> Packet {
         let codigo = headers[0] >> 4;
         match codigo {
-            1 => match connect::Connect::new(headers, stream) {
+            1 => match connect::Connect::new(stream) {
                 Ok(packet) => Packet::ConnectType(packet),
                 Err(err) => {
                     todo!("{:?} {:?}", err.kind(), err.to_string());
@@ -209,7 +209,7 @@ impl Client {
 fn packet_maker(headers: [u8; 2], client: &mut Client) -> Option<Packet> {
     let codigo = headers[0] >> 4;
     match codigo {
-        1 => match Connect::new(headers, client) {
+        1 => match Connect::new(client) {
             Ok(packet) => Some(Packet::ConnectType(packet)),
             Err(err) => {
                 println!("Error parseando Connect packet: {}", err.to_string());
