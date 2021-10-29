@@ -13,6 +13,8 @@ pub enum ErrorKind {
     InvalidProtocol,
     InvalidProtocolLevel,
     InvalidFlags,
+    // No queda muy lindo en PacketError, quiza errores diferentes?
+    ClientDisconnected,
     Other,
 }
 
