@@ -175,8 +175,8 @@ impl Connect {
         Ok(())
     }
 
-    pub fn new(fixed_header: [u8; 2], stream: &mut impl Read) -> Result<Connect, PacketError> {
-        let mut bytes = packet_reader::read_packet_bytes(fixed_header, stream)?;
+    pub fn new(stream: &mut impl Read) -> Result<Connect, PacketError> {
+        let mut bytes = packet_reader::read_packet_bytes(stream)?;
 
         Connect::verify_protocol(&mut bytes)?;
         Connect::verify_protocol_level(&mut bytes)?;
@@ -254,11 +254,12 @@ mod tests {
         v.append(&mut vec![16u8, 60u8]); //Keep alive
         v.append(&mut Field::new_from_string("id").unwrap().encode());
 
-        let headers = [HEADER_1, v.len() as u8];
-        let mut bytes = Cursor::new(v);
+        let mut bytes = vec![v.len() as u8];
+        bytes.append(&mut v);
+        let mut stream = Cursor::new(bytes);
 
         assert_eq!(
-            *Connect::new(headers, &mut bytes).unwrap().keep_alive(),
+            *Connect::new(&mut stream).unwrap().keep_alive(),
             ((16 << 8) + 60) as u16
         );
     }
@@ -271,11 +272,12 @@ mod tests {
         v.append(&mut vec![0u8, 60u8]); //Keep alive
         v.append(&mut Field::new_from_string("id").unwrap().encode());
 
-        let headers = [HEADER_1, v.len() as u8];
-        let mut bytes = Cursor::new(v);
+        let mut bytes = vec![v.len() as u8];
+        bytes.append(&mut v);
+        let mut stream = Cursor::new(bytes);
 
         assert_eq!(
-            Connect::new(headers, &mut bytes).unwrap_err().kind(),
+            Connect::new(&mut stream).unwrap_err().kind(),
             ErrorKind::InvalidProtocol
         );
     }
@@ -288,11 +290,12 @@ mod tests {
         v.append(&mut vec![0u8, 60u8]); //Keep alive
         v.append(&mut Field::new_from_string("id").unwrap().encode());
 
-        let headers = [HEADER_1, v.len() as u8];
-        let mut bytes = Cursor::new(v);
+        let mut bytes = vec![v.len() as u8];
+        bytes.append(&mut v);
+        let mut stream = Cursor::new(bytes);
 
         assert_eq!(
-            Connect::new(headers, &mut bytes).unwrap_err().kind(),
+            Connect::new(&mut stream).unwrap_err().kind(),
             ErrorKind::InvalidProtocolLevel
         );
     }
@@ -305,11 +308,12 @@ mod tests {
         v.append(&mut vec![0u8, 60u8]); //Keep alive
         v.append(&mut Field::new_from_string("id").unwrap().encode());
 
-        let headers = [HEADER_1, v.len() as u8];
-        let mut bytes = Cursor::new(v);
+        let mut bytes = vec![v.len() as u8];
+        bytes.append(&mut v);
+        let mut stream = Cursor::new(bytes);
 
         assert_eq!(
-            Connect::new(headers, &mut bytes).unwrap_err().kind(),
+            Connect::new(&mut stream).unwrap_err().kind(),
             ErrorKind::InvalidFlags
         );
     }
@@ -322,11 +326,12 @@ mod tests {
         v.append(&mut Field::new_from_string("id").unwrap().encode());
         v.append(&mut vec![0u8, 60u8]); //Keep alive
 
-        let headers = [HEADER_1, v.len() as u8];
-        let mut bytes = Cursor::new(v);
+        let mut bytes = vec![v.len() as u8];
+        bytes.append(&mut v);
+        let mut stream = Cursor::new(bytes);
 
         assert_eq!(
-            Connect::new(headers, &mut bytes).unwrap_err().kind(),
+            Connect::new(&mut stream).unwrap_err().kind(),
             ErrorKind::InvalidFlags
         );
     }
@@ -339,10 +344,11 @@ mod tests {
         v.append(&mut vec![0u8, 60u8]); //Keep alive
         v.append(&mut Field::new_from_string("id").unwrap().encode());
 
-        let headers = [HEADER_1, v.len() as u8];
-        let mut bytes = Cursor::new(v);
+        let mut bytes = vec![v.len() as u8];
+        bytes.append(&mut v);
+        let mut stream = Cursor::new(bytes);
 
-        assert!(Connect::new(headers, &mut bytes).is_err());
+        assert!(Connect::new(&mut stream).is_err());
     }
 
     #[test]
@@ -354,10 +360,11 @@ mod tests {
         v.append(&mut Field::new_from_string("id").unwrap().encode());
         v.append(&mut Field::new_from_string("unNombre").unwrap().encode());
 
-        let headers = [HEADER_1, v.len() as u8];
-        let mut bytes = Cursor::new(v);
+        let mut bytes = vec![v.len() as u8];
+        bytes.append(&mut v);
+        let mut stream = Cursor::new(bytes);
 
-        assert!(Connect::new(headers, &mut bytes).is_err());
+        assert!(Connect::new(&mut stream).is_err());
     }
 
     #[test]
@@ -368,10 +375,11 @@ mod tests {
         v.append(&mut vec![0u8, 60u8]); //Keep alive
         v.append(&mut Field::new_from_string("id").unwrap().encode());
 
-        let headers = [HEADER_1, v.len() as u8];
-        let mut bytes = Cursor::new(v);
+        let mut bytes = vec![v.len() as u8];
+        bytes.append(&mut v);
+        let mut stream = Cursor::new(bytes);
 
-        assert!(Connect::new(headers, &mut bytes).unwrap().clean_session());
+        assert!(Connect::new(&mut stream).unwrap().clean_session());
     }
 
     #[test]
@@ -384,9 +392,11 @@ mod tests {
         v.append(&mut Field::new_from_string("soyUnTopic").unwrap().encode());
         v.append(&mut Field::new_from_string("soyUnMensaje").unwrap().encode());
 
-        let headers = [HEADER_1, v.len() as u8];
-        let mut bytes = Cursor::new(v);
-        let packet = Connect::new(headers, &mut bytes).unwrap();
+        let mut bytes = vec![v.len() as u8];
+        bytes.append(&mut v);
+        let mut stream = Cursor::new(bytes);
+
+        let packet = Connect::new(&mut stream).unwrap();
         let will = packet.last_will().unwrap();
 
         assert!(will.retain);
@@ -414,9 +424,11 @@ mod tests {
                 .encode(),
         );
 
-        let headers = [HEADER_1, v.len() as u8];
-        let mut bytes = Cursor::new(v);
-        let packet = Connect::new(headers, &mut bytes).unwrap();
+        let mut bytes = vec![v.len() as u8];
+        bytes.append(&mut v);
+        let mut stream = Cursor::new(bytes);
+
+        let packet = Connect::new(&mut stream).unwrap();
         let will = packet.last_will().unwrap();
 
         assert!(will.retain);

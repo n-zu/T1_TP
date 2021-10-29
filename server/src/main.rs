@@ -19,6 +19,9 @@ mod connect;
 #[allow(dead_code)]
 mod topic_handler;
 
+#[allow(dead_code, unused_imports)]
+mod server;
+
 const SLEEP_DUR: Duration = Duration::from_secs(2);
 
 #[allow(dead_code)]
@@ -83,11 +86,10 @@ fn wait_for_connections(
     }
 }
 #[allow(dead_code)]
-fn handle_packet(headers: [u8; 2], client: &mut Client) {
-    println!("ASD");
-    let codigo = headers[0] >> 4;
+fn handle_packet(control_byte: [u8; 1], client: &mut Client) {
+    let codigo = control_byte[0] >> 4;
     match codigo {
-        1 => match connect::Connect::new(headers, client) {
+        1 => match connect::Connect::new(client) {
             Ok(packet) => {
                 let rta = packet.response().encode();
                 client.write_all(&rta).unwrap();
@@ -123,7 +125,7 @@ fn wait_for_packets(stop: Arc<AtomicBool>, receiver: Receiver<Client>) {
         }
 
         for client in clients.iter_mut() {
-            let mut buf = [0u8, 2];
+            let mut buf = [0u8; 1];
             match client.read_exact(&mut buf) {
                 Ok(_size) => {
                     handle_packet(buf, client);
