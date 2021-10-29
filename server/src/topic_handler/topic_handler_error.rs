@@ -1,10 +1,14 @@
-use std::{error::Error, fmt::Display, sync::{PoisonError, RwLockReadGuard, RwLockWriteGuard}};
+use std::{
+    error::Error,
+    fmt::Display,
+    sync::{PoisonError, RwLockReadGuard, RwLockWriteGuard},
+};
 
 use super::{Subscribers, Subtopics};
 
 #[derive(Debug)]
 pub struct TopicHandlerError {
-    msg : String,
+    msg: String,
 }
 
 impl Display for TopicHandlerError {
@@ -19,37 +23,36 @@ impl Error for TopicHandlerError {
     }
 }
 
-
 impl TopicHandlerError {
-    fn new(msg : &str) -> TopicHandlerError {
+    fn new(msg: &str) -> TopicHandlerError {
         TopicHandlerError {
-            msg : msg.to_string(),
+            msg: msg.to_string(),
         }
     }
 }
 
-const DEFAULT_MSG : &str = "TopicHandlerError: No se pudo desbloquear contenido del Topic";
+const DEFAULT_MSG: &str = "TopicHandlerError: No se pudo desbloquear contenido del Topic";
 
 impl From<PoisonError<RwLockReadGuard<'_, Subscribers>>> for TopicHandlerError {
-    fn from(err : PoisonError<RwLockReadGuard<Subscribers>>) -> TopicHandlerError {
+    fn from(err: PoisonError<RwLockReadGuard<Subscribers>>) -> TopicHandlerError {
         TopicHandlerError::new(&format!("{} ({})", DEFAULT_MSG, err))
     }
 }
 
 impl From<PoisonError<RwLockReadGuard<'_, Subtopics>>> for TopicHandlerError {
-    fn from(err : PoisonError<RwLockReadGuard<Subtopics>>) -> TopicHandlerError {
+    fn from(err: PoisonError<RwLockReadGuard<Subtopics>>) -> TopicHandlerError {
         TopicHandlerError::new(&format!("{} ({})", DEFAULT_MSG, err))
     }
 }
 
 impl From<PoisonError<RwLockWriteGuard<'_, Subscribers>>> for TopicHandlerError {
-    fn from(err : PoisonError<RwLockWriteGuard<Subscribers>>) -> TopicHandlerError {
+    fn from(err: PoisonError<RwLockWriteGuard<Subscribers>>) -> TopicHandlerError {
         TopicHandlerError::new(&format!("{} ({})", DEFAULT_MSG, err))
     }
 }
 
 impl From<PoisonError<RwLockWriteGuard<'_, Subtopics>>> for TopicHandlerError {
-    fn from(err : PoisonError<RwLockWriteGuard<Subtopics>>) -> TopicHandlerError {
+    fn from(err: PoisonError<RwLockWriteGuard<Subtopics>>) -> TopicHandlerError {
         TopicHandlerError::new(&format!("{} ({})", DEFAULT_MSG, err))
     }
 }
