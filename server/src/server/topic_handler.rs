@@ -1,8 +1,9 @@
-struct TopicHandler {
+use crate::server::Server;
 
-}
+pub struct TopicHandler {}
 
 impl TopicHandler {
+    /*
     fn subscribe(&self, packet: Subscribe, client_id: &str) {
 
     }
@@ -15,11 +16,11 @@ impl TopicHandler {
 
     }
 
-    fn new(server: &Server) -> Self {
-        Self {}
-    }
-
     fn remove_client(&self, client_id: &str) {
 
+    }
+    */
+    pub fn new() -> Self {
+        Self {}
     }
 }

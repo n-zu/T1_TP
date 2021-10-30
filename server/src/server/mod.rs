@@ -7,130 +7,78 @@ use std::{
     io::{self, Read, Write},
     net::{SocketAddr, TcpListener, TcpStream},
     sync::{
+        atomic::{AtomicBool, Ordering},
         mpsc::{sync_channel, Receiver, Sender, SyncSender},
-        Arc, Mutex,
+        Arc, Mutex, MutexGuard, RwLock,
     },
     thread::{self, JoinHandle},
     time::Duration,
     vec,
 };
 
+use tracing::{debug, error, event, info, instrument, span, warn, Level};
+use tracing_subscriber::{field::debug, FmtSubscriber};
+
 use packets::packet_reader::{ErrorKind, PacketError};
 
-use crate::{
-    connack::Connack,
-    connect::{self, Connect},
-};
+use crate::{config::Config, connack::Connack, connect::{self, Connect}, server::{packet_scheduler::PacketScheduler, server_error::ServerErrorKind}};
+
+mod server_error;
+use server_error::ServerError;
+
+mod client;
+use client::Client;
+
+mod client_list;
+
+mod topic_handler;
+use topic_handler::TopicHandler;
+
+mod packet_scheduler;
+
+use self::client_list::Clients;
+
 const MPSC_BUF_SIZE: usize = 256;
 const SLEEP_DUR: Duration = Duration::from_secs(2);
 
-#[derive(Debug)]
-struct ServerError {
-    msg: String,
-    kind: ServerErrorKind,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum ServerErrorKind {
-    FirstPacketWasNotConnect,
-    Other,
-    _NonExhaustive,
-}
-
-impl fmt::Display for ServerError {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{}", self.msg)
-    }
-}
-
-impl std::error::Error for ServerError {
-    fn description(&self) -> &str {
-        &self.msg
-    }
-}
-
-impl From<io::Error> for ServerError {
-    fn from(error: io::Error) -> Self {
-        ServerError::new_msg(&error.to_string())
-    }
-}
-
-impl ServerError {
-    pub fn new_msg(msg: &str) -> ServerError {
-        ServerError {
-            msg: msg.to_string(),
-            kind: ServerErrorKind::Other,
-        }
-    }
-
-    pub fn new_kind(msg: &str, kind: ServerErrorKind) -> ServerError {
-        ServerError {
-            msg: msg.to_string(),
-            kind,
-        }
-    }
-
-    pub fn kind(&self) -> ServerErrorKind {
-        self.kind
-    }
-}
-
-enum Packet {
+pub enum Packet {
     ConnectType(Connect),
     ConnackType(Connack),
     PublishTypee(Publish),
+    SubscribeType(Subscribe),
 }
 
 // Temporal
-struct Publish {}
+pub struct Publish {}
 
-struct Client {
-    incoming: TcpStream,
-    id: Option<String>,
+pub struct Subscribe {}
+
+impl Publish {
+    fn encode(self) -> Vec<u8> {
+        todo!()
+    }
 }
 
-struct ClientData {
-    id: String,
-    outgoing: Mutex<TcpStream>,
-}
-
-struct Server {
-    client_datas: Mutex<HashMap<String, ClientData>>,
-    port: u16,
+pub struct Server {
+    clients: Clients,
+    config: Config,
+    topic_handler: TopicHandler,
     handlers: Mutex<Vec<JoinHandle<()>>>,
 }
 
-impl Read for Client {
-    fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
-        self.incoming.read(buf)
-    }
-}
-
-impl ClientData {
-    fn new(id: &str, outgoing: TcpStream) -> Self {
-        Self {
-            id: id.to_owned(),
-            outgoing: Mutex::new(outgoing),
-        }
-    }
-
-    fn id(&self) -> &str {
-        &self.id
-    }
-}
-
 impl Server {
-    fn new(port: u16) -> Arc<Self> {
+    fn new(config: Config) -> Arc<Self> {
         Arc::new(Self {
-            client_datas: Mutex::new(HashMap::new()),
-            port,
+            clients: Clients::new(),
+            config,
+            topic_handler: TopicHandler::new(),
             handlers: Mutex::new(vec![]),
         })
     }
 
-    fn read_packet(&self, headers: [u8; 2], stream: &mut TcpStream) -> Packet {
-        let codigo = headers[0] >> 4;
-        match codigo {
+    fn read_packet(&self, control_byte: u8, stream: &mut TcpStream) -> Packet {
+        let code = control_byte >> 4;
+        match code {
             1 => match connect::Connect::new(stream) {
                 Ok(packet) => Packet::ConnectType(packet),
                 Err(err) => {
@@ -154,194 +102,187 @@ impl Server {
         }
     }
 
-    fn receive_packet(&self, stream: &mut TcpStream) -> Result<Packet, PacketError> {
-        let mut buf = [0u8, 2];
+    fn receive_packet(&self, stream: &mut TcpStream) -> Result<Packet, ServerError> {
+        let mut buf = [0u8; 1];
         match stream.read_exact(&mut buf) {
-            Ok(_size) => Ok(self.read_packet(buf, stream)),
+            Ok(_) => Ok(self.read_packet(buf[0], stream)),
             Err(error) if error.kind() == io::ErrorKind::UnexpectedEof => {
-                println!("Cliente se desconecto sin avisar");
-                Err(PacketError::new_kind(
+                error!("Cliente se desconecto sin avisar");
+                Err(ServerError::new_kind(
                     "Cliente se desconecto sin avisar",
-                    ErrorKind::ClientDisconnected,
+                    ServerErrorKind::ClientDisconnected,
                 ))
             }
-            Err(error) if error.kind() == io::ErrorKind::WouldBlock => Err(PacketError::new()),
-            Err(err) => {
-                panic!(
-                    "Error recibiendo bytes de stream: {}\n Kind: {:?}",
-                    err.to_string(),
-                    err.kind()
-                );
-            }
-        }
-    }
-
-    fn handle_connect(&self, packet: Connect, mut stream: TcpStream) {
-        let id = packet.client_id();
-        if self.client_datas.lock().unwrap().get(id).is_some() {
-            // Desconexion
-        } else {
-            let client_data = ClientData::new(id, stream.try_clone().unwrap());
-            self.client_datas
-                .lock()
-                .unwrap()
-                .insert(id.to_owned(), client_data)
-                .unwrap();
-        }
-        stream
-            .write_all(&packet.response().to_owned().encode())
-            .unwrap();
-    }
-
-    fn handle_packet(&self, packet: Packet, stream: TcpStream) {
-        match packet {
-            Packet::ConnectType(packet) => self.handle_connect(packet, stream),
-            Packet::ConnackType(_) => todo!(),
-            Packet::PublishTypee(packet) => todo!(),
-        }
-    }
-
-    fn connect_new_client(&self, connect: Connect, stream: &TcpStream) -> Result<ClientData, ServerError> {
-        let client_data = ClientData::new(connect.client_id(), stream.try_clone().unwrap());
-        Ok(client_data)
-    }
-
-    fn wait_for_connect(&self, stream: &mut TcpStream) -> Result<ClientData, ServerError> {
-        println!("Esperando connect");
-        if let Ok(packet) = self.receive_packet(stream) {
-            if let Packet::ConnectType(connect) = packet {
-                return self.connect_new_client(connect, stream);
-            } else {
-                return Err(ServerError::new_kind(
-                    "Primer paquete recibido no es CONNECT",
-                    ServerErrorKind::FirstPacketWasNotConnect,
-                ));
-            }
-        } else {
-            return Err(ServerError::new_msg("Error recibiendo el primer paquete"));
-        }
-    }
-
-    fn manage_client(self: Arc<Self>, mut stream: TcpStream, _addr: SocketAddr) {
-        let mut handlers = vec![];
-        let client_data = self.wait_for_connect(&mut stream).unwrap();
-        let id = client_data.id();
-        loop {
-            match self.receive_packet(&mut stream) {
-                Ok(packet) => {
-                    let sv_copy = self.clone();
-                    let stream_copy = stream.try_clone().unwrap();
-                    let handle = thread::spawn(move || {
-                        sv_copy.handle_packet(packet, stream_copy);
-                    });
-                    handlers.push(handle);
-                }
-                Err(err) if err.kind() == ErrorKind::ClientDisconnected => break,
-                Err(_) => {
-                    //println!("No se recibio ningun paquete");
-                    //thread::sleep(SLEEP_DUR);
-                }
-            }
-        }
-        for handle in handlers {
-            handle.join().unwrap();
-        }
-    }
-
-    fn connect(self: &Arc<Self>, stream: TcpStream, addr: SocketAddr) {
-        println!("Conectando con {}", addr.to_string());
-        if let Err(_err) = stream.set_nonblocking(true) {
-            println!("Error estableciendo socket como no bloqueante");
-        } else {
-            let sv_copy = self.clone();
-            let handle = thread::spawn(move || {
-                sv_copy.manage_client(stream, addr);
-            });
-            self.handlers.lock().unwrap().push(handle);
-        }
-    }
-
-    fn accept_client(self: &Arc<Self>, listener: &TcpListener) {
-        match listener.accept() {
             Err(error) if error.kind() == io::ErrorKind::WouldBlock => {
-                thread::sleep(SLEEP_DUR);
-            }
-            Err(error) => {
-                println!("Error aceptando conexión: {}", error.to_string());
-            }
-            Ok((stream, addr)) => {
-                self.connect(stream, addr);
+                warn!("Error WouldBlock");
+                Err(ServerError::new_msg(&error.to_string()))
+            },
+            Err(err) => {
+                Err(ServerError::from(err))
             }
         }
     }
 
-    pub fn send_publish_to(&self, packet: Publish, client_id: &str) {
+    fn handle_connect(&self, connect: Connect, client_id: &str) {
+        // Como la conexion se maneja antes de entrar al loop de paquetes
+        // si se llega a este punto es porque se mando un segundo connect
+        // Por lo tanto, se debe desconectar al cliente
+        error!(
+            "El cliente con id {} envio un segundo connect. Se procede a su desconexion",
+            client_id
+        );
+        self.clients.disconnect(client_id);
+    }
+
+    fn handle_publish(&self, publish: Publish, client_id: &str) {
         todo!()
     }
 
-    fn run(self: Arc<Self>) {
-        let listener = TcpListener::bind(format!("127.0.0.1:{}", 1883)).unwrap();
-        loop {
-            self.accept_client(&listener);
+    fn handle_subscribe(&self, subscribe: Subscribe, client_id: &str) {}
+
+    fn handle_packet(&self, packet: Packet, client_id: String) {
+        match packet {
+            Packet::ConnectType(packet) => self.handle_connect(packet, &client_id),
+            Packet::ConnackType(_) => todo!(),
+            Packet::PublishTypee(packet) => self.handle_publish(packet, &client_id),
+            Packet::SubscribeType(packet) => self.handle_subscribe(packet, &client_id),
         }
     }
-}
 
-impl Client {
-    fn new(incoming: TcpStream) -> Client {
-        Self { id: None, incoming }
+    fn connect_new_client(
+        &self,
+        connect: Connect,
+        stream: &mut TcpStream,
+    ) -> Result<Client, ServerError> {
+        let stream_copy = stream.try_clone()?;
+        Ok(Client::new(connect, stream_copy))
     }
 
-    fn new_id(&mut self, id: &str) {
-        self.id = Some(id.to_owned())
+    fn wait_for_connect(&self, stream: &mut TcpStream) -> Result<Client, ServerError> {
+        match self.receive_packet(stream) {
+            Ok(packet) => {
+                if let Packet::ConnectType(connect) = packet {
+                    info!("Recibido CONNECT de cliente {}", connect.client_id());
+                    return self.connect_new_client(connect, stream);
+                } else {
+                    error!("Primer paquete recibido en la conexion no es CONNECT");
+                    return Err(ServerError::new_kind(
+                        "Primer paquete recibido no es CONNECT",
+                        ServerErrorKind::ProtocolViolation,
+                    ));
+                }
+            },
+            Err(err) => Err(err)
+        }
     }
-}
 
-fn packet_maker(headers: [u8; 2], client: &mut Client) -> Option<Packet> {
-    let codigo = headers[0] >> 4;
-    match codigo {
-        1 => match Connect::new(client) {
-            Ok(packet) => Some(Packet::ConnectType(packet)),
-            Err(err) => {
-                println!("Error parseando Connect packet: {}", err.to_string());
-                None
+    fn manage_client(
+        self: Arc<Self>,
+        mut stream: TcpStream,
+        _addr: SocketAddr,
+    ) -> Result<(), ServerError> {
+        let client = self.wait_for_connect(&mut stream).unwrap();
+        let client_id = client.id().to_owned();
+        self.clients.new_client(client)?;
+        self.clients.send_connack(&client_id);
+        let mut packet_manager = PacketScheduler::new(self.clone(), &client_id);
+        while self.clients.is_alive(&client_id).unwrap() {
+            match self.receive_packet(&mut stream) {
+                Ok(packet) => {
+                    packet_manager.new_packet(packet);
+                }
+                Err(err) if err.kind() == ServerErrorKind::ClientDisconnected => {
+                    error!("Epa");
+                    self.clients.disconnect(&client_id);
+                    break
+                }
+                Err(err) => {
+                    error!("Error grave: {}", err.to_string());
+                }
             }
-        },
-        2 => panic!("Pendiente implementación"),
-        3 => panic!("Pendiente implementación"),
-        4 => panic!("Pendiente implementación"),
-        5 => panic!("Pendiente implementación"),
-        6 => panic!("Pendiente implementación"),
-        7 => panic!("Pendiente implementación"),
-        8 => panic!("Pendiente implementación"),
-        9 => panic!("Pendiente implementación"),
-        10 => panic!("Pendiente implementación"),
-        11 => panic!("Pendiente implementación"),
-        12 => panic!("Pendiente implementación"),
-        13 => panic!("Pendiente implementación"),
-        14 => panic!("Pendiente implementación"),
-        _ => panic!("Error"),
+        }
+        info!("Desconectando {}", client_id);
+        self.clients.remove(&client_id);
+        info!("Conexion finalizada con {}", client_id);
+        // Implementar Drop para PacketManager
+        Ok(())
+    }
+
+    fn connect(self: &Arc<Self>, stream: TcpStream, addr: SocketAddr) -> Result<(), ServerError> {
+        if let Err(err) = stream.set_nonblocking(true) {
+            error!(
+                "No se pudo establecer socket como no bloqueante: {}",
+                err.to_string()
+            );
+            Err(ServerError::new_msg(
+                "Error estableciendo conexion no bloqueante",
+            ))
+        } else {
+            let sv_copy = self.clone();
+            let handle = thread::spawn(move || {
+                match sv_copy.manage_client(stream, addr) {
+                    Err(err) if err.kind() == ServerErrorKind::RepeatedId => {
+
+                    }
+                    Err(_) => todo!(),
+                    Ok(()) => {}
+                }
+            });
+            self.handlers.lock().unwrap().push(handle);
+            Ok(())
+        }
+    }
+
+    fn accept_client(self: &Arc<Self>, listener: &TcpListener) -> Result<(), ServerError> {
+        match listener.accept() {
+            Err(error) if error.kind() == io::ErrorKind::WouldBlock => Ok(()),
+            Err(error) => {
+                error!("No se pudo aceptar conexion TCP: {}", error.to_string());
+                Err(ServerError::from(error))
+            }
+            Ok((stream, addr)) => {
+                info!("Aceptada conexion TCP con {}", addr);
+                self.connect(stream, addr)?;
+                Ok(())
+            }
+        }
+    }
+
+    pub fn send_publish_to(&self, publish: Publish, client_id: &str) {
+        self.clients.send_publish(client_id, publish);
+    }
+
+    fn run(self: Arc<Self>) -> Result<(), ServerError> {
+        let listener = TcpListener::bind(format!("127.0.0.1:{}", self.config.port())).unwrap();
+        loop {
+            self.accept_client(&listener)?;
+        }
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use std::{
-        io,
-        net::{TcpListener, TcpStream},
-        sync::{mpsc::sync_channel, Arc},
-        thread,
-        time::Duration,
-    };
+    use std::{env, io, net::{TcpListener, TcpStream}, sync::{mpsc::sync_channel, Arc}, thread, time::Duration};
 
-    use crate::server::{Client, MPSC_BUF_SIZE};
+    use tracing::Level;
+    use tracing_subscriber::FmtSubscriber;
+
+    use crate::{config::{self, Config}, server::{Client, MPSC_BUF_SIZE}};
 
     use super::{Packet, Server};
-    /*
+
     #[test]
     fn test() {
-        let server = Server::new(1883);
-        server.run()
+        let config = Config::new("config.txt").expect("Error cargando la configuracion");
+        
+        let subscriber = FmtSubscriber::builder()
+            .with_max_level(Level::TRACE)
+            .finish();
+
+        tracing::subscriber::set_global_default(subscriber)
+            .expect("setting default subscriber failed");
+
+        let server = Server::new(config);
+        server.run().unwrap()
     }
-    */
 }
