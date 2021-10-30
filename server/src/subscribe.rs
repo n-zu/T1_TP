@@ -22,7 +22,6 @@ pub struct Subscribe {
 const QOS_MASK: u8 = 3;
 
 impl Subscribe {
-    
     /// Gets the next two bytes of the stream as an unsigned 16-bit integer.
     /// Returns a PacketError in case they can't be read.
     fn get_identifier(stream: &mut impl Read) -> Result<u16, PacketError> {
