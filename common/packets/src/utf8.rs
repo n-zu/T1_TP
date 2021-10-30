@@ -35,9 +35,6 @@ impl Field {
     }
 
     pub fn encode(&self) -> Vec<u8> {
-        if self.value.is_empty() {
-            return vec![];
-        }
         let mut bytes = Vec::from(self.value.len().to_be_bytes());
         bytes.drain(0..bytes.len() - 2);
 
@@ -76,9 +73,16 @@ mod tests {
     }
 
     #[test]
-    fn test_empty_msg_returns_empty_vec() {
+    fn test_empty_msg_returns_vec_with_two_zero_bytes_as_length() {
         let msg = "";
         let field = Field::new_from_string(msg).unwrap();
-        assert_eq!(field.encode(), vec![]);
+        assert_eq!(field.encode(), vec![0, 0]);
+    }
+
+    #[test]
+    fn test_whitespace_character() {
+        let msg = " ";
+        let field = Field::new_from_string(msg).unwrap();
+        assert_eq!(field.encode(), vec![0, 1, 32]);
     }
 }

@@ -318,10 +318,10 @@ mod tests {
             packet.encode().unwrap(),
             [
                 0b00110010, // control_byte
-                9,          // remaining_length
+                11,         // remaining_length
                 0, 5, // largo topic_name
                 116, 111, 112, 105, 99, // topic
-                1, 94, // packet_identifier
+                1, 94, 0, 0 // packet_identifier + zero length payload
             ]
         );
     }

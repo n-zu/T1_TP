@@ -9,12 +9,16 @@ pub enum ErrorKind {
     InvalidProtocol,
     InvalidProtocolLevel,
     InvalidFlags,
-    // No queda muy lindo en PacketError, quiza errores diferentes?
     ClientDisconnected,
+    InvalidQoSLevel,
+    InvalidDupFlag,
+    InvalidControlPacketType,
+    ErrorAtReadingPacket,
+    TopicNameMustBeAtLeastOneCharacterLong,
     Other,
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub struct PacketError {
     msg: String,
     kind: ErrorKind,
