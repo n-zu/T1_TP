@@ -4,6 +4,7 @@ const MAX_FIELD_LEN: usize = 665535;
 
 use crate::packet_reader::PacketError;
 
+#[derive(Debug)]
 pub struct Field {
     pub value: String,
 }
