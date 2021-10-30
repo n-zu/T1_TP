@@ -38,6 +38,7 @@ pub enum PublishError {
     InvalidDupFlag,
     InvalidControlPacketType,
     ErrorAtReadingPacket,
+    TopicNameMustBeAtLeastOneCharacterLong,
 }
 
 impl From<PacketError> for PublishError {
@@ -57,8 +58,7 @@ impl Publish {
         let dup_flag = Publish::verify_dup_flag(&first_byte_buffer, &qos_level)?;
         Publish::verify_control_packet_type(&first_byte_buffer)?;
         let mut remaining_bytes = packet_reader::read_packet_bytes(stream)?;
-        let topic_name =
-            Field::new_from_stream(&mut remaining_bytes).ok_or_else(PacketError::new)?;
+        let topic_name = Publish::verify_topic_name(&mut remaining_bytes)?;
         let packet_id = Publish::verify_packet_id(&mut remaining_bytes, &qos_level);
         let payload = Field::new_from_stream(&mut remaining_bytes).ok_or_else(PacketError::new)?;
         Ok(Self {
@@ -127,8 +127,17 @@ impl Publish {
         Some(packet_id)
     }
 
-    pub fn packet_id(&self) -> Option<u16> {
-        self.packet_id
+    fn verify_topic_name(bytes: &mut impl Read) -> Result<Field, PublishError> {
+        let topic_name = Field::new_from_stream(bytes).ok_or_else(PacketError::new)?;
+        let topic_name_chars_count = topic_name.value.chars().count();
+        if topic_name_chars_count == 0 {
+            return Err(PublishError::TopicNameMustBeAtLeastOneCharacterLong);
+        }
+        Ok(topic_name)
+    }
+
+    pub fn packet_id(&self) -> Option<&u16> {
+        self.packet_id.as_ref()
     }
     pub fn topic_name(&self) -> &str {
         &self.topic_name
@@ -142,8 +151,8 @@ impl Publish {
     pub fn dup_flag(&self) -> &DupFlag {
         &self.dup_flag
     }
-    pub fn payload(&self) -> &Option<String> {
-        &self.payload
+    pub fn payload(&self) -> Option<&String> {
+        self.payload.as_ref()
     }
 }
 
@@ -212,6 +221,106 @@ mod tests {
             payload: Option::from("mensaje".to_string()),
         };
         let result = Publish::read_from(&mut stream).unwrap();
+        assert_eq!(expected, result);
+    }
+
+    #[test]
+    fn test_publish_packet_with_qos_level_1_must_have_a_packet_id() {
+        let mut first_byte: Vec<u8> = vec![0b110010]; // primer byte con los flags con QoS level 1;
+        let mut remaining_data: Vec<u8> = vec![];
+        let mut topic = Field::new_from_string("a/b").unwrap().encode();
+        let mut payload = Field::new_from_string("mensaje").unwrap().encode();
+        let mut packet_id_buf: Vec<u8> = vec![0b0, 0b1010]; // Seria 01010 = packet identifier 10;
+        remaining_data.append(&mut topic);
+        remaining_data.append(&mut packet_id_buf);
+        remaining_data.append(&mut payload);
+
+        let mut bytes = vec![];
+        bytes.append(&mut first_byte);
+        bytes.push(remaining_data.len() as u8);
+        bytes.append(&mut remaining_data);
+        let mut stream = Cursor::new(bytes);
+        let expected = Publish {
+            packet_id: Option::from(10 as u16),
+            topic_name: "a/b".to_string(),
+            qos: QoSLevel::QoSLevel1,
+            retain_flag: RetainFlag::RetainFlag0,
+            dup_flag: DupFlag::DupFlag0,
+            payload: Option::from("mensaje".to_string()),
+        };
+        let result = Publish::read_from(&mut stream).unwrap();
+        assert_eq!(expected, result);
+    }
+
+    #[test]
+    fn test_publish_packet_might_have_zero_lenght_payload() {
+        let mut first_byte: Vec<u8> = vec![0b110000]; // primer byte con los flags con QoS level 0;
+        let mut remaining_data: Vec<u8> = vec![];
+        let mut topic = Field::new_from_string("a/b").unwrap().encode();
+        let mut payload = Field::new_from_string("").unwrap().encode();
+        remaining_data.append(&mut topic);
+        remaining_data.append(&mut payload);
+
+        let mut bytes = vec![];
+        bytes.append(&mut first_byte);
+        bytes.push(remaining_data.len() as u8);
+        bytes.append(&mut remaining_data);
+        let mut stream = Cursor::new(bytes);
+        let expected = Publish {
+            packet_id: None,
+            topic_name: "a/b".to_string(),
+            qos: QoSLevel::QoSLevel0,
+            retain_flag: RetainFlag::RetainFlag0,
+            dup_flag: DupFlag::DupFlag0,
+            payload: Option::from("".to_string()),
+        };
+        let result = Publish::read_from(&mut stream).unwrap();
+        assert_eq!(expected, result);
+        assert_eq!(expected.payload().unwrap(), "");
+    }
+
+    #[test]
+    fn test_publish_packet_topics_should_be_case_sensitive() {
+        let mut first_byte: Vec<u8> = vec![0b110000]; // primer byte con los flags con QoS level 0;
+        let mut remaining_data: Vec<u8> = vec![];
+        let mut topic = Field::new_from_string("a/B").unwrap().encode();
+        let mut payload = Field::new_from_string("").unwrap().encode();
+        remaining_data.append(&mut topic);
+        remaining_data.append(&mut payload);
+
+        let mut bytes = vec![];
+        bytes.append(&mut first_byte);
+        bytes.push(remaining_data.len() as u8);
+        bytes.append(&mut remaining_data);
+        let mut stream = Cursor::new(bytes);
+        let expected = Publish {
+            packet_id: None,
+            topic_name: "a/b".to_string(),
+            qos: QoSLevel::QoSLevel0,
+            retain_flag: RetainFlag::RetainFlag0,
+            dup_flag: DupFlag::DupFlag0,
+            payload: Option::from("".to_string()),
+        };
+        let result = Publish::read_from(&mut stream).unwrap();
+        assert_ne!(expected, result);
+    }
+
+    #[test]
+    fn test_publish_packet_must_be_at_least_one_character_long() {
+        let mut first_byte: Vec<u8> = vec![0b110000]; // primer byte con los flags con QoS level 0;
+        let mut remaining_data: Vec<u8> = vec![];
+        let mut topic = Field::new_from_string("").unwrap().encode();
+        let mut payload = Field::new_from_string("aa").unwrap().encode();
+        remaining_data.append(&mut topic);
+        remaining_data.append(&mut payload);
+
+        let mut bytes = vec![];
+        bytes.append(&mut first_byte);
+        bytes.push(remaining_data.len() as u8);
+        bytes.append(&mut remaining_data);
+        let mut stream = Cursor::new(bytes);
+        let expected = PublishError::TopicNameMustBeAtLeastOneCharacterLong;
+        let result = Publish::read_from(&mut stream).unwrap_err();
         assert_eq!(expected, result);
     }
 }
