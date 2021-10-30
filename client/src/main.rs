@@ -1,6 +1,7 @@
 mod client;
 mod connack;
 mod connect;
+mod publish;
 
 use crate::{client::Client, connect::ConnectBuilder};
 

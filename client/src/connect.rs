@@ -55,6 +55,7 @@ fn encode_len(len: u32) -> Vec<u8> {
     bytes_vec
 }
 
+#[derive(PartialEq)]
 pub enum QoSLevel {
     QoSLevel0,
     QoSLevel1,

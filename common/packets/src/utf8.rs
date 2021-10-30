@@ -35,14 +35,20 @@ impl Field {
     }
 
     pub fn encode(&self) -> Vec<u8> {
+        if self.value.is_empty() {
+            return vec![];
+        }
         let mut bytes = Vec::from(self.value.len().to_be_bytes());
         bytes.drain(0..bytes.len() - 2);
 
         for byte in self.value.as_bytes() {
-            //println!("{}", byte);
             bytes.push(*byte);
         }
         bytes
+    }
+
+    pub fn decode(&self) -> &str {
+        &self.value
     }
 }
 
@@ -60,11 +66,19 @@ mod tests {
         let field_from_stream = Field::new_from_stream(&mut cursor).unwrap();
         assert_eq!(field_from_stream.value, msg);
     }
+
     #[test]
     fn test_encode() {
         let bytes: [u8; 11] = [0, 9, 116, 101, 115, 116, 32, 48, 49, 50, 51];
         let msg = "test 0123";
         let field = Field::new_from_string(msg).unwrap();
         assert_eq!(field.encode(), bytes);
+    }
+
+    #[test]
+    fn test_empty_msg_returns_empty_vec() {
+        let msg = "";
+        let field = Field::new_from_string(msg).unwrap();
+        assert_eq!(field.encode(), vec![]);
     }
 }
