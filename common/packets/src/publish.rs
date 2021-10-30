@@ -41,13 +41,13 @@ impl From<PacketError> for PublishError {
 const PUBLISH_CONTROL_PACKET_TYPE: u8 = 3;
 
 #[derive(Debug, PartialEq)]
-struct Publish {
-    packet_id: Option<u16>,
-    topic_name: String,
-    qos: QoSLevel,
-    retain_flag: RetainFlag,
-    dup_flag: DupFlag,
-    payload: Option<String>,
+pub struct Publish {
+    pub packet_id: Option<u16>,
+    pub topic_name: String,
+    pub qos: QoSLevel,
+    pub retain_flag: RetainFlag,
+    pub dup_flag: DupFlag,
+    pub payload: Option<String>,
 }
 
 impl Publish {
@@ -69,8 +69,9 @@ impl Publish {
     ///
     /// ```
     /// use std::io::Cursor;
-    /// use packets::publish::{DupFlag, QoSLevel, RetainFlag};
+    /// use packets::publish::{DupFlag, QoSLevel, RetainFlag, Publish};
     /// use packets::utf8::Field;
+    ///
     ///
     /// let mut first_byte: Vec<u8> = vec![0b110010]; // primer byte con los flags con QoS level 1;
     ///  let mut remaining_data: Vec<u8> = vec![];
