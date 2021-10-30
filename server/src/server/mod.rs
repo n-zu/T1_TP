@@ -279,7 +279,7 @@ mod tests {
     };
 
     use super::{Packet, Server};
-
+    /*
     #[test]
     fn test() {
         let config = Config::new("config.txt").expect("Error cargando la configuracion");
@@ -294,4 +294,5 @@ mod tests {
         let server = Server::new(config);
         server.run().unwrap()
     }
+    */
 }
