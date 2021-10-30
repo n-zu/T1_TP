@@ -13,6 +13,7 @@ pub enum ConnackError {
 }
 
 #[derive(Debug, PartialEq)]
+/// Client-side Connack packet structure
 pub struct Connack {
     session_present: u8,
     return_code: u8,
@@ -46,6 +47,7 @@ impl Connack {
     /// ```
     /// # Errors
     /// If the stream's bytes doesn't follow the MQTT 3.1.1 protocol, this function returns a ConnackError::WrongEncoding(message)
+    ///
     /// If return_code is not 0, this function returns a specific ConnackError
     pub fn read_from(stream: &mut impl Read) -> Result<Connack, ConnackError> {
         let buffer = [0u8; 1];
@@ -59,6 +61,7 @@ impl Connack {
         })
     }
 
+    #[doc(hidden)]
     fn verify_first_byte_control_packet(
         mut buffer: [u8; 1],
         stream: &mut impl Read,
@@ -74,6 +77,7 @@ impl Connack {
         }
     }
 
+    #[doc(hidden)]
     fn verify_remaining_length(
         mut buffer: [u8; 1],
         stream: &mut impl Read,
@@ -88,6 +92,7 @@ impl Connack {
         Ok(())
     }
 
+    #[doc(hidden)]
     fn verify_session_present_flag(
         mut buffer: [u8; 1],
         stream: &mut impl Read,
@@ -102,6 +107,7 @@ impl Connack {
         Ok(session_present)
     }
 
+    #[doc(hidden)]
     fn verify_return_code(mut buffer: [u8; 1], stream: &mut impl Read) -> Result<u8, ConnackError> {
         stream.read_exact(&mut buffer);
         let return_code = u8::from_be_bytes(buffer);

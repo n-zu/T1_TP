@@ -38,9 +38,11 @@ impl From<PacketError> for PublishError {
     }
 }
 
+#[doc(hidden)]
 const PUBLISH_CONTROL_PACKET_TYPE: u8 = 3;
 
 #[derive(Debug, PartialEq)]
+/// Publish packet structure for server/client side
 pub struct Publish {
     pub packet_id: Option<u16>,
     pub topic_name: String,
@@ -118,6 +120,7 @@ impl Publish {
         })
     }
 
+    #[doc(hidden)]
     fn verify_retain_flag(first_byte_buffer: &[u8; 1]) -> Result<RetainFlag, PublishError> {
         let first_byte = first_byte_buffer[0];
         let retain_flag = first_byte & 0b1;
@@ -128,6 +131,7 @@ impl Publish {
         }
     }
 
+    #[doc(hidden)]
     fn verify_qos_level_flag(first_byte_buffer: &[u8; 1]) -> Result<QoSLevel, PublishError> {
         let first_byte = first_byte_buffer[0];
         let qos_level = (first_byte & 0b110) >> 1;
@@ -138,6 +142,7 @@ impl Publish {
         }
     }
 
+    #[doc(hidden)]
     fn verify_dup_flag(
         first_byte_buffer: &[u8; 1],
         qos_level: &QoSLevel,
@@ -155,6 +160,7 @@ impl Publish {
         }
     }
 
+    #[doc(hidden)]
     fn verify_control_packet_type(first_byte_buffer: &[u8; 1]) -> Result<(), PublishError> {
         let first_byte = first_byte_buffer[0];
         let control_packet_type = (first_byte & 0b110000) >> 4;
@@ -164,6 +170,7 @@ impl Publish {
         Ok(())
     }
 
+    #[doc(hidden)]
     fn verify_packet_id(bytes: &mut impl Read, qos_level: &QoSLevel) -> Option<u16> {
         if *qos_level != QoSLevel::QoSLevel1 {
             return None;
@@ -174,6 +181,7 @@ impl Publish {
         Some(packet_id)
     }
 
+    #[doc(hidden)]
     fn verify_topic_name(bytes: &mut impl Read) -> Result<Field, PublishError> {
         let topic_name = Field::new_from_stream(bytes).ok_or_else(PacketError::new)?;
         let topic_name_chars_count = topic_name.value.chars().count();
@@ -183,21 +191,27 @@ impl Publish {
         Ok(topic_name)
     }
 
+    /// Gets packet_id from a Publish packet
     pub fn packet_id(&self) -> Option<&u16> {
         self.packet_id.as_ref()
     }
+    /// Gets topic_name from a Publish packet
     pub fn topic_name(&self) -> &str {
         &self.topic_name
     }
+    /// Gets QoS from a Publish packet
     pub fn qos(&self) -> &QoSLevel {
         &self.qos
     }
+    /// Gets retain_flag from a Publish packet
     pub fn retain_flag(&self) -> &RetainFlag {
         &self.retain_flag
     }
+    /// Gets dup_flag from a Publish packet
     pub fn dup_flag(&self) -> &DupFlag {
         &self.dup_flag
     }
+    /// Gets payload from a Publish packet
     pub fn payload(&self) -> Option<&String> {
         self.payload.as_ref()
     }
