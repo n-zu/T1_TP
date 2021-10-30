@@ -44,7 +44,7 @@ impl Topic {
 
 impl TopicHandler {
     pub fn subscribe(&self, _packet: Subscribe, client_id: &str) -> Result<(), TopicHandlerError> {
-        let topics : Vec<&str> = Vec::new();
+        let topics: Vec<&str> = Vec::new();
 
         for topic in topics {
             subscribe_rec(&self.root, topic, client_id)?;
