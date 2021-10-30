@@ -26,9 +26,8 @@ const CONNECT_PACKET_TYPE: u8 = 0x10;
 #[doc(hidden)]
 const CONTINUATION_SHIFT: u8 = 7;
 
-/// Algoritmo de codificacion de entero no negativo
-/// para el `variable_length`, segun el estandar
-/// MQTT V3.1.1
+/// Non negative integer codification algorithm for
+/// variable_length, according to MQTT V3.1.1 standard
 fn encode_len(len: u32) -> Vec<u8> {
     let mut len = len;
     let mut encoded_len = 0;
@@ -159,8 +158,8 @@ impl Connect {
         fixed_header
     }
 
-    /// Codifica el contenido del paquete segun el estandar
-    /// MQTT V3.1.1
+    /// Encodes the content of the packet according to MQTT
+    /// V3.1.1 standard
     pub fn encode(&self) -> Vec<u8> {
         let mut encoded = vec![];
         encoded.append(&mut self.fixed_header());
@@ -170,19 +169,20 @@ impl Connect {
     }
 }
 
-/// Constructor del paquete Connect
+/// Connect packet constructor
 pub struct ConnectBuilder {
     #[doc(hidden)]
     connect: Connect,
 }
 
 impl ConnectBuilder {
-    /// Crea un ConnectBuilder
+    /// Creates a ConnectBuilder
     ///
     /// # Errors
     ///
-    /// Devuelve error i el largo del client_id supera al maximo
-    /// establecido para los campos utf8 del estandar MQTT V3.1.1
+    /// Returns error if the length of the client_id exceedes
+    /// the maximum established for utf8 fields in MQTT V3.1.1
+    /// standard
     pub fn new(client_id: &str, keep_alive: u16, clean_session: bool) -> Result<Self, PacketError> {
         Ok(ConnectBuilder {
             connect: Connect {
@@ -211,12 +211,12 @@ impl ConnectBuilder {
         self
     }
 
-    /// Crea el paquete con todos los parametros recibidos
+    /// Builds the packet with the received parameters
     ///
     /// # Errors
     ///
-    /// Devuelve error si el los campos del paquete no cumplen
-    /// los requisitos del estandar MQTT V3.1.1
+    /// Returns error if the packet fields do not meet the
+    /// requirements of the MQTT V3.1.1 standard
     pub fn build(self) -> Result<Connect, PacketError> {
         if self.connect.password.is_some() && self.connect.user_name.is_none() {
             return Err(PacketError::new_msg(
