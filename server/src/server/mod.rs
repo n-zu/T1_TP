@@ -21,7 +21,12 @@ use tracing_subscriber::{field::debug, FmtSubscriber};
 
 use packets::packet_reader::{ErrorKind, PacketError};
 
-use crate::{config::Config, connack::Connack, connect::{self, Connect}, server::{packet_scheduler::PacketScheduler, server_error::ServerErrorKind}};
+use crate::{
+    config::Config,
+    connack::Connack,
+    connect::{self, Connect},
+    server::{packet_scheduler::PacketScheduler, server_error::ServerErrorKind},
+};
 
 mod server_error;
 use server_error::ServerError;
@@ -116,10 +121,8 @@ impl Server {
             Err(error) if error.kind() == io::ErrorKind::WouldBlock => {
                 warn!("Error WouldBlock");
                 Err(ServerError::new_msg(&error.to_string()))
-            },
-            Err(err) => {
-                Err(ServerError::from(err))
             }
+            Err(err) => Err(ServerError::from(err)),
         }
     }
 
@@ -171,8 +174,8 @@ impl Server {
                         ServerErrorKind::ProtocolViolation,
                     ));
                 }
-            },
-            Err(err) => Err(err)
+            }
+            Err(err) => Err(err),
         }
     }
 
@@ -181,7 +184,7 @@ impl Server {
         mut stream: TcpStream,
         _addr: SocketAddr,
     ) -> Result<(), ServerError> {
-        let client = self.wait_for_connect(&mut stream).unwrap();
+        let client = self.wait_for_connect(&mut stream)?;
         let client_id = client.id().to_owned();
         self.clients.new_client(client)?;
         self.clients.send_connack(&client_id);
@@ -192,9 +195,8 @@ impl Server {
                     packet_manager.new_packet(packet);
                 }
                 Err(err) if err.kind() == ServerErrorKind::ClientDisconnected => {
-                    error!("Epa");
                     self.clients.disconnect(&client_id);
-                    break
+                    break;
                 }
                 Err(err) => {
                     error!("Error grave: {}", err.to_string());
@@ -209,6 +211,7 @@ impl Server {
     }
 
     fn connect(self: &Arc<Self>, stream: TcpStream, addr: SocketAddr) -> Result<(), ServerError> {
+        /*
         if let Err(err) = stream.set_nonblocking(true) {
             error!(
                 "No se pudo establecer socket como no bloqueante: {}",
@@ -217,20 +220,17 @@ impl Server {
             Err(ServerError::new_msg(
                 "Error estableciendo conexion no bloqueante",
             ))
-        } else {
-            let sv_copy = self.clone();
-            let handle = thread::spawn(move || {
-                match sv_copy.manage_client(stream, addr) {
-                    Err(err) if err.kind() == ServerErrorKind::RepeatedId => {
 
-                    }
-                    Err(_) => todo!(),
-                    Ok(()) => {}
-                }
+        } else {
+            */
+            let sv_copy = self.clone();
+            let handle = thread::spawn(move || match sv_copy.manage_client(stream, addr) {
+                Err(err) if err.kind() == ServerErrorKind::RepeatedId => {}
+                Err(_) => todo!(),
+                Ok(()) => {}
             });
             self.handlers.lock().unwrap().push(handle);
             Ok(())
-        }
     }
 
     fn accept_client(self: &Arc<Self>, listener: &TcpListener) -> Result<(), ServerError> {
@@ -262,19 +262,28 @@ impl Server {
 
 #[cfg(test)]
 mod tests {
-    use std::{env, io, net::{TcpListener, TcpStream}, sync::{mpsc::sync_channel, Arc}, thread, time::Duration};
+    use std::{
+        env, io,
+        net::{TcpListener, TcpStream},
+        sync::{mpsc::sync_channel, Arc},
+        thread,
+        time::Duration,
+    };
 
     use tracing::Level;
     use tracing_subscriber::FmtSubscriber;
 
-    use crate::{config::{self, Config}, server::{Client, MPSC_BUF_SIZE}};
+    use crate::{
+        config::{self, Config},
+        server::{Client, MPSC_BUF_SIZE},
+    };
 
     use super::{Packet, Server};
 
     #[test]
     fn test() {
         let config = Config::new("config.txt").expect("Error cargando la configuracion");
-        
+
         let subscriber = FmtSubscriber::builder()
             .with_max_level(Level::TRACE)
             .finish();

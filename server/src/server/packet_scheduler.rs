@@ -1,6 +1,10 @@
 #![allow(dead_code)]
 
-use std::{net::{SocketAddr, TcpStream}, sync::Arc, thread::{self, JoinHandle}};
+use std::{
+    net::{SocketAddr, TcpStream},
+    sync::Arc,
+    thread::{self, JoinHandle},
+};
 
 use super::{Packet, Server};
 
@@ -15,7 +19,7 @@ impl PacketScheduler {
         Self {
             server,
             client_id: client_id.to_owned(),
-            handles: vec![]
+            handles: vec![],
         }
     }
 
@@ -28,4 +32,3 @@ impl PacketScheduler {
         self.handles.push(handle);
     }
 }
-
