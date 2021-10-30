@@ -5,7 +5,7 @@ mod connect;
 use crate::{client::Client, connect::ConnectBuilder};
 
 fn main() -> Result<(), String> {
-    let mut client = Client::new("localhost:1883").map_err(|err| -> String { err.to_string() })?;
+    let mut client = Client::new("127.0.0.1:1883").map_err(|err| -> String { err.to_string() })?;
 
     client.connect(ConnectBuilder::new("rust", 15, false)?.build()?)?;
 
