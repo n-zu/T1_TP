@@ -1,6 +1,9 @@
 #![allow(dead_code)]
 
-use packets::{packet_reader::PacketError, utf8::Field};
+use packets::{
+    packet_reader::{PacketError, RemainingLength},
+    utf8::Field,
+};
 
 const SUBSCRIBE_PACKET_TYPE: u8 = 0x80;
 const FIXED_FLAGS: u8 = 2;
@@ -56,7 +59,7 @@ impl Subscribe {
         }
     }
 
-    // Unused Getters
+    // Unused Getters - TODO: Remove if not needed
     /*
     pub fn topics(&self) -> &Vec<Topic> {
         &self.topics
@@ -78,14 +81,17 @@ impl Subscribe {
     }
 
     // Returns the subscribe packet encoded bytes
-    pub fn encode(&self) -> Vec<u8> {
-        let mut packet = Vec::new();
-
-        // Packet Type and Flags
-        packet.push(SUBSCRIBE_PACKET_TYPE | FIXED_FLAGS);
+    pub fn encode(&self) -> Result<Vec<u8>, PacketError> {
+        let mut packet = vec![
+            // Packet Type and Flags
+            SUBSCRIBE_PACKET_TYPE | FIXED_FLAGS,
+        ];
 
         // Remaining Length
-        packet.push(self.remaining_length() as u8); // FIXME : Use RemainingLenght
+        packet.append(&mut RemainingLength::encode(
+            &RemainingLength::from_uncoded(self.remaining_length())?,
+        ));
+        //packet.push(self.remaining_length() as u8); // FIXME : Use RemainingLenght
 
         // Packet Identifier
         packet.push((self.packet_identifier >> 8) as u8);
@@ -98,7 +104,7 @@ impl Subscribe {
             // Topic QoS
             packet.push(topic.qos);
         }
-        packet
+        Ok(packet)
     }
 }
 
@@ -111,7 +117,7 @@ mod tests {
         let topic = Topic::new("topic", 1).unwrap();
         let topics = vec![topic];
         let subscribe = Subscribe::new(topics, 1);
-        let packet = subscribe.encode();
+        let packet = subscribe.encode().unwrap();
         assert_eq!(
             packet,
             [
@@ -131,12 +137,12 @@ mod tests {
         let topic2 = Topic::new("topic2", 1).unwrap();
         let topics = vec![topic1, topic2];
         let subscribe = Subscribe::new(topics, 2);
-        let packet = subscribe.encode();
+        let packet = subscribe.encode().unwrap();
         assert_eq!(
             packet,
             [
-                0b10000010, // Packet Type and Flags
-                20,         // Remaining Length 10 = +2 +9 +9
+                0x82, // Packet Type and Flags
+                20,   // Remaining Length 10 = +2 +9 +9
                 0, 2, // Packet Identifier
                 0, 6, // Topic 1 Length
                 116, 111, 112, 105, 99, 49, // Topic 1 Name
