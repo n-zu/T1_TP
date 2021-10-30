@@ -27,15 +27,26 @@ const CONNACK_BAD_USER_NAME_OR_PASSWORD: u8 = 4;
 const CONNACK_NOT_AUTHORIZED: u8 = 5;
 
 impl Connack {
-    /// Devuelve un Connack con estado valido leyendo bytes desde el stream
+    /// Return a Connack with valid state from a stream of bytes
     ///
+    /// # Arguments
+    ///
+    /// * `stream`: &mut impl Read
+    ///
+    /// returns: Result<Connack, ConnackError>
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// let v: Vec<u8> = vec![32, 2, 1, 0];
+    /// let mut stream = Cursor::new(v);
+    /// let result = Connack::read_from(&mut stream)?;
+    /// let connack_expected = Connack { session_present: 1, return_code: 0, };
+    /// assert_eq!(result, connack_expected);
+    /// ```
     /// # Errors
-    ///
-    /// Si la estructura de los bytes enviados por el stream no se corresponde con el estandar de
-    /// MQTT 3.1.1, se devuelve un ConnackError::WrongEncoding(mensaje)
-    ///
-    /// Si el return_code no es 0, entonces se devuelve un ConnackError especifico correspondiente
-    /// al estandar de MQTT
+    /// If the stream's bytes doesn't follow the MQTT 3.1.1 protocol, this function returns a ConnackError::WrongEncoding(message)
+    /// If return_code is not 0, this function returns a specific ConnackError
     pub fn read_from(stream: &mut impl Read) -> Result<Connack, ConnackError> {
         let buffer = [0u8; 1];
         Connack::verify_first_byte_control_packet(buffer, stream)?;

@@ -1,3 +1,4 @@
+#![allow(unused)]
 use crate::packet_reader;
 use crate::packet_reader::PacketError;
 use crate::utf8::Field;
@@ -22,16 +23,6 @@ pub enum DupFlag {
 }
 
 #[derive(Debug, PartialEq)]
-struct Publish {
-    packet_id: Option<u16>,
-    topic_name: String,
-    qos: QoSLevel,
-    retain_flag: RetainFlag,
-    dup_flag: DupFlag,
-    payload: Option<String>,
-}
-
-#[derive(Debug, PartialEq)]
 pub enum PublishError {
     InvalidRetainFlag,
     InvalidQoSLevel,
@@ -49,7 +40,62 @@ impl From<PacketError> for PublishError {
 
 const PUBLISH_CONTROL_PACKET_TYPE: u8 = 3;
 
+#[derive(Debug, PartialEq)]
+struct Publish {
+    packet_id: Option<u16>,
+    topic_name: String,
+    qos: QoSLevel,
+    retain_flag: RetainFlag,
+    dup_flag: DupFlag,
+    payload: Option<String>,
+}
+
 impl Publish {
+    ///
+    /// Returns a Publish packet with a valid state
+    ///
+    /// # Arguments
+    ///
+    /// * `stream`: &mut impl Read
+    ///
+    /// returns: Result<Publish, PublishError>
+    ///
+    /// # Errors
+    ///
+    /// If the stream of bytes doesn't follow MQTT 3.1.1 protocol this function returns
+    /// a PublishError corresponding to the type of the error encountered
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use std::io::Cursor;
+    /// use packets::publish::{DupFlag, QoSLevel, RetainFlag};
+    /// use packets::utf8::Field;
+    ///
+    /// let mut first_byte: Vec<u8> = vec![0b110010]; // primer byte con los flags con QoS level 1;
+    ///  let mut remaining_data: Vec<u8> = vec![];
+    ///  let mut topic = Field::new_from_string("a/b").unwrap().encode();
+    ///  let mut payload = Field::new_from_string("mensaje").unwrap().encode();
+    ///  let mut packet_id_buf: Vec<u8> = vec![0b0, 0b1010]; // Seria 01010 = packet identifier 10;
+    ///  remaining_data.append(&mut topic);
+    ///  remaining_data.append(&mut packet_id_buf);
+    ///  remaining_data.append(&mut payload);
+    ///  let mut bytes = vec![];
+    ///  bytes.append(&mut first_byte);
+    ///  bytes.push(remaining_data.len() as u8);
+    ///  bytes.append(&mut remaining_data);
+    ///  let mut stream = Cursor::new(bytes);
+    ///  let expected = Publish {
+    ///             packet_id: Option::from(10 as u16),
+    ///             topic_name: "a/b".to_string(),
+    ///             qos: QoSLevel::QoSLevel1,
+    ///             retain_flag: RetainFlag::RetainFlag0,
+    ///             dup_flag: DupFlag::DupFlag0,
+    ///             payload: Option::from("mensaje".to_string()),
+    ///         };
+    ///  let result = Publish::read_from(&mut stream).unwrap();
+    ///  assert_eq!(expected, result);
+    /// ```
     pub fn read_from(stream: &mut impl Read) -> Result<Publish, PublishError> {
         let mut first_byte_buffer = [0u8; 1];
         stream.read_exact(&mut first_byte_buffer);
@@ -253,7 +299,7 @@ mod tests {
     }
 
     #[test]
-    fn test_publish_packet_might_have_zero_lenght_payload() {
+    fn test_publish_packet_might_have_zero_length_payload() {
         let mut first_byte: Vec<u8> = vec![0b110000]; // primer byte con los flags con QoS level 0;
         let mut remaining_data: Vec<u8> = vec![];
         let mut topic = Field::new_from_string("a/b").unwrap().encode();
