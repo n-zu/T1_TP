@@ -7,12 +7,14 @@ use packets::{
 
 #[derive(Debug)]
 pub struct TopicFilter {
+    /// Topic filter for a subscribe packet
     pub topic_name: String,
     pub qos: QoSLevel,
 }
 
 #[derive(Debug)]
 pub struct Subscribe {
+    /// Server-side subscribe packet structure
     identifier: u16,
     topic_filters: Vec<TopicFilter>,
 }
@@ -20,12 +22,18 @@ pub struct Subscribe {
 const QOS_MASK: u8 = 3;
 
 impl Subscribe {
+    
+    /// Gets the next two bytes of the stream as an unsigned 16-bit integer.
+    /// Returns a PacketError in case they can't be read.
     fn get_identifier(stream: &mut impl Read) -> Result<u16, PacketError> {
         let mut buf = [0; 2];
         stream.read_exact(&mut buf)?;
         Ok(u16::from_be_bytes(buf))
     }
 
+    /// Creates a new Subscribe packet from the given stream.
+    /// Returns a PacketError in case the packet is malformed.
+    /// It is assumed that the first identifier byte has already been read.
     pub fn new(stream: &mut impl Read) -> Result<Subscribe, PacketError> {
         let mut bytes = packet_reader::read_packet_bytes(stream)?;
 
@@ -58,7 +66,7 @@ impl Subscribe {
         })
     }
 
-    /*
+    /* Pendiente para cuando este el Suback
     pub fn response(&self) -> &Suback {
         &self.response
     }*/
