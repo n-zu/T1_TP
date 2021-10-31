@@ -4,6 +4,12 @@ use std::{
     io::{self, Cursor, Read},
 };
 
+#[derive(Debug, PartialEq, Eq)]
+pub enum QoSLevel {
+    QoSLevel0,
+    QoSLevel1,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ErrorKind {
     InvalidProtocol,
@@ -85,10 +91,8 @@ impl From<PacketError> for String {
 
 pub fn read_packet_bytes(stream: &mut impl Read) -> Result<Cursor<Vec<u8>>, PacketError> {
     let remaining_len = RemainingLength::from_encoded(stream)?.decode();
-
     let mut vec = vec![0u8; remaining_len as usize];
     stream.read_exact(&mut vec)?;
-
     Ok(Cursor::new(vec))
 }
 
