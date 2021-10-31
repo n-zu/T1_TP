@@ -6,11 +6,11 @@ use std::{
 pub mod topic_handler_error;
 use self::topic_handler_error::TopicHandlerError;
 
-/* DEFINICIONES TEMPORALES (la idea es después importarlas) */
-pub struct Server;
+use super::subscribe::Subscribe;
+use packets::publish::Publish;
 
-pub struct Publish;
-pub struct Subscribe;
+/* DEFINICIONES TEMPORALES (la idea es después importarlas) */
+
 pub struct Unsubscribe;
 
 /************************************************************/

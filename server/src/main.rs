@@ -17,10 +17,9 @@ mod connack;
 #[allow(dead_code)]
 mod connect;
 #[allow(dead_code)]
-mod topic_handler;
-#[allow(dead_code)]
 mod subscribe;
-
+#[allow(dead_code)]
+mod topic_handler;
 
 #[allow(dead_code, unused_imports)]
 mod server;
