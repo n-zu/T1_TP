@@ -1,7 +1,7 @@
 #![allow(unused)]
 use crate::packet_reader::{self, RemainingLength};
 use crate::packet_reader::{ErrorKind, PacketError};
-use crate::utf8::Field;
+use crate::utf8::{self, Field};
 use std::io::Read;
 
 #[doc(hidden)]
@@ -124,14 +124,17 @@ impl Publish {
         let mut remaining_bytes = packet_reader::read_packet_bytes(stream)?;
         let topic_name = Publish::verify_topic_name(&mut remaining_bytes)?;
         let packet_id = Publish::verify_packet_id(&mut remaining_bytes, &qos_level);
-        let payload = Field::new_from_stream(&mut remaining_bytes).ok_or_else(PacketError::new)?;
+        let mut buffer_prueba = vec![];
+        remaining_bytes.read_to_end(&mut buffer_prueba);
+        let payload = String::from_utf8(buffer_prueba).unwrap();
+
         Ok(Self {
             packet_id,
             topic_name: topic_name.value,
             qos: qos_level,
             retain_flag,
             dup_flag,
-            payload: Option::from(payload.value),
+            payload: Option::from(payload),
         })
     }
 
@@ -270,21 +273,12 @@ impl Publish {
         control_byte
     }
 
-    fn get_payload_field(&self) -> Field {
-        if self.payload().is_some() {
-            Field::new_from_string(&self.payload.as_ref().unwrap()).unwrap()
-        } else {
-            Field::new_from_string("").unwrap()
-        }
-
-    }
-
     #[doc(hidden)]
     fn fixed_header(&self) -> Result<Vec<u8>, PacketError> {
         let mut fixed_header = vec![];
         let variable_header_len = self.variable_header().len();
-        let message_len = self.get_payload_field().encode().len();
-        let remaining_length = RemainingLength::from_uncoded(variable_header_len + message_len)?;        
+        let message_len = self.payload.as_ref().unwrap().as_bytes().len();
+        let remaining_length = RemainingLength::from_uncoded(variable_header_len + message_len)?;
         let control_byte = self.control_byte();
         fixed_header.push(control_byte);
         fixed_header.append(&mut remaining_length.encode());
@@ -295,7 +289,7 @@ impl Publish {
         let mut bytes = vec![];
         bytes.append(&mut self.fixed_header()?);
         bytes.append(&mut self.variable_header());
-        bytes.append(&mut self.get_payload_field().encode());
+        bytes.append(&mut Vec::from(self.payload.as_ref().unwrap().as_bytes()));
         Ok(bytes)
     }
 }

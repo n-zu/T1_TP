@@ -4,10 +4,11 @@ use std::{
 };
 
 pub mod topic_handler_error;
-use self::topic_handler_error::TopicHandlerError;
-
-use super::subscribe::Subscribe;
 use packets::publish::Publish;
+
+use crate::server_packets::Subscribe;
+
+use self::topic_handler_error::TopicHandlerError;
 
 /* DEFINICIONES TEMPORALES (la idea es después importarlas) */
 pub struct Unsubscribe;
@@ -206,7 +207,7 @@ fn remove_client_rec(node: &Topic, user_id: &str) -> Result<(), TopicHandlerErro
 mod tests {
     use std::{io::Cursor, sync::RwLock};
 
-    use crate::subscribe::Subscribe;
+    use crate::server_packets::Subscribe;
 
     use super::Publisher;
     use packets::{publish::Publish, utf8::Field};

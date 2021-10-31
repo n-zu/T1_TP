@@ -7,5 +7,6 @@ edition = "2018"
 
 [dependencies]
 packets = { path = "../common/packets" }
-tracing = "0.1"
-tracing-subscriber = "0.2.0"
+tracing-subscriber = "0.3.1"
+tracing = "0.1.29"
+tracing-appender = "0.2"

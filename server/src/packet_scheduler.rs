@@ -6,7 +6,7 @@ use std::{
     thread::{self, JoinHandle},
 };
 
-use super::{Packet, Server};
+use crate::server::{Packet, Server};
 
 pub struct PacketScheduler {
     server: Arc<Server>,

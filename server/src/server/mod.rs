@@ -3,39 +3,35 @@
 use core::panic;
 use std::{
     collections::HashMap,
-    fmt,
-    io::{self, Read, Write},
+    io::{self, Read},
     net::{SocketAddr, TcpListener, TcpStream},
-    sync::{
-        atomic::{AtomicBool, Ordering},
-        mpsc::{sync_channel, Receiver, Sender, SyncSender},
-        Arc, Mutex, MutexGuard, RwLock,
-    },
+    sync::{Arc, Mutex, RwLock},
     thread::{self, JoinHandle},
     time::Duration,
     vec,
 };
 
-use tracing::{debug, error, event, info, instrument, span, warn, Level};
+use tracing::{error, info, warn};
 use tracing_subscriber::{field::debug, FmtSubscriber};
 
 use packets::packet_reader::{ErrorKind, PacketError};
 
-use crate::{config::Config, connack::Connack, connect::{self, Connect}, server::{packet_scheduler::PacketScheduler, server_error::ServerErrorKind}, topic_handler::{Publisher, TopicHandler}};
-
 mod server_error;
 use server_error::ServerError;
-
-mod client;
-use client::Client;
-
-mod packet_scheduler;
 
 const MPSC_BUF_SIZE: usize = 256;
 const SLEEP_DUR: Duration = Duration::from_secs(2);
 
-use crate::subscribe::Subscribe;
 use packets::publish::Publish;
+
+use crate::{
+    client::Client,
+    config::Config,
+    packet_scheduler::PacketScheduler,
+    server::server_error::ServerErrorKind,
+    server_packets::{Connack, Connect, Subscribe},
+    topic_handler::{Publisher, TopicHandler},
+};
 
 pub enum Packet {
     ConnectType(Connect),
@@ -93,7 +89,7 @@ fn get_code_type(code: u8) -> Result<PacketType, PacketError> {
 }
 
 impl Publisher for Server {
-    fn send_publish(&self, user_id: &str, publish: &Publish){
+    fn send_publish(&self, user_id: &str, publish: &Publish) {
         self.clients
             .read()
             .unwrap()
@@ -108,7 +104,7 @@ impl Publisher for Server {
 
 impl Server {
     /// Creates a new Server
-    fn new(config: Config) -> Arc<Self> {
+    pub fn new(config: Config) -> Arc<Self> {
         Arc::new(Self {
             clients: RwLock::new(HashMap::new()),
             config,
@@ -118,15 +114,23 @@ impl Server {
     }
 
     fn read_packet(&self, control_byte: u8, stream: &mut TcpStream) -> Result<Packet, ServerError> {
+        let buf: [u8; 1] = [control_byte];
+
         let code = control_byte >> 4;
         match get_code_type(code)? {
             PacketType::Connect => {
-                let packet = connect::Connect::new(stream)?;
+                let packet = Connect::new(stream)?;
                 Ok(Packet::ConnectType(packet))
             }
-            PacketType::Publish => todo!(),
+            PacketType::Publish => {
+                let packet = Publish::read_from(stream, &buf).unwrap();
+                Ok(Packet::PublishTypee(packet))
+            }
             PacketType::Puback => todo!(),
-            PacketType::Subscribe => todo!(),
+            PacketType::Subscribe => {
+                let packet = Subscribe::new(stream, &buf).unwrap();
+                Ok(Packet::SubscribeType(packet))
+            }
             PacketType::Unsubscribe => todo!(),
             PacketType::Pingreq => todo!(),
             PacketType::Disconnect => todo!(),
@@ -177,11 +181,12 @@ impl Server {
     }
 
     fn handle_subscribe(&self, subscribe: Subscribe, client_id: &str) -> Result<(), ServerError> {
-        todo!();
-        //self.topic_handler.subscribe(subscribe, client_id)
+        info!("Recibido subscribe de <{}>", client_id);
+        self.topic_handler.subscribe(&subscribe, client_id).unwrap();
+        Ok(())
     }
 
-    fn handle_packet(&self, packet: Packet, client_id: String) -> Result<(), ServerError> {
+    pub fn handle_packet(&self, packet: Packet, client_id: String) -> Result<(), ServerError> {
         match packet {
             Packet::ConnectType(packet) => self.handle_connect(packet, &client_id),
             Packet::PublishTypee(packet) => self.handle_publish(packet, &client_id),
@@ -366,48 +371,10 @@ impl Server {
         }
     }
 
-    fn run(self: Arc<Self>) -> Result<(), ServerError> {
+    pub fn run(self: Arc<Self>) -> Result<(), ServerError> {
         let listener = TcpListener::bind(format!("127.0.0.1:{}", self.config.port()))?;
         loop {
             self.accept_client(&listener)?;
         }
     }
-}
-
-#[cfg(test)]
-mod tests {
-    use std::{
-        env, io,
-        net::{TcpListener, TcpStream},
-        sync::{mpsc::sync_channel, Arc},
-        thread,
-        time::Duration,
-    };
-
-    use tracing::Level;
-    use tracing_subscriber::FmtSubscriber;
-
-    use crate::{
-        config::{self, Config},
-        server::{Client, MPSC_BUF_SIZE},
-    };
-
-    use super::{Packet, Server};
-
-    /*
-    #[test]
-    fn test() {
-        let config = Config::new("config.txt").expect("Error cargando la configuracion");
-
-        let subscriber = FmtSubscriber::builder()
-            .with_max_level(Level::TRACE)
-            .finish();
-
-        tracing::subscriber::set_global_default(subscriber)
-            .expect("setting default subscriber failed");
-
-        let server = Server::new(config);
-        server.run().unwrap()
-    }
-    */
 }
