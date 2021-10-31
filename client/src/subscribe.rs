@@ -1,5 +1,6 @@
 #![allow(dead_code)]
 
+use crate::connect::QoSLevel;
 use packets::{
     packet_reader::{PacketError, RemainingLength},
     utf8::Field,
@@ -12,27 +13,25 @@ const FIXED_FLAGS: u8 = 2;
 pub struct Topic {
     /// Topic for a subsribe packet
     name: Field,
-    qos: u8,
+    qos: QoSLevel,
 }
 
 impl Topic {
-    // Creates a new topic
-    // Returns PacketError if the topic name is invalid
-    pub fn new(name: &str, qos: u8) -> Result<Topic, PacketError> {
+    /// Creates a new topic
+    /// Returns PacketError if the topic name is invalid
+    pub fn new(name: &str, qos: QoSLevel) -> Result<Topic, PacketError> {
         Ok(Topic {
             name: Field::new_from_string(name)?,
             qos,
         })
     }
 
-    // Returns the topic name
-    pub fn name(&self) -> &Field {
-        &self.name
-    }
-
-    // Returns the topic qos
-    pub fn qos(&self) -> u8 {
-        self.qos
+    /// Encodes the topic and returns the encoded bytes
+    pub fn encode(&self) -> Vec<u8> {
+        let mut bytes = Vec::new();
+        bytes.extend(self.name.encode());
+        bytes.push(self.qos as u8);
+        bytes
     }
 
     // Returns the topic length
@@ -51,7 +50,7 @@ pub struct Subscribe {
 }
 
 impl Subscribe {
-    // Creates a new subscribe packet
+    /// Creates a new subscribe packet
     pub fn new(topics: Vec<Topic>, packet_identifier: u16) -> Subscribe {
         Subscribe {
             topics,
@@ -59,18 +58,7 @@ impl Subscribe {
         }
     }
 
-    // Unused Getters - TODO: Remove if not needed
-    /*
-    pub fn topics(&self) -> &Vec<Topic> {
-        &self.topics
-    }
-
-    pub fn packet_identifier(&self) -> u16 {
-        self.packet_identifier
-    }
-    */
-
-    // Returns the subscribe packet remaining bytes length
+    /// Returns the subscribe packet remaining bytes length
     fn remaining_length(&self) -> usize {
         let mut len = 2; // Packet Identifier
         for topic in self.topics.iter() {
@@ -80,7 +68,7 @@ impl Subscribe {
         len
     }
 
-    // Returns the subscribe packet encoded bytes
+    /// Returns the subscribe packet encoded bytes
     pub fn encode(&self) -> Result<Vec<u8>, PacketError> {
         let mut packet = vec![
             // Packet Type and Flags
@@ -91,7 +79,6 @@ impl Subscribe {
         packet.append(&mut RemainingLength::encode(
             &RemainingLength::from_uncoded(self.remaining_length())?,
         ));
-        //packet.push(self.remaining_length() as u8); // FIXME : Use RemainingLenght
 
         // Packet Identifier
         packet.push((self.packet_identifier >> 8) as u8);
@@ -100,9 +87,7 @@ impl Subscribe {
         // Payload: Topic Filters
         for topic in self.topics.iter() {
             // Topic name & Length
-            packet.append(&mut topic.name.encode());
-            // Topic QoS
-            packet.push(topic.qos);
+            packet.append(&mut topic.encode());
         }
         Ok(packet)
     }
@@ -114,7 +99,7 @@ mod tests {
 
     #[test]
     fn test_subscribe_encode_1_topic() {
-        let topic = Topic::new("topic", 1).unwrap();
+        let topic = Topic::new("topic", QoSLevel::QoSLevel1).unwrap();
         let topics = vec![topic];
         let subscribe = Subscribe::new(topics, 1);
         let packet = subscribe.encode().unwrap();
@@ -133,8 +118,8 @@ mod tests {
 
     #[test]
     fn test_subscribe_encode_2_topics() {
-        let topic1 = Topic::new("topic1", 0).unwrap();
-        let topic2 = Topic::new("topic2", 1).unwrap();
+        let topic1 = Topic::new("topic1", QoSLevel::QoSLevel0).unwrap();
+        let topic2 = Topic::new("topic2", QoSLevel::QoSLevel1).unwrap();
         let topics = vec![topic1, topic2];
         let subscribe = Subscribe::new(topics, 2);
         let packet = subscribe.encode().unwrap();
