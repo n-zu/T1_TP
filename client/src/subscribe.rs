@@ -10,7 +10,7 @@ const FIXED_FLAGS: u8 = 2;
 
 #[derive(Debug)]
 pub struct Topic {
-    // Topic for a subsribe packet
+    /// Topic for a subsribe packet
     name: Field,
     qos: u8,
 }
