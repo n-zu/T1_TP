@@ -1,7 +1,7 @@
 use std::io::Read;
 
 use packets::{
-    packet_reader::{self, ErrorKind, PacketError},
+    packet_reader::{self, ErrorKind, PacketError, QoSLevel},
     utf8::Field,
 };
 
@@ -23,12 +23,6 @@ const WILL_QOS_1: u8 = 0x10;
 const WILL_RETAIN: u8 = 0x20;
 const PASSWORD_FLAG: u8 = 0x40;
 const USERNAME_FLAG: u8 = 0x80;
-
-#[derive(Debug)]
-pub enum QoSLevel {
-    QoSLevel0,
-    QoSLevel1,
-}
 
 #[derive(Debug)]
 pub struct LastWill {

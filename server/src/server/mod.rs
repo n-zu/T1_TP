@@ -26,6 +26,7 @@ use crate::{
     connack::Connack,
     connect::{self, Connect},
     server::{packet_scheduler::PacketScheduler, server_error::ServerErrorKind},
+    topic_handler::TopicHandler,
 };
 
 mod server_error;
@@ -33,9 +34,6 @@ use server_error::ServerError;
 
 mod client;
 use client::Client;
-
-mod topic_handler;
-use topic_handler::TopicHandler;
 
 mod packet_scheduler;
 
