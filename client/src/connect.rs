@@ -1,17 +1,33 @@
 #![allow(dead_code)]
 
-use std::io::Read;
-
 use packets::packet_reader::PacketError;
 use packets::utf8::Field;
 
+#[doc(hidden)]
 const ENCODED_LEN_MAX_BYTES: usize = 4;
-
+#[doc(hidden)]
 const PROTOCOL_LEVEL_3_1_1: u8 = 0x04;
+#[doc(hidden)]
+const USER_NAME_PRESENT: u8 = 0x80;
+#[doc(hidden)]
+const PASSWORD_PRESENT: u8 = 0x40;
+#[doc(hidden)]
+const LAST_WILL_PRESENT: u8 = 0x04;
+#[doc(hidden)]
+const WILL_RETAIN: u8 = 0x20;
+#[doc(hidden)]
+const QOS_LEVEL_0: u8 = 0x00;
+#[doc(hidden)]
+const QOS_LEVEL_1: u8 = 0x08;
+#[doc(hidden)]
+const CLEAN_SESSION: u8 = 0x02;
+#[doc(hidden)]
+const CONNECT_PACKET_TYPE: u8 = 0x10;
+#[doc(hidden)]
 const CONTINUATION_SHIFT: u8 = 7;
-const VALUE_MASK: u8 = 0x3f;
-const CONTINUATION_MAX: u8 = 4;
 
+/// Non negative integer codification algorithm for
+/// variable_length, according to MQTT V3.1.1 standard
 fn encode_len(len: u32) -> Vec<u8> {
     let mut len = len;
     let mut encoded_len = 0;
@@ -36,11 +52,11 @@ fn encode_len(len: u32) -> Vec<u8> {
         bytes_vec.push(bytes[i]);
         i += 1
     }
-
     bytes_vec
 }
 
-enum QoSLevel {
+#[derive(PartialEq)]
+pub enum QoSLevel {
     QoSLevel0,
     QoSLevel1,
 }
@@ -62,45 +78,50 @@ pub struct Connect {
 }
 
 impl Connect {
+    #[doc(hidden)]
     fn protocol_name(&self) -> Vec<u8> {
         Field::new_from_string("MQTT")
             .expect("Error inesperado")
             .encode()
     }
 
+    #[doc(hidden)]
     fn control_byte(&self) -> u8 {
-        0x10
+        CONNECT_PACKET_TYPE
     }
 
+    #[doc(hidden)]
     fn protocol_level(&self) -> u8 {
         PROTOCOL_LEVEL_3_1_1
     }
 
+    #[doc(hidden)]
     fn flags(&self) -> u8 {
         let mut flags = 0;
         if self.user_name.is_some() {
-            flags |= 0x80;
+            flags |= USER_NAME_PRESENT;
         }
         if self.password.is_some() {
-            flags |= 0x40;
+            flags |= PASSWORD_PRESENT;
         }
-        if self.last_will.is_some() {
-            if self.last_will.is_some() {
-                flags |= 0x20;
+        if let Some(last_will) = &self.last_will {
+            if last_will.retain {
+                flags |= WILL_RETAIN;
             }
             match self.last_will.as_ref().unwrap().qos {
-                QoSLevel::QoSLevel0 => flags |= 0x00,
-                QoSLevel::QoSLevel1 => flags |= 0x08,
+                QoSLevel::QoSLevel0 => flags |= QOS_LEVEL_0,
+                QoSLevel::QoSLevel1 => flags |= QOS_LEVEL_1,
             }
-            flags |= 0x04;
+            flags |= LAST_WILL_PRESENT;
         }
         if self.clean_session {
-            flags |= 0x02;
+            flags |= CLEAN_SESSION;
         }
 
         flags
     }
 
+    #[doc(hidden)]
     fn payload(&self) -> Vec<u8> {
         let mut payload = vec![];
         payload.append(&mut self.client_id.encode());
@@ -117,6 +138,7 @@ impl Connect {
         payload
     }
 
+    #[doc(hidden)]
     fn variable_header(&self) -> Vec<u8> {
         let mut variable_header = vec![];
         variable_header.append(&mut self.protocol_name());
@@ -127,6 +149,7 @@ impl Connect {
         variable_header
     }
 
+    #[doc(hidden)]
     fn fixed_header(&self) -> Vec<u8> {
         let mut fixed_header = vec![];
         let remaining_len = self.variable_header().len() + self.payload().len();
@@ -136,6 +159,8 @@ impl Connect {
         fixed_header
     }
 
+    /// Encodes the content of the packet according to MQTT
+    /// V3.1.1 standard
     pub fn encode(&self) -> Vec<u8> {
         let mut encoded = vec![];
         encoded.append(&mut self.fixed_header());
@@ -145,27 +170,20 @@ impl Connect {
     }
 }
 
-impl LastWill {
-    fn new(
-        retain: bool,
-        qos: QoSLevel,
-        topic: &str,
-        message: &str,
-    ) -> Result<LastWill, PacketError> {
-        Ok(Self {
-            retain,
-            qos,
-            topic: Field::new_from_string(topic)?,
-            message: Field::new_from_string(message)?,
-        })
-    }
-}
-
+/// Connect packet constructor
 pub struct ConnectBuilder {
+    #[doc(hidden)]
     connect: Connect,
 }
 
 impl ConnectBuilder {
+    /// Creates a ConnectBuilder
+    ///
+    /// # Errors
+    ///
+    /// Returns error if the length of the client_id exceedes
+    /// the maximum established for utf8 fields in MQTT V3.1.1
+    /// standard
     pub fn new(client_id: &str, keep_alive: u16, clean_session: bool) -> Result<Self, PacketError> {
         Ok(ConnectBuilder {
             connect: Connect {
@@ -185,7 +203,6 @@ impl ConnectBuilder {
     }
 
     pub fn password(mut self, password: &str) -> Result<Self, PacketError> {
-        //check_payload_field_length(&password)?;
         self.connect.password = Some(Field::new_from_string(password)?);
         Ok(self)
     }
@@ -195,6 +212,12 @@ impl ConnectBuilder {
         self
     }
 
+    /// Builds the packet with the received parameters
+    ///
+    /// # Errors
+    ///
+    /// Returns error if the packet fields do not meet the
+    /// requirements of the MQTT V3.1.1 standard
     pub fn build(self) -> Result<Connect, PacketError> {
         if self.connect.password.is_some() && self.connect.user_name.is_none() {
             return Err(PacketError::new_msg(
@@ -204,28 +227,6 @@ impl ConnectBuilder {
 
         Ok(self.connect)
     }
-}
-
-#[derive(Debug)]
-pub enum ErrorKind {
-    InvalidProtocolLevel,
-    Other,
-}
-
-fn get_remaining(stream: &mut impl Read, byte: u8) -> Result<usize, PacketError> {
-    let i: u8 = 1;
-    let mut buf = [byte];
-    let mut len: usize = usize::from(buf[0] & VALUE_MASK);
-
-    while buf[0] >> CONTINUATION_SHIFT != 0 {
-        if i >= CONTINUATION_MAX {
-            return Err(PacketError::new_msg("Malformed Remaining Length"));
-        }
-
-        stream.read_exact(&mut buf)?;
-        len += usize::from(buf[0] & VALUE_MASK) << (i * CONTINUATION_SHIFT);
-    }
-    Ok(len)
 }
 
 #[cfg(test)]
@@ -240,7 +241,15 @@ mod tests {
             .unwrap();
         assert_eq!(
             packet.encode(),
-            [16, 16, 0, 4, 77, 81, 84, 84, 4, 2, 0, 13, 0, 4, 114, 117, 115, 116]
+            [
+                16, // fixed_header
+                16, // remaining_length
+                0, 4, 77, 81, 84, 84, // (0) (4) MQTT
+                4,  // protocol_level
+                2,  // flags: CLEAN_SESSION
+                0, 13, // keep_alive
+                0, 4, 114, 117, 115, 116 // (0) (4) rust
+            ]
         );
     }
 
@@ -257,21 +266,27 @@ mod tests {
         assert_eq!(
             packet.encode(),
             [
-                16, 26, 0, 4, 77, 81, 84, 84, 4, 194, 0, 25, 0, 4, 114, 117, 115, 116, 0, 2, 121,
-                111, 0, 4, 112, 97, 115, 115
+                16, // fixed_header
+                26, // remaining_length
+                0, 4, 77, 81, 84, 84,  // (0) (4) MQTT
+                4,   // protocol_level
+                194, // flags: CLEAN_SESSION | USER_NAME_PRESENT | PASSWORD_PRESENT
+                0, 25, // keep_alive
+                0, 4, 114, 117, 115, 116, // (0) (4) rust
+                0, 2, 121, 111, // user_name: (0) (2) yo
+                0, 4, 112, 97, 115, 115 // password: (0) (4) pass
             ]
         );
     }
 
     #[test]
-    #[should_panic]
     fn test_password_without_username() {
-        let _ = ConnectBuilder::new("rust", 25, true)
+        let builder = ConnectBuilder::new("rust", 25, true)
             .unwrap()
             .password("pass")
-            .unwrap()
-            .build()
             .unwrap();
+
+        assert!(builder.build().is_err());
     }
 
     #[test]
@@ -282,7 +297,15 @@ mod tests {
             .unwrap();
         assert_eq!(
             packet.encode(),
-            [16, 16, 0, 4, 77, 81, 84, 84, 4, 0, 0, 25, 0, 4, 114, 117, 115, 116]
+            [
+                16, // fixed_header
+                16, // remaining_length
+                0, 4, 77, 81, 84, 84, // (0) (4) MQTT
+                4,  // protocol_level
+                0,  // flags
+                0, 25, // keep_alive
+                0, 4, 114, 117, 115, 116 // password: (0) (4) rust
+            ]
         )
     }
 }
