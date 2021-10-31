@@ -27,7 +27,7 @@ impl PacketScheduler {
         let sv_copy = self.server.clone();
         let client_id = self.client_id.clone();
         let handle = thread::spawn(move || {
-            sv_copy.handle_packet(packet, client_id);
+            sv_copy.handle_packet(packet, client_id).unwrap();
         });
         self.handles.push(handle);
     }

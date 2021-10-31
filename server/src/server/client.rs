@@ -1,4 +1,11 @@
-use std::{io::{self, Write}, net::TcpStream, sync::{Mutex, MutexGuard, atomic::{AtomicBool, Ordering}}};
+use std::{
+    io::{self, Write},
+    net::TcpStream,
+    sync::{
+        atomic::{AtomicBool, Ordering},
+        Mutex, MutexGuard,
+    },
+};
 
 use crate::connect::Connect;
 

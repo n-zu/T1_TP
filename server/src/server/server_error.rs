@@ -1,5 +1,7 @@
 use std::{fmt, io};
 
+use packets::packet_reader::PacketError;
+
 #[derive(Debug)]
 pub struct ServerError {
     msg: String,
@@ -36,6 +38,12 @@ impl From<io::Error> for ServerError {
 impl From<ServerError> for io::Error {
     fn from(server_error: ServerError) -> Self {
         io::Error::new(io::ErrorKind::ConnectionAborted, "Cliente muerto")
+    }
+}
+
+impl From<PacketError> for ServerError {
+    fn from(packet_error: PacketError) -> Self {
+        ServerError::new_msg(&packet_error.to_string())
     }
 }
 
