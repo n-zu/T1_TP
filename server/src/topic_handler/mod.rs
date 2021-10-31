@@ -10,9 +10,7 @@ use super::subscribe::Subscribe;
 use packets::publish::Publish;
 
 /* DEFINICIONES TEMPORALES (la idea es después importarlas) */
-
 pub struct Unsubscribe;
-
 /************************************************************/
 
 type Subtopics = HashMap<String, Topic>;
@@ -43,8 +41,12 @@ impl Topic {
 }
 
 impl TopicHandler {
-    pub fn subscribe(&self, _packet: Subscribe, client_id: &str) -> Result<(), TopicHandlerError> {
-        let topics: Vec<&str> = Vec::new();
+    pub fn subscribe(&self, packet: &Subscribe, client_id: &str) -> Result<(), TopicHandlerError> {
+        let topics: Vec<&str> = packet
+            .topic_filters()
+            .iter()
+            .map(|t| t.topic_name.as_ref())
+            .collect();
 
         for topic in topics {
             subscribe_rec(&self.root, topic, client_id)?;
@@ -55,16 +57,16 @@ impl TopicHandler {
 
     pub fn publish(
         &self,
-        packet: Publish,
-        server: impl Publisher,
+        packet: &Publish,
+        server: &impl Publisher,
     ) -> Result<(), TopicHandlerError> {
-        let full_topic = "todo";
+        let full_topic = packet.topic_name.as_ref();
         let mut subs: Subscribers = HashSet::new();
 
         get_subs_rec(&self.root, full_topic, &mut subs)?;
 
         for sub in subs {
-            server.send_publish(&sub, &packet);
+            server.send_publish(&sub, packet);
         }
         Ok(())
     }
@@ -198,4 +200,96 @@ fn remove_client_rec(node: &Topic, user_id: &str) -> Result<(), TopicHandlerErro
     // si falla no importa
     let _res = clean_node(node);
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use std::{io::Cursor, sync::RwLock};
+
+    use crate::subscribe::Subscribe;
+
+    use super::Publisher;
+    use packets::{publish::Publish, utf8::Field};
+
+    struct ServerMock<'a> {
+        pub expected_users: Vec<String>,
+        pub expected_packet: &'a Publish,
+        pub times_called: RwLock<u8>,
+    }
+
+    impl<'a> ServerMock<'a> {
+        fn new(expected_users: Vec<String>, expected_packet: &'a Publish) -> Self {
+            Self {
+                expected_users,
+                expected_packet,
+                times_called: RwLock::new(0),
+            }
+        }
+    }
+
+    impl Publisher for ServerMock<'_> {
+        fn send_publish(&self, user_id: &str, packet: &Publish) {
+            assert_eq!(self.expected_packet, packet);
+            assert!(self.expected_users.contains(&user_id.to_string()));
+            *self.times_called.write().unwrap() += 1;
+        }
+    }
+
+    fn build_publish(topic: &str, message: &str) -> Publish {
+        let mut bytes = Vec::new();
+        bytes.extend(Field::new_from_string(topic).unwrap().encode());
+        bytes.extend([0, 1]); // identifier
+        bytes.extend(Field::new_from_string(message).unwrap().encode());
+        bytes.insert(0, bytes.len() as u8);
+        let header = [0b00110010];
+        Publish::read_from(&mut Cursor::new(bytes), &header).unwrap()
+    }
+
+    fn build_subscribe(topic: &str) -> Subscribe {
+        let mut bytes: Vec<u8> = Vec::new();
+        bytes.extend([0, 5]); // identifier
+        bytes.extend(Field::new_from_string(topic).unwrap().encode());
+        bytes.push(1); // QoS level 1
+
+        bytes.insert(0, bytes.len() as u8);
+        let header = [0b10000010];
+        Subscribe::new(&mut Cursor::new(bytes), &header).unwrap()
+    }
+
+    #[test]
+    fn test_one_subscribe_one_publish_single_level_topic() {
+        let subscribe = build_subscribe("topic");
+        let publish = build_publish("topic", "unMensaje");
+        let handler = super::TopicHandler::new();
+        let server = ServerMock::new(vec!["user".to_string()], &publish);
+
+        handler.subscribe(&subscribe, "user").unwrap();
+        handler.publish(&publish, &server).unwrap();
+        assert_eq!(1, *server.times_called.read().unwrap());
+    }
+
+    #[test]
+    fn test_one_subscribe_one_publish_multi_level_topic() {
+        let subscribe = build_subscribe("topic/asd/dsa");
+        let publish = build_publish("topic/asd/dsa", "unMensaje");
+        let handler = super::TopicHandler::new();
+        let server = ServerMock::new(vec!["user".to_string()], &publish);
+
+        handler.subscribe(&subscribe, "user").unwrap();
+        handler.publish(&publish, &server).unwrap();
+        assert_eq!(1, *server.times_called.read().unwrap());
+    }
+
+    #[test]
+    fn test_two_subscribe_one_publish_multi_level_topic() {
+        let subscribe = build_subscribe("topic/asd/dsa");
+        let publish = build_publish("topic/asd/dsa", "unMensaje");
+        let handler = super::TopicHandler::new();
+        let server = ServerMock::new(vec!["user".to_string(), "user2".to_string()], &publish);
+
+        handler.subscribe(&subscribe, "user").unwrap();
+        handler.subscribe(&subscribe, "user2").unwrap();
+        handler.publish(&publish, &server).unwrap();
+        assert_eq!(2, *server.times_called.read().unwrap());
+    }
 }
