@@ -48,6 +48,7 @@ const PROTOCOL_LEVEL: u8 = 4;
 
 impl Connect {
     fn verify_protocol(bytes: &mut impl Read) -> Result<(), PacketError> {
+        /*
         match Field::new_from_stream(bytes) {
             Some(mensaje) if mensaje.value != "MQTT" => Err(PacketError::new_kind(
                 "Invalid protocol",
@@ -56,9 +57,12 @@ impl Connect {
             None => Err(PacketError::new()),
             Some(_mensaje) => Ok(()),
         }
+        */
+        Ok(())
     }
 
     fn verify_protocol_level(bytes: &mut impl Read) -> Result<(), PacketError> {
+        /*
         let mut buf = [0; 1];
         bytes.read_exact(&mut buf)?;
         if buf[0] != PROTOCOL_LEVEL {
@@ -67,6 +71,7 @@ impl Connect {
                 ErrorKind::InvalidProtocolLevel,
             ));
         }
+        */
         Ok(())
     }
 
@@ -171,13 +176,25 @@ impl Connect {
 
     pub fn new(stream: &mut impl Read) -> Result<Connect, PacketError> {
         let mut bytes = packet_reader::read_packet_bytes(stream)?;
-
+        println!("1");
         Connect::verify_protocol(&mut bytes)?;
+        println!("2");
+
         Connect::verify_protocol_level(&mut bytes)?;
+        println!("3");
+
         let mut ret = Connect::get_flags(&mut bytes)?;
+        println!("4");
+
         ret.get_keepalive(&mut bytes)?;
+        println!("5");
+
         ret.get_clientid(&mut bytes)?;
+        println!("6");
+
         ret.get_will_data(&mut bytes)?;
+        println!("7");
+
         ret.get_auth(&mut bytes)?;
 
         let mut buf = [0u8; 1];

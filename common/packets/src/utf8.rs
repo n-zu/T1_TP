@@ -69,6 +69,7 @@ impl Field {
         stream.read_exact(&mut buf).ok()?;
 
         let size = u16::from_be_bytes(buf) as usize;
+        println!("Largo: {}", size);
         let mut buf_string = vec![0; size];
         if stream.read_exact(&mut buf_string).is_err() {
             return None;

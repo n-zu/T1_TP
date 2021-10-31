@@ -1,8 +1,23 @@
 #![allow(unused)]
-use crate::packet_reader;
+use crate::packet_reader::{self, RemainingLength};
 use crate::packet_reader::{ErrorKind, PacketError};
 use crate::utf8::Field;
 use std::io::Read;
+
+#[doc(hidden)]
+const RETAIN_FLAG: u8 = 0b00000001;
+#[doc(hidden)]
+const QOS_LEVEL_0_FLAG: u8 = 0b00000000;
+#[doc(hidden)]
+const QOS_LEVEL_1_FLAG: u8 = 0b00000010;
+#[doc(hidden)]
+const DUP_FLAG: u8 = 0b00001000;
+#[doc(hidden)]
+const PUBLISH_PACKET_TYPE: u8 = 0b00110000;
+#[doc(hidden)]
+const SINGLE_LEVEL_WILDCARD: char = '+';
+#[doc(hidden)]
+const MULTI_LEVEL_WILDCARD: char = '#';
 
 #[derive(Debug, PartialEq)]
 pub enum QoSLevel {
@@ -225,6 +240,63 @@ impl Publish {
     /// Gets payload from a Publish packet
     pub fn payload(&self) -> Option<&String> {
         self.payload.as_ref()
+    }
+
+    #[doc(hidden)]
+    fn variable_header(&self) -> Vec<u8> {
+        let mut variable_header = vec![];
+        variable_header.append(&mut Field::new_from_string(&self.topic_name).unwrap().encode());
+        if let Some(packet_identifier) = self.packet_id {
+            variable_header.push(packet_identifier.to_be_bytes()[0]);
+            variable_header.push(packet_identifier.to_be_bytes()[1]);
+        }
+
+        variable_header
+    }
+
+    #[doc(hidden)]
+    fn control_byte(&self) -> u8 {
+        let mut control_byte = PUBLISH_PACKET_TYPE;
+        if self.dup_flag == DupFlag::DupFlag1 {
+            control_byte |= DUP_FLAG;
+        }
+        match self.qos {
+            QoSLevel::QoSLevel0 => control_byte |= QOS_LEVEL_0_FLAG,
+            QoSLevel::QoSLevel1 => control_byte |= QOS_LEVEL_1_FLAG,
+        }
+        if self.retain_flag == RetainFlag::RetainFlag1 {
+            control_byte |= RETAIN_FLAG;
+        }
+        control_byte
+    }
+
+    fn get_payload_field(&self) -> Field {
+        if self.payload().is_some() {
+            Field::new_from_string(&self.payload.as_ref().unwrap()).unwrap()
+        } else {
+            Field::new_from_string("").unwrap()
+        }
+
+    }
+
+    #[doc(hidden)]
+    fn fixed_header(&self) -> Result<Vec<u8>, PacketError> {
+        let mut fixed_header = vec![];
+        let variable_header_len = self.variable_header().len();
+        let message_len = self.get_payload_field().encode().len();
+        let remaining_length = RemainingLength::from_uncoded(variable_header_len + message_len)?;        
+        let control_byte = self.control_byte();
+        fixed_header.push(control_byte);
+        fixed_header.append(&mut remaining_length.encode());
+        Ok(fixed_header)
+    }
+
+    pub fn encode(&self) -> Result<Vec<u8>, PacketError> {
+        let mut bytes = vec![];
+        bytes.append(&mut self.fixed_header()?);
+        bytes.append(&mut self.variable_header());
+        bytes.append(&mut self.get_payload_field().encode());
+        Ok(bytes)
     }
 }
 

@@ -93,6 +93,7 @@ pub fn read_packet_bytes(stream: &mut impl Read) -> Result<Cursor<Vec<u8>>, Pack
     let remaining_len = RemainingLength::from_encoded(stream)?.decode();
     let mut vec = vec![0u8; remaining_len as usize];
     stream.read_exact(&mut vec)?;
+    println!("Stream: {:?}", &vec);
     Ok(Cursor::new(vec))
 }
 

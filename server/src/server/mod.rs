@@ -21,13 +21,7 @@ use tracing_subscriber::{field::debug, FmtSubscriber};
 
 use packets::packet_reader::{ErrorKind, PacketError};
 
-use crate::{
-    config::Config,
-    connack::Connack,
-    connect::{self, Connect},
-    server::{packet_scheduler::PacketScheduler, server_error::ServerErrorKind},
-    topic_handler::TopicHandler,
-};
+use crate::{config::Config, connack::Connack, connect::{self, Connect}, server::{packet_scheduler::PacketScheduler, server_error::ServerErrorKind}, topic_handler::{Publisher, TopicHandler}};
 
 mod server_error;
 use server_error::ServerError;
@@ -40,16 +34,8 @@ mod packet_scheduler;
 const MPSC_BUF_SIZE: usize = 256;
 const SLEEP_DUR: Duration = Duration::from_secs(2);
 
-// Temporal
-pub struct Subscribe {}
-
-pub struct Publish {}
-
-impl Publish {
-    pub fn encode(&self) -> Result<Vec<u8>, PacketError> {
-        todo!()
-    }
-}
+use crate::subscribe::Subscribe;
+use packets::publish::Publish;
 
 pub enum Packet {
     ConnectType(Connect),
@@ -103,6 +89,20 @@ fn get_code_type(code: u8) -> Result<PacketType, PacketError> {
             "Tipo de paquete invalido/no soportado",
             ErrorKind::InvalidControlPacketType,
         )),
+    }
+}
+
+impl Publisher for Server {
+    fn send_publish(&self, user_id: &str, publish: &Publish){
+        self.clients
+            .read()
+            .unwrap()
+            .get(user_id)
+            .unwrap()
+            .lock()
+            .unwrap()
+            .write_all(&publish.encode().unwrap())
+            .unwrap();
     }
 }
 
@@ -172,25 +172,13 @@ impl Server {
     }
 
     fn handle_publish(&self, publish: Publish, client_id: &str) -> Result<(), ServerError> {
-        todo!();
-        //self.topic_handler.publish(publish)
+        self.topic_handler.publish(&publish, self).unwrap();
+        Ok(())
     }
 
     fn handle_subscribe(&self, subscribe: Subscribe, client_id: &str) -> Result<(), ServerError> {
         todo!();
         //self.topic_handler.subscribe(subscribe, client_id)
-    }
-
-    pub fn send_publish(&self, publish: Publish, client_id: &str) -> Result<(), ServerError> {
-        self.clients
-            .read()
-            .unwrap()
-            .get(client_id)
-            .unwrap()
-            .lock()
-            .unwrap()
-            .write_all(&publish.encode()?)?;
-        Ok(())
     }
 
     fn handle_packet(&self, packet: Packet, client_id: String) -> Result<(), ServerError> {
