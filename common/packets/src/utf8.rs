@@ -4,7 +4,7 @@ const MAX_FIELD_LEN: usize = 665535;
 
 use crate::packet_reader::PacketError;
 
-/// Field struct represents a UTF-8 encoded strings
+#[derive(Debug)]
 pub struct Field {
     pub value: String,
 }
