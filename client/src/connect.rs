@@ -55,9 +55,12 @@ fn encode_len(len: u32) -> Vec<u8> {
     bytes_vec
 }
 
+#[derive(Debug, PartialEq, Copy, Clone)]
+#[repr(u8)]
+
 pub enum QoSLevel {
-    QoSLevel0,
-    QoSLevel1,
+    QoSLevel0 = 0,
+    QoSLevel1 = 1,
 }
 
 pub struct LastWill {

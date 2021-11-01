@@ -1,11 +1,11 @@
 use std::io::Read;
 
 use packets::{
-    packet_reader::{self, ErrorKind, PacketError},
+    packet_reader::{self, ErrorKind, PacketError, QoSLevel},
     utf8::Field,
 };
 
-use crate::connack::{Connack, CONNACK_CONNECTION_ACCEPTED};
+use super::{connack::CONNACK_CONNECTION_ACCEPTED, Connack};
 
 /*
 const MAX_PAYLOAD_FIELD_LEN: usize = 65535;
@@ -25,12 +25,6 @@ const PASSWORD_FLAG: u8 = 0x40;
 const USERNAME_FLAG: u8 = 0x80;
 
 #[derive(Debug)]
-pub enum QoSLevel {
-    QoSLevel0,
-    QoSLevel1,
-}
-
-#[derive(Debug)]
 pub struct LastWill {
     pub retain: bool,
     pub qos: QoSLevel,
@@ -46,7 +40,6 @@ pub struct Connect {
     password: Option<String>,
     last_will: Option<LastWill>,
     keep_alive: u16,
-
     response: Connack,
 }
 
@@ -177,7 +170,6 @@ impl Connect {
 
     pub fn new(stream: &mut impl Read) -> Result<Connect, PacketError> {
         let mut bytes = packet_reader::read_packet_bytes(stream)?;
-
         Connect::verify_protocol(&mut bytes)?;
         Connect::verify_protocol_level(&mut bytes)?;
         let mut ret = Connect::get_flags(&mut bytes)?;
@@ -238,7 +230,7 @@ mod tests {
 
     use super::ErrorKind;
     use super::Field;
-    use crate::connect::{
+    use crate::server_packets::connect::{
         Connect, CLEAN_SESSION, PASSWORD_FLAG, RESERVED, USERNAME_FLAG, WILL_FLAG, WILL_QOS_0,
         WILL_QOS_1, WILL_RETAIN,
     };
