@@ -6,6 +6,8 @@ use packets::packet_reader::PacketError;
 
 use crate::connack::Connack;
 use crate::connect::Connect;
+use crate::publish::{self, Publish};
+use crate::subscribe::Subscribe;
 
 pub struct Client {
     stream: TcpStream,
@@ -31,6 +33,16 @@ impl Client {
             }
         }
 
+        Ok(())
+    }
+
+    pub fn subscribe(&mut self, subscribe: Subscribe) -> Result<(), PacketError> {
+        self.stream.write_all(&subscribe.encode()?)?;
+        Ok(())
+    }
+
+    pub fn publish(&mut self, publish: Publish) -> Result<(), PacketError> {
+        self.stream.write_all(&publish.encode()?)?;
         Ok(())
     }
 }
