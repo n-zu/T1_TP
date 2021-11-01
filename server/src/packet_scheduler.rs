@@ -1,12 +1,11 @@
 #![allow(dead_code)]
 
 use std::{
-    net::{SocketAddr, TcpStream},
     sync::Arc,
     thread::{self, JoinHandle},
 };
 
-use super::{Packet, Server};
+use crate::server::{Packet, Server};
 
 pub struct PacketScheduler {
     server: Arc<Server>,

@@ -1,6 +1,6 @@
 use std::io::Read;
 
-const MAX_FIELD_LEN: usize = 665535;
+const MAX_FIELD_LEN: usize = 65535;
 
 use crate::packet_reader::PacketError;
 
@@ -12,12 +12,6 @@ pub struct Field {
 impl Field {
     /// Creates a new Field struct from a string literal
     ///
-    /// # Arguments
-    ///
-    /// * `value`: &str, string literal
-    ///
-    /// returns: Result<Field, PacketError>
-    ///
     /// # Examples
     ///
     /// ```
@@ -27,7 +21,6 @@ impl Field {
     /// let msg = "test 0123";    ///
     /// let field = Field::new_from_string(msg).unwrap();
     /// assert_eq!(field.encode(), bytes);
-    ///
     /// ```
     ///
     /// # Errors
@@ -45,12 +38,6 @@ impl Field {
 
     ///
     /// Creates a Field struct from a stream of bytes
-    /// # Arguments
-    ///
-    /// * `stream`: &mut impl Read, first two bytes must give the number of bytes in a UTF-8 encoded string itself
-    ///
-    /// returns: Option<Field>
-    ///
     /// # Examples
     ///
     /// ```
@@ -69,7 +56,6 @@ impl Field {
         stream.read_exact(&mut buf).ok()?;
 
         let size = u16::from_be_bytes(buf) as usize;
-        println!("Largo: {}", size);
         let mut buf_string = vec![0; size];
         if stream.read_exact(&mut buf_string).is_err() {
             return None;
@@ -82,11 +68,6 @@ impl Field {
     }
 
     /// Encodes a Field struct into a UTF-8 string
-    ///
-    /// # Arguments
-    ///
-    /// * `self`: Field struct
-    ///
     ///
     /// # Examples
     ///

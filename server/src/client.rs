@@ -3,11 +3,11 @@ use std::{
     net::TcpStream,
     sync::{
         atomic::{AtomicBool, Ordering},
-        Mutex, MutexGuard,
+        Mutex,
     },
 };
 
-use crate::connect::Connect;
+use crate::server_packets::Connect;
 
 pub struct Client {
     id: String,

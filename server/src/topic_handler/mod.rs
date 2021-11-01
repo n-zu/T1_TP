@@ -4,10 +4,11 @@ use std::{
 };
 
 pub mod topic_handler_error;
-use self::topic_handler_error::TopicHandlerError;
-
-use super::subscribe::Subscribe;
 use packets::publish::Publish;
+
+use crate::server_packets::Subscribe;
+
+use self::topic_handler_error::TopicHandlerError;
 
 /* DEFINICIONES TEMPORALES (la idea es después importarlas) */
 pub struct Unsubscribe;
@@ -41,6 +42,7 @@ impl Topic {
 }
 
 impl TopicHandler {
+    /// Subscribe a client_id into a set of topics given a Subscribe packet
     pub fn subscribe(&self, packet: &Subscribe, client_id: &str) -> Result<(), TopicHandlerError> {
         let topics: Vec<&str> = packet
             .topic_filters()
@@ -55,6 +57,7 @@ impl TopicHandler {
         Ok(())
     }
 
+    /// Sends a Publish packet to the clients who are subscribed into a certain topic
     pub fn publish(
         &self,
         packet: &Publish,
@@ -71,6 +74,7 @@ impl TopicHandler {
         Ok(())
     }
 
+    /// Unsubscribe a client_id from a set of topics given a Unsubscribe packet
     pub fn unsubscribe(
         &self,
         _packet: Unsubscribe,
@@ -206,7 +210,7 @@ fn remove_client_rec(node: &Topic, user_id: &str) -> Result<(), TopicHandlerErro
 mod tests {
     use std::{io::Cursor, sync::RwLock};
 
-    use crate::subscribe::Subscribe;
+    use crate::server_packets::Subscribe;
 
     use super::Publisher;
     use packets::{publish::Publish, utf8::Field};
