@@ -6,7 +6,7 @@ use packets::packet_reader::PacketError;
 
 use crate::connack::Connack;
 use crate::connect::Connect;
-use crate::publish::{self, Publish};
+use crate::publish::{Publish};
 use crate::subscribe::Subscribe;
 
 pub struct Client {
