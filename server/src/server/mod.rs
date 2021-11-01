@@ -15,6 +15,7 @@ use tracing::{error, info, warn};
 use packets::packet_reader::{ErrorKind, PacketError};
 
 mod server_error;
+
 use server_error::ServerError;
 
 const MPSC_BUF_SIZE: usize = 256;
@@ -103,6 +104,7 @@ impl Publisher for Server {
 impl Server {
     /// Creates a new Server
     pub fn new(config: Config) -> Arc<Self> {
+        info!("Inicializando servidor");
         Arc::new(Self {
             clients: RwLock::new(HashMap::new()),
             config,
@@ -111,28 +113,31 @@ impl Server {
         })
     }
 
+    /// Server start listening to connections
     pub fn run(self: Arc<Self>) -> Result<(), ServerError> {
+        info!("Escuchando conexiones");
         let listener = TcpListener::bind(format!("127.0.0.1:{}", self.config.port()))?;
         loop {
             self.accept_client(&listener)?;
         }
     }
 
+    /// Handles packets depending on packet type
     pub fn handle_packet(&self, packet: Packet, client_id: String) -> Result<(), ServerError> {
         match packet {
             Packet::ConnectType(packet) => self.handle_connect(packet, &client_id),
             Packet::PublishTypee(packet) => self.handle_publish(packet, &client_id),
             Packet::SubscribeType(packet) => self.handle_subscribe(packet, &client_id),
             _ => Err(ServerError::new_kind(
-                "Paquete invalido",
+                "Invalid packet",
                 ServerErrorKind::ProtocolViolation,
             )),
         }
     }
 
+    #[doc(hidden)]
     fn read_packet(&self, control_byte: u8, stream: &mut TcpStream) -> Result<Packet, ServerError> {
         let buf: [u8; 1] = [control_byte];
-
         let code = control_byte >> 4;
         match get_code_type(code)? {
             PacketType::Connect => {
@@ -158,6 +163,7 @@ impl Server {
         }
     }
 
+    #[doc(hidden)]
     fn receive_packet(&self, stream: &mut TcpStream) -> Result<Packet, ServerError> {
         let mut buf = [0u8; 1];
         match stream.read_exact(&mut buf) {
@@ -177,6 +183,7 @@ impl Server {
         }
     }
 
+    #[doc(hidden)]
     fn handle_connect(&self, connect: Connect, client_id: &str) -> Result<(), ServerError> {
         // Como la conexion se maneja antes de entrar al loop de paquetes
         // si se llega a este punto es porque se mando un segundo connect
@@ -192,17 +199,21 @@ impl Server {
         ))
     }
 
+    #[doc(hidden)]
     fn handle_publish(&self, publish: Publish, client_id: &str) -> Result<(), ServerError> {
+        info!("Recibido Publish de <{}>", client_id);
         self.topic_handler.publish(&publish, self).unwrap();
         Ok(())
     }
 
+    #[doc(hidden)]
     fn handle_subscribe(&self, subscribe: Subscribe, client_id: &str) -> Result<(), ServerError> {
         info!("Recibido subscribe de <{}>", client_id);
         self.topic_handler.subscribe(&subscribe, client_id).unwrap();
         Ok(())
     }
 
+    #[doc(hidden)]
     fn connect_new_client(
         &self,
         connect: Connect,
@@ -212,6 +223,7 @@ impl Server {
         Ok(Client::new(connect, stream_copy))
     }
 
+    #[doc(hidden)]
     fn wait_for_connect(&self, stream: &mut TcpStream) -> Result<Client, ServerError> {
         match self.receive_packet(stream) {
             Ok(packet) => {
@@ -230,6 +242,7 @@ impl Server {
         }
     }
 
+    #[doc(hidden)]
     fn new_client(&self, client: Client) -> Result<(), ServerError> {
         match self
             .clients
@@ -249,6 +262,7 @@ impl Server {
     }
 
     // Temporal
+    #[doc(hidden)]
     fn send_connack(&self, client_id: &str) -> Result<(), ServerError> {
         let response = *self
             .clients
@@ -271,6 +285,7 @@ impl Server {
         Ok(())
     }
 
+    #[doc(hidden)]
     fn is_alive(&self, client_id: &str) -> bool {
         self.clients
             .read()
@@ -282,6 +297,7 @@ impl Server {
             .alive()
     }
 
+    #[doc(hidden)]
     fn disconnect(&self, client_id: &str) {
         self.clients
             .read()
@@ -294,8 +310,10 @@ impl Server {
         self.clients.write().unwrap().remove(client_id).unwrap();
     }
 
+    #[doc(hidden)]
     fn remove_client(&self, client_id: &str) {}
 
+    #[doc(hidden)]
     fn connect_client(
         &self,
         stream: &mut TcpStream,
@@ -305,6 +323,7 @@ impl Server {
             Ok(client) => {
                 let client_id = client.id().to_owned();
                 self.new_client(client)?;
+                info!("Sending Connack packet to {}", addr.to_string());
                 self.send_connack(&client_id)?;
                 Ok(client_id)
             }
@@ -322,6 +341,7 @@ impl Server {
         }
     }
 
+    #[doc(hidden)]
     fn client_loop(self: Arc<Self>, client_id: String, mut stream: TcpStream) {
         let mut packet_manager = PacketScheduler::new(self.clone(), &client_id);
         while self.is_alive(&client_id) {
@@ -344,25 +364,27 @@ impl Server {
         // Implementar Drop para PacketManager
     }
 
+    #[doc(hidden)]
     fn manage_client(self: Arc<Self>, mut stream: TcpStream, addr: SocketAddr) {
         match self.connect_client(&mut stream, addr) {
             Err(err) => match err.kind() {
                 ServerErrorKind::ProtocolViolation => {}
-                _ => panic!("Error inesperado"),
+                _ => panic!("Unexpected error"),
             },
             Ok(client_id) => self.client_loop(client_id, stream),
         }
     }
 
+    #[doc(hidden)]
     fn accept_client(self: &Arc<Self>, listener: &TcpListener) -> Result<(), ServerError> {
         match listener.accept() {
             Err(error) if error.kind() == io::ErrorKind::WouldBlock => Ok(()),
             Err(error) => {
-                error!("No se pudo aceptar conexion TCP: {}", error.to_string());
+                error!("Could not accept TCP connection: {}", error.to_string());
                 Err(ServerError::from(error))
             }
             Ok((stream, addr)) => {
-                info!("Aceptada conexion TCP con {}", addr);
+                info!("TCP connection to {} accepted", addr);
                 // En la implementacion original habia un set_nonblocking, para que lo precisamos?
                 let sv_copy = self.clone();
                 // No funcionan los nombres en el trace

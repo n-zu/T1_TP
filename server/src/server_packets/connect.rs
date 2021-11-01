@@ -40,7 +40,6 @@ pub struct Connect {
     password: Option<String>,
     last_will: Option<LastWill>,
     keep_alive: u16,
-
     response: Connack,
 }
 
