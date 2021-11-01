@@ -12,7 +12,6 @@ use std::{
 };
 
 use tracing::{error, info, warn};
-use tracing_subscriber::{field::debug, FmtSubscriber};
 
 use packets::packet_reader::{ErrorKind, PacketError};
 
@@ -113,7 +112,7 @@ impl Server {
         })
     }
 
-    fn read_packet(&self, control_byte: u8, stream: &mut TcpStream) -> Result<Packet, ServerError> {
+    fn read_packet(&self, control_byte: u8, stream: &mut TcpStream, client_id: &str) -> Result<Packet, ServerError> {
         let buf: [u8; 1] = [control_byte];
 
         let code = control_byte >> 4;
@@ -132,7 +131,9 @@ impl Server {
                 Ok(Packet::SubscribeType(packet))
             }
             PacketType::Unsubscribe => todo!(),
-            PacketType::Pingreq => todo!(),
+            PacketType::Pingreq => {
+                todo!()
+            },
             PacketType::Disconnect => todo!(),
             _ => Err(ServerError::new_kind(
                 "Codigo de paquete inesperado",
@@ -141,10 +142,10 @@ impl Server {
         }
     }
 
-    fn receive_packet(&self, stream: &mut TcpStream) -> Result<Packet, ServerError> {
+    fn receive_packet(&self, stream: &mut TcpStream, client_id: &str) -> Result<Packet, ServerError> {
         let mut buf = [0u8; 1];
         match stream.read_exact(&mut buf) {
-            Ok(_) => Ok(self.read_packet(buf[0], stream)?),
+            Ok(_) => Ok(self.read_packet(buf[0], stream, client_id)?),
             Err(error) if error.kind() == io::ErrorKind::UnexpectedEof => {
                 error!("Cliente se desconecto de forma inesperada");
                 Err(ServerError::new_kind(
@@ -176,6 +177,8 @@ impl Server {
     }
 
     fn handle_publish(&self, publish: Publish, client_id: &str) -> Result<(), ServerError> {
+        //self.get_client(client_id)?.unacknowledged(publish);
+
         self.topic_handler.publish(&publish, self).unwrap();
         Ok(())
     }
@@ -208,20 +211,12 @@ impl Server {
     }
 
     fn wait_for_connect(&self, stream: &mut TcpStream) -> Result<Client, ServerError> {
-        match self.receive_packet(stream) {
+        match Connect::new_from_zero(stream) {
             Ok(packet) => {
-                if let Packet::ConnectType(connect) = packet {
-                    info!("Recibido CONNECT de cliente {}", connect.client_id());
-                    self.connect_new_client(connect, stream)
-                } else {
-                    error!("Primer paquete recibido en la conexion no es CONNECT");
-                    Err(ServerError::new_kind(
-                        "Primer paquete recibido no es CONNECT",
-                        ServerErrorKind::ProtocolViolation,
-                    ))
-                }
+                info!("Recibido CONNECT de cliente {}", packet.client_id());
+                self.connect_new_client(packet, stream)
             }
-            Err(err) => Err(err),
+            Err(err) => Err(ServerError::from(err))
         }
     }
 
@@ -320,7 +315,7 @@ impl Server {
     fn client_loop(self: Arc<Self>, client_id: String, mut stream: TcpStream) {
         let mut packet_manager = PacketScheduler::new(self.clone(), &client_id);
         while self.is_alive(&client_id) {
-            match self.receive_packet(&mut stream) {
+            match self.receive_packet(&mut stream, &client_id) {
                 Ok(packet) => {
                     packet_manager.new_packet(packet);
                 }

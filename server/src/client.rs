@@ -3,9 +3,11 @@ use std::{
     net::TcpStream,
     sync::{
         atomic::{AtomicBool, Ordering},
-        Mutex, MutexGuard,
+        Mutex,
     },
 };
+
+use packets::publish::Publish;
 
 use crate::server_packets::Connect;
 
@@ -44,5 +46,9 @@ impl Client {
 
     pub fn write_all(&mut self, buf: &[u8]) -> io::Result<()> {
         self.stream.lock().unwrap().write_all(buf)
+    }
+
+    pub fn unacknowledged(&mut self, publish: Publish) {
+        todo!()
     }
 }

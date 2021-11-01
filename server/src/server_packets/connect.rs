@@ -1,9 +1,12 @@
+#![allow(dead_code)]
 use std::io::Read;
 
 use packets::{
     packet_reader::{self, ErrorKind, PacketError, QoSLevel},
     utf8::Field,
 };
+
+use crate::server::Packet;
 
 use super::{connack::CONNACK_CONNECTION_ACCEPTED, Connack};
 
@@ -190,6 +193,25 @@ impl Connect {
 
         Ok(ret)
     }
+
+    /***************
+    WIP
+    ****************/
+    pub fn new_from_zero(stream: &mut impl Read) -> Result<Connect, PacketError> {
+        let mut control_byte_buff: [u8; 1] = [0];
+        if let Ok(_) = stream.read_exact(&mut control_byte_buff) {
+            if control_byte_buff[0] >> 4 == 1 {
+                Connect::new(stream)
+            } else {
+                Err(PacketError::new_msg("El paquete recibido no es CONNECT")) 
+            }
+
+        } else {
+            Err(PacketError::new_msg("Error leyendo CONNECT"))
+        }
+
+    }
+
 
     pub fn response(&self) -> &Connack {
         &self.response

@@ -1,7 +1,6 @@
 #![allow(dead_code)]
 
 use std::{
-    net::{SocketAddr, TcpStream},
     sync::Arc,
     thread::{self, JoinHandle},
 };

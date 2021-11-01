@@ -93,7 +93,7 @@ impl Publish {
     ///  let first_byte_buffer = [0b110010; 1]; // primer byte con los flags con QoS level 1;
     ///  let mut remaining_data: Vec<u8> = vec![];
     ///  let mut topic = Field::new_from_string("a/b").unwrap().encode();
-    ///  let mut payload = Field::new_from_string("mensaje").unwrap().encode();
+    ///  let mut payload = Vec::from("mensaje".as_bytes());
     ///  let mut packet_id_buf: Vec<u8> = vec![0b0, 0b1010]; // Seria 01010 = packet identifier 10;
     ///  remaining_data.append(&mut topic);
     ///  remaining_data.append(&mut packet_id_buf);
@@ -274,10 +274,18 @@ impl Publish {
     }
 
     #[doc(hidden)]
+    fn encoded_payload(&self) -> Vec<u8> {
+        match self.payload.as_ref() {
+            Some(payload) => Vec::from(payload.as_bytes()),
+            None => vec![],
+        }
+    }
+
+    #[doc(hidden)]
     fn fixed_header(&self) -> Result<Vec<u8>, PacketError> {
         let mut fixed_header = vec![];
         let variable_header_len = self.variable_header().len();
-        let message_len = self.payload.as_ref().unwrap().as_bytes().len();
+        let message_len = self.encoded_payload().len();
         let remaining_length = RemainingLength::from_uncoded(variable_header_len + message_len)?;
         let control_byte = self.control_byte();
         fixed_header.push(control_byte);
@@ -289,7 +297,9 @@ impl Publish {
         let mut bytes = vec![];
         bytes.append(&mut self.fixed_header()?);
         bytes.append(&mut self.variable_header());
-        bytes.append(&mut Vec::from(self.payload.as_ref().unwrap().as_bytes()));
+        if let Some(payload) = self.payload.as_ref() {
+            bytes.append(&mut self.encoded_payload());
+        }
         Ok(bytes)
     }
 }
@@ -300,6 +310,7 @@ mod tests {
     use crate::publish::{DupFlag, Publish, PublishError, QoSLevel, RetainFlag};
     use crate::utf8::Field;
     use std::io::Cursor;
+    use std::vec;
 
     #[test]
     fn test_dup_flag_0_with_qos_level_different_from_0_should_raise_invalid_dup_flag() {
@@ -352,7 +363,7 @@ mod tests {
         let first_byte_buffer = [0b110000u8; 1]; // primer byte con los flags con QoS level 0;
         let mut remaining_data: Vec<u8> = vec![];
         let mut topic = Field::new_from_string("a/b").unwrap().encode();
-        let mut payload = Field::new_from_string("mensaje").unwrap().encode();
+        let mut payload = Vec::from("mensaje".as_bytes());
         remaining_data.append(&mut topic);
         remaining_data.append(&mut payload);
         let mut bytes = vec![];
@@ -376,7 +387,7 @@ mod tests {
         let first_byte_buffer = [0b110010u8; 1]; // primer byte con los flags con QoS level 1;
         let mut remaining_data: Vec<u8> = vec![];
         let mut topic = Field::new_from_string("a/b").unwrap().encode();
-        let mut payload = Field::new_from_string("mensaje").unwrap().encode();
+        let mut payload = Vec::from("mensaje".as_bytes());
         let mut packet_id_buf: Vec<u8> = vec![0b0, 0b1010]; // Seria 01010 = packet identifier 10;
         remaining_data.append(&mut topic);
         remaining_data.append(&mut packet_id_buf);
@@ -403,7 +414,7 @@ mod tests {
         let first_byte_buffer = [0b110000u8; 1]; // primer byte con los flags con QoS level 0;
         let mut remaining_data: Vec<u8> = vec![];
         let mut topic = Field::new_from_string("a/b").unwrap().encode();
-        let mut payload = Field::new_from_string("").unwrap().encode();
+        let mut payload = vec![];
         remaining_data.append(&mut topic);
         remaining_data.append(&mut payload);
 
@@ -429,7 +440,7 @@ mod tests {
         let first_byte_buffer = [0b110000u8; 1]; // primer byte con los flags con QoS level 0;
         let mut remaining_data: Vec<u8> = vec![];
         let mut topic = Field::new_from_string("a/B").unwrap().encode();
-        let mut payload = Field::new_from_string("aa").unwrap().encode();
+        let mut payload = Vec::from("aa".as_bytes());
         remaining_data.append(&mut topic);
         remaining_data.append(&mut payload);
 
@@ -454,7 +465,7 @@ mod tests {
         let first_byte_buffer = [0b110000u8; 1]; // primer byte con los flags con QoS level 0;
         let mut remaining_data: Vec<u8> = vec![];
         let mut topic = Field::new_from_string("").unwrap().encode();
-        let mut payload = Field::new_from_string("aa").unwrap().encode();
+        let mut payload = Vec::from("aa".as_bytes());
         remaining_data.append(&mut topic);
         remaining_data.append(&mut payload);
 
