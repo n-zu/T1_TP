@@ -21,6 +21,7 @@ pub enum ErrorKind {
     InvalidControlPacketType,
     ErrorAtReadingPacket,
     TopicNameMustBeAtLeastOneCharacterLong,
+    TopicNameMustNotHaveWildcards,
     Other,
 }
 

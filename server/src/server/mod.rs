@@ -11,7 +11,6 @@ use std::{
 };
 
 use tracing::{error, info, warn};
-use tracing_subscriber::{field::debug, FmtSubscriber};
 
 use packets::packet_reader::{ErrorKind, PacketError};
 
@@ -112,6 +111,25 @@ impl Server {
         })
     }
 
+    pub fn run(self: Arc<Self>) -> Result<(), ServerError> {
+        let listener = TcpListener::bind(format!("127.0.0.1:{}", self.config.port()))?;
+        loop {
+            self.accept_client(&listener)?;
+        }
+    }
+
+    pub fn handle_packet(&self, packet: Packet, client_id: String) -> Result<(), ServerError> {
+        match packet {
+            Packet::ConnectType(packet) => self.handle_connect(packet, &client_id),
+            Packet::PublishTypee(packet) => self.handle_publish(packet, &client_id),
+            Packet::SubscribeType(packet) => self.handle_subscribe(packet, &client_id),
+            _ => Err(ServerError::new_kind(
+                "Paquete invalido",
+                ServerErrorKind::ProtocolViolation,
+            )),
+        }
+    }
+
     fn read_packet(&self, control_byte: u8, stream: &mut TcpStream) -> Result<Packet, ServerError> {
         let buf: [u8; 1] = [control_byte];
 
@@ -183,18 +201,6 @@ impl Server {
         info!("Recibido subscribe de <{}>", client_id);
         self.topic_handler.subscribe(&subscribe, client_id).unwrap();
         Ok(())
-    }
-
-    pub fn handle_packet(&self, packet: Packet, client_id: String) -> Result<(), ServerError> {
-        match packet {
-            Packet::ConnectType(packet) => self.handle_connect(packet, &client_id),
-            Packet::PublishTypee(packet) => self.handle_publish(packet, &client_id),
-            Packet::SubscribeType(packet) => self.handle_subscribe(packet, &client_id),
-            _ => Err(ServerError::new_kind(
-                "Paquete invalido",
-                ServerErrorKind::ProtocolViolation,
-            )),
-        }
     }
 
     fn connect_new_client(
@@ -367,13 +373,6 @@ impl Server {
                 self.client_handlers.lock().unwrap().push(handle);
                 Ok(())
             }
-        }
-    }
-
-    pub fn run(self: Arc<Self>) -> Result<(), ServerError> {
-        let listener = TcpListener::bind(format!("127.0.0.1:{}", self.config.port()))?;
-        loop {
-            self.accept_client(&listener)?;
         }
     }
 }

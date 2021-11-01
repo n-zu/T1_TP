@@ -1,4 +1,3 @@
-#![allow(unused)]
 use crate::packet_reader::{self, RemainingLength};
 use crate::packet_reader::{ErrorKind, PacketError};
 use crate::utf8::Field;
@@ -51,6 +50,12 @@ pub struct Publish {
     pub payload: Option<String>,
 }
 
+const MSG_TOPIC_NAME_ONE_CHAR: &str =
+    "Topic name must be at least one character long for a Publish packet";
+const MSG_PACKET_TYPE_PUBLISH: &str = "Packet type must be 3 for a Publish packet";
+const MSG_TOPIC_WILDCARDS: &str = "Topic name must not have wildcards";
+const MSG_DUP_FLAG_1_WITH_QOS_LEVEL_0: &str = "It can not be dup flag 1 with QoS level 0";
+
 impl Publish {
     ///
     /// Returns a Publish packet with a valid state
@@ -76,8 +81,8 @@ impl Publish {
     ///
     ///  let first_byte_buffer = [0b110010; 1]; // primer byte con los flags con QoS level 1;
     ///  let mut remaining_data: Vec<u8> = vec![];
-    ///  let mut topic = Field::new_from_string("a/b").unwrap().encode();
-    ///  let mut payload = Field::new_from_string("mensaje").unwrap().encode();
+    ///  let mut topic = Field::new_from_string("a/b").unwrap().encode();    ///
+    ///  let mut payload = "mensaje".as_bytes().to_vec();
     ///  let mut packet_id_buf: Vec<u8> = vec![0b0, 0b1010]; // Seria 01010 = packet identifier 10;
     ///  remaining_data.append(&mut topic);
     ///  remaining_data.append(&mut packet_id_buf);
@@ -120,6 +125,17 @@ impl Publish {
         })
     }
 
+    ///
+    /// Encode a Publish packet into a vector of bytes
+    ///
+    /// # Errors
+    ///
+    /// Returns error if:
+    /// * packet_identifier is None and QoS is 1
+    /// * packet_identifier is not None and QoS is 0
+    /// * topic_name or topic_message exceedes the maximum length
+    ///   established for UTF-8 fields in MQTT V3.1.1 standard
+    /// * topic_name contains wildcard characters
     pub fn encode(&self) -> Result<Vec<u8>, PacketError> {
         let mut bytes = vec![];
         bytes.append(&mut self.fixed_header()?);
@@ -157,8 +173,7 @@ impl Publish {
     fn read_payload(bytes: &mut impl Read) -> Option<String> {
         let mut payload_buf = vec![];
         let _ = bytes.read_to_end(&mut payload_buf);
-        let payload = String::from_utf8(payload_buf).ok();
-        payload
+        String::from_utf8(payload_buf).ok()
     }
 
     #[doc(hidden)]
@@ -195,7 +210,7 @@ impl Publish {
         let dup_flag = (first_byte & 0b1000) >> 3;
         if *qos_level == QoSLevel::QoSLevel0 && dup_flag == 1 {
             return Err(PacketError::new_kind(
-                "It can not be dup flag 1 with QoS level 0",
+                MSG_DUP_FLAG_1_WITH_QOS_LEVEL_0,
                 ErrorKind::InvalidDupFlag,
             ));
         }
@@ -212,7 +227,7 @@ impl Publish {
         let control_packet_type = (first_byte & 0b110000) >> 4;
         if control_packet_type != PUBLISH_CONTROL_PACKET_TYPE {
             return Err(PacketError::new_kind(
-                "Packet type must be 3 for a Publish packet",
+                MSG_PACKET_TYPE_PUBLISH,
                 ErrorKind::InvalidControlPacketType,
             ));
         }
@@ -236,8 +251,16 @@ impl Publish {
         let topic_name_chars_count = topic_name.value.chars().count();
         if topic_name_chars_count == 0 {
             return Err(PacketError::new_kind(
-                "Topic name must be at least one character long for a Publish packet",
+                MSG_TOPIC_NAME_ONE_CHAR,
                 ErrorKind::TopicNameMustBeAtLeastOneCharacterLong,
+            ));
+        }
+        if topic_name.value.contains(SINGLE_LEVEL_WILDCARD)
+            || topic_name.value.contains(MULTI_LEVEL_WILDCARD)
+        {
+            return Err(PacketError::new_kind(
+                MSG_TOPIC_WILDCARDS,
+                ErrorKind::TopicNameMustNotHaveWildcards,
             ));
         }
         Ok(topic_name)
@@ -287,7 +310,10 @@ impl Publish {
 #[cfg(test)]
 mod tests {
     use crate::packet_reader::{ErrorKind, PacketError};
-    use crate::publish::{DupFlag, Publish, QoSLevel, RetainFlag};
+    use crate::publish::{
+        DupFlag, Publish, QoSLevel, RetainFlag, MSG_DUP_FLAG_1_WITH_QOS_LEVEL_0,
+        MSG_PACKET_TYPE_PUBLISH, MSG_TOPIC_NAME_ONE_CHAR, MSG_TOPIC_WILDCARDS,
+    };
     use crate::utf8::Field;
     use std::io::Cursor;
 
@@ -296,10 +322,8 @@ mod tests {
         let first_byte_buffer = [0b111000u8; 1];
         let dummy: Vec<u8> = vec![0b111000];
         let mut stream = Cursor::new(dummy);
-        let expected_error = PacketError::new_kind(
-            "It can not be dup flag 1 with QoS level 0",
-            ErrorKind::InvalidDupFlag,
-        );
+        let expected_error =
+            PacketError::new_kind(MSG_DUP_FLAG_1_WITH_QOS_LEVEL_0, ErrorKind::InvalidDupFlag);
         let result = Publish::read_from(&mut stream, &first_byte_buffer).unwrap_err();
         assert_eq!(result, expected_error);
     }
@@ -329,10 +353,8 @@ mod tests {
         let first_byte_buffer = [0b100000u8; 1];
         let dummy: Vec<u8> = vec![0b100000];
         let mut stream = Cursor::new(dummy);
-        let expected_error = PacketError::new_kind(
-            "Packet type must be 3 for a Publish packet",
-            ErrorKind::InvalidControlPacketType,
-        );
+        let expected_error =
+            PacketError::new_kind(MSG_PACKET_TYPE_PUBLISH, ErrorKind::InvalidControlPacketType);
         let result = Publish::read_from(&mut stream, &first_byte_buffer).unwrap_err();
         assert_eq!(result, expected_error);
     }
@@ -453,8 +475,28 @@ mod tests {
         bytes.append(&mut remaining_data);
         let mut stream = Cursor::new(bytes);
         let expected_error = PacketError::new_kind(
-            "Topic name must be at least one character long for a Publish packet",
+            MSG_TOPIC_NAME_ONE_CHAR,
             ErrorKind::TopicNameMustBeAtLeastOneCharacterLong,
+        );
+        let result = Publish::read_from(&mut stream, &first_byte_buffer).unwrap_err();
+        assert_eq!(expected_error, result);
+    }
+    #[test]
+    fn test_topic_name_can_not_have_wildcards() {
+        let first_byte_buffer = [0b110000u8; 1]; // primer byte con los flags con QoS level 0;
+        let mut remaining_data: Vec<u8> = vec![];
+        let mut topic = Field::new_from_string("asd/#").unwrap().encode();
+        let mut payload = "mensaje".as_bytes().to_vec();
+        remaining_data.append(&mut topic);
+        remaining_data.append(&mut payload);
+
+        let mut bytes = vec![];
+        bytes.push(remaining_data.len() as u8);
+        bytes.append(&mut remaining_data);
+        let mut stream = Cursor::new(bytes);
+        let expected_error = PacketError::new_kind(
+            MSG_TOPIC_WILDCARDS,
+            ErrorKind::TopicNameMustNotHaveWildcards,
         );
         let result = Publish::read_from(&mut stream, &first_byte_buffer).unwrap_err();
         assert_eq!(expected_error, result);
