@@ -1,7 +1,7 @@
 #![allow(unused)]
 use crate::packet_reader::{self, RemainingLength};
 use crate::packet_reader::{ErrorKind, PacketError};
-use crate::utf8::{self, Field};
+use crate::utf8::Field;
 use std::io::Read;
 
 #[doc(hidden)]
@@ -35,22 +35,6 @@ pub enum RetainFlag {
 pub enum DupFlag {
     DupFlag0,
     DupFlag1,
-}
-
-#[derive(Debug, PartialEq)]
-pub enum PublishError {
-    InvalidRetainFlag,
-    InvalidQoSLevel,
-    InvalidDupFlag,
-    InvalidControlPacketType,
-    ErrorAtReadingPacket,
-    TopicNameMustBeAtLeastOneCharacterLong,
-}
-
-impl From<PacketError> for PublishError {
-    fn from(error: PacketError) -> PublishError {
-        PublishError::ErrorAtReadingPacket
-    }
 }
 
 #[doc(hidden)]
@@ -117,16 +101,14 @@ impl Publish {
         stream: &mut impl Read,
         first_byte_buffer: &[u8; 1],
     ) -> Result<Publish, PacketError> {
-        let retain_flag = Publish::verify_retain_flag(first_byte_buffer);
-        let qos_level = Publish::verify_qos_level_flag(first_byte_buffer)?;
-        let dup_flag = Publish::verify_dup_flag(first_byte_buffer, &qos_level)?;
-        Publish::verify_control_packet_type(first_byte_buffer)?;
+        let retain_flag = Self::verify_retain_flag(first_byte_buffer);
+        let qos_level = Self::verify_qos_level_flag(first_byte_buffer)?;
+        let dup_flag = Self::verify_dup_flag(first_byte_buffer, &qos_level)?;
+        Self::verify_control_packet_type(first_byte_buffer)?;
         let mut remaining_bytes = packet_reader::read_packet_bytes(stream)?;
-        let topic_name = Publish::verify_topic_name(&mut remaining_bytes)?;
-        let packet_id = Publish::verify_packet_id(&mut remaining_bytes, &qos_level);
-        let mut buffer_prueba = vec![];
-        remaining_bytes.read_to_end(&mut buffer_prueba);
-        let payload = String::from_utf8(buffer_prueba).unwrap();
+        let topic_name = Self::verify_topic_name(&mut remaining_bytes)?;
+        let packet_id = Self::verify_packet_id(&mut remaining_bytes, &qos_level);
+        let payload = Self::read_payload(&mut remaining_bytes);
 
         Ok(Self {
             packet_id,
@@ -134,8 +116,49 @@ impl Publish {
             qos: qos_level,
             retain_flag,
             dup_flag,
-            payload: Option::from(payload),
+            payload,
         })
+    }
+
+    pub fn encode(&self) -> Result<Vec<u8>, PacketError> {
+        let mut bytes = vec![];
+        bytes.append(&mut self.fixed_header()?);
+        bytes.append(&mut self.variable_header());
+        bytes.append(&mut Vec::from(self.payload.as_ref().unwrap().as_bytes()));
+        Ok(bytes)
+    }
+
+    /// Gets packet_id from a Publish packet
+    pub fn packet_id(&self) -> Option<&u16> {
+        self.packet_id.as_ref()
+    }
+    /// Gets topic_name from a Publish packet
+    pub fn topic_name(&self) -> &str {
+        &self.topic_name
+    }
+    /// Gets QoS from a Publish packet
+    pub fn qos(&self) -> &QoSLevel {
+        &self.qos
+    }
+    /// Gets retain_flag from a Publish packet
+    pub fn retain_flag(&self) -> &RetainFlag {
+        &self.retain_flag
+    }
+    /// Gets dup_flag from a Publish packet
+    pub fn dup_flag(&self) -> &DupFlag {
+        &self.dup_flag
+    }
+    /// Gets payload from a Publish packet
+    pub fn payload(&self) -> Option<&String> {
+        self.payload.as_ref()
+    }
+
+    #[doc(hidden)]
+    fn read_payload(bytes: &mut impl Read) -> Option<String> {
+        let mut payload_buf = vec![];
+        let _ = bytes.read_to_end(&mut payload_buf);
+        let payload = String::from_utf8(payload_buf).ok();
+        payload
     }
 
     #[doc(hidden)]
@@ -202,7 +225,7 @@ impl Publish {
             return None;
         }
         let mut packet_id_buffer = [0u8; 2];
-        bytes.read_exact(&mut packet_id_buffer);
+        let _ = bytes.read_exact(&mut packet_id_buffer);
         let packet_id = u16::from_be_bytes(packet_id_buffer);
         Some(packet_id)
     }
@@ -218,31 +241,6 @@ impl Publish {
             ));
         }
         Ok(topic_name)
-    }
-
-    /// Gets packet_id from a Publish packet
-    pub fn packet_id(&self) -> Option<&u16> {
-        self.packet_id.as_ref()
-    }
-    /// Gets topic_name from a Publish packet
-    pub fn topic_name(&self) -> &str {
-        &self.topic_name
-    }
-    /// Gets QoS from a Publish packet
-    pub fn qos(&self) -> &QoSLevel {
-        &self.qos
-    }
-    /// Gets retain_flag from a Publish packet
-    pub fn retain_flag(&self) -> &RetainFlag {
-        &self.retain_flag
-    }
-    /// Gets dup_flag from a Publish packet
-    pub fn dup_flag(&self) -> &DupFlag {
-        &self.dup_flag
-    }
-    /// Gets payload from a Publish packet
-    pub fn payload(&self) -> Option<&String> {
-        self.payload.as_ref()
     }
 
     #[doc(hidden)]
@@ -284,20 +282,12 @@ impl Publish {
         fixed_header.append(&mut remaining_length.encode());
         Ok(fixed_header)
     }
-
-    pub fn encode(&self) -> Result<Vec<u8>, PacketError> {
-        let mut bytes = vec![];
-        bytes.append(&mut self.fixed_header()?);
-        bytes.append(&mut self.variable_header());
-        bytes.append(&mut Vec::from(self.payload.as_ref().unwrap().as_bytes()));
-        Ok(bytes)
-    }
 }
 
 #[cfg(test)]
 mod tests {
     use crate::packet_reader::{ErrorKind, PacketError};
-    use crate::publish::{DupFlag, Publish, PublishError, QoSLevel, RetainFlag};
+    use crate::publish::{DupFlag, Publish, QoSLevel, RetainFlag};
     use crate::utf8::Field;
     use std::io::Cursor;
 
@@ -352,7 +342,7 @@ mod tests {
         let first_byte_buffer = [0b110000u8; 1]; // primer byte con los flags con QoS level 0;
         let mut remaining_data: Vec<u8> = vec![];
         let mut topic = Field::new_from_string("a/b").unwrap().encode();
-        let mut payload = Field::new_from_string("mensaje").unwrap().encode();
+        let mut payload = "mensaje".as_bytes().to_vec();
         remaining_data.append(&mut topic);
         remaining_data.append(&mut payload);
         let mut bytes = vec![];
@@ -376,7 +366,7 @@ mod tests {
         let first_byte_buffer = [0b110010u8; 1]; // primer byte con los flags con QoS level 1;
         let mut remaining_data: Vec<u8> = vec![];
         let mut topic = Field::new_from_string("a/b").unwrap().encode();
-        let mut payload = Field::new_from_string("mensaje").unwrap().encode();
+        let mut payload = "mensaje".as_bytes().to_vec();
         let mut packet_id_buf: Vec<u8> = vec![0b0, 0b1010]; // Seria 01010 = packet identifier 10;
         remaining_data.append(&mut topic);
         remaining_data.append(&mut packet_id_buf);
@@ -403,7 +393,7 @@ mod tests {
         let first_byte_buffer = [0b110000u8; 1]; // primer byte con los flags con QoS level 0;
         let mut remaining_data: Vec<u8> = vec![];
         let mut topic = Field::new_from_string("a/b").unwrap().encode();
-        let mut payload = Field::new_from_string("").unwrap().encode();
+        let mut payload = "".as_bytes().to_vec();
         remaining_data.append(&mut topic);
         remaining_data.append(&mut payload);
 
@@ -429,7 +419,7 @@ mod tests {
         let first_byte_buffer = [0b110000u8; 1]; // primer byte con los flags con QoS level 0;
         let mut remaining_data: Vec<u8> = vec![];
         let mut topic = Field::new_from_string("a/B").unwrap().encode();
-        let mut payload = Field::new_from_string("aa").unwrap().encode();
+        let mut payload = "aa".as_bytes().to_vec();
         remaining_data.append(&mut topic);
         remaining_data.append(&mut payload);
 
@@ -454,7 +444,7 @@ mod tests {
         let first_byte_buffer = [0b110000u8; 1]; // primer byte con los flags con QoS level 0;
         let mut remaining_data: Vec<u8> = vec![];
         let mut topic = Field::new_from_string("").unwrap().encode();
-        let mut payload = Field::new_from_string("aa").unwrap().encode();
+        let mut payload = "aa".as_bytes().to_vec();
         remaining_data.append(&mut topic);
         remaining_data.append(&mut payload);
 
