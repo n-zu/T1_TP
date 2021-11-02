@@ -25,6 +25,32 @@ impl Puback {
         Ok(Self { packet_id })
     }
 
+    pub fn new(packet_id: u16) -> Self {
+        Self { packet_id }
+    }
+
+    pub fn encode(&self) -> Vec<u8> {
+        let mut bytes: Vec<u8> = vec![];
+        bytes.append(&mut self.fixed_header());
+        bytes.append(&mut self.variable_header());
+        bytes
+    }
+
+    fn fixed_header(&self) -> Vec<u8> {
+        let mut fixed_header_buffer: Vec<u8> = vec![];
+        fixed_header_buffer.push(0b01000000);
+        fixed_header_buffer.push(0b10);
+        fixed_header_buffer
+    }
+
+    fn variable_header(&self) -> Vec<u8> {
+        let mut variable_header_buffer: Vec<u8> = vec![];
+        let packet_id_representation = self.packet_id.to_be_bytes();
+        variable_header_buffer.push(packet_id_representation[0]);
+        variable_header_buffer.push(packet_id_representation[1]);
+        variable_header_buffer
+    }
+
     fn verify_reserved_bits(control_byte: &u8) -> Result<(), PacketError> {
         let reserved_bits = control_byte & 0b1111;
         if reserved_bits != FIXED_RESERVED_BITS {
