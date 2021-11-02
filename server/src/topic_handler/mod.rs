@@ -245,8 +245,8 @@ mod tests {
         bytes.extend([0, 1]); // identifier
         bytes.extend(Field::new_from_string(message).unwrap().encode());
         bytes.insert(0, bytes.len() as u8);
-        let header = [0b00110010];
-        Publish::read_from(&mut Cursor::new(bytes), &header).unwrap()
+        let header = 0b00110010u8;
+        Publish::read_from(&mut Cursor::new(bytes), header).unwrap()
     }
 
     fn build_subscribe(topic: &str) -> Subscribe {

@@ -29,7 +29,7 @@ impl Puback {
     ///
     /// If reserved bits from the bytes stream doesn't follow MQTT 3.1.1 (this is 0b0), this function returns an invalid protocol error
     ///
-    /// If control packet type bit sfrom the bytes stream doesn't follow MQTT 3.1.1 (this is 0b01000000), this function returns an invalid control packet type error
+    /// If control packet type bits from the bytes stream doesn't follow MQTT 3.1.1 (this is 0b01000000), this function returns an invalid control packet type error
     /// # Examples
     ///
     /// ```
@@ -71,9 +71,7 @@ impl Puback {
 
     #[doc(hidden)]
     fn fixed_header(&self) -> Vec<u8> {
-        let mut fixed_header_buffer: Vec<u8> = vec![];
-        fixed_header_buffer.push(0b01000000);
-        fixed_header_buffer.push(0b10);
+        let fixed_header_buffer: Vec<u8> = vec![0b01000000, 0b10];
         fixed_header_buffer
     }
 
