@@ -17,6 +17,32 @@ pub struct Puback {
 }
 
 impl Puback {
+    /// Returns a new Puback packet with given packet_id
+    pub fn new(packet_id: u16) -> Self {
+        Self { packet_id }
+    }
+    /// Creates a new Puback packet from a given stream of bytes.
+    ///
+    /// It is assumed the first byte from the stream was read by the client/server
+    ///
+    /// # Errors
+    ///
+    /// If reserved bits from the bytes stream doesn't follow MQTT 3.1.1 (this is 0b0), this function returns an invalid protocol error
+    ///
+    /// If control packet type bit sfrom the bytes stream doesn't follow MQTT 3.1.1 (this is 0b01000000), this function returns an invalid control packet type error
+    /// # Examples
+    ///
+    /// ```
+    /// use std::io::Cursor;
+    /// use packets::puback::Puback;
+    /// let control_byte = 0b01000000u8;
+    /// let remaining_length = 2u8;
+    /// let data_buffer: Vec<u8> = vec![remaining_length, 0, 0];
+    /// let mut stream = Cursor::new(data_buffer);
+    /// let expected = Puback::new(0);
+    /// let result = Puback::read_from(&mut stream, control_byte).unwrap();
+    /// assert_eq!(expected, result);
+    /// ```
     pub fn read_from(bytes: &mut impl Read, control_byte: u8) -> Result<Self, PacketError> {
         Self::verify_reserved_bits(&control_byte)?;
         Self::verify_control_packet_type(&control_byte)?;
@@ -25,10 +51,17 @@ impl Puback {
         Ok(Self { packet_id })
     }
 
-    pub fn new(packet_id: u16) -> Self {
-        Self { packet_id }
-    }
-
+    /// Encodes a Puback packet into its bytes representation following MQTT 3.1.1 protocol
+    ///
+    /// # Examples
+    /// ```
+    /// use packets::puback::Puback;
+    ///
+    /// let puback = Puback::new(0);
+    /// let result = puback.encode();
+    /// let expected: Vec<u8> = vec![0b01000000, 0b10, 0b0, 0b0];
+    /// assert_eq!(expected, result)
+    /// ```
     pub fn encode(&self) -> Vec<u8> {
         let mut bytes: Vec<u8> = vec![];
         bytes.append(&mut self.fixed_header());
@@ -36,6 +69,7 @@ impl Puback {
         bytes
     }
 
+    #[doc(hidden)]
     fn fixed_header(&self) -> Vec<u8> {
         let mut fixed_header_buffer: Vec<u8> = vec![];
         fixed_header_buffer.push(0b01000000);
@@ -43,6 +77,7 @@ impl Puback {
         fixed_header_buffer
     }
 
+    #[doc(hidden)]
     fn variable_header(&self) -> Vec<u8> {
         let mut variable_header_buffer: Vec<u8> = vec![];
         let packet_id_representation = self.packet_id.to_be_bytes();
@@ -51,6 +86,7 @@ impl Puback {
         variable_header_buffer
     }
 
+    #[doc(hidden)]
     fn verify_reserved_bits(control_byte: &u8) -> Result<(), PacketError> {
         let reserved_bits = control_byte & 0b1111;
         if reserved_bits != FIXED_RESERVED_BITS {
@@ -62,6 +98,7 @@ impl Puback {
         Ok(())
     }
 
+    #[doc(hidden)]
     fn verify_control_packet_type(control_byte: &u8) -> Result<(), PacketError> {
         let control_packet_type = (control_byte & 0b11110000) >> 4;
         if control_packet_type != PUBACK_CONTROL_PACKET_TYPE {
@@ -73,6 +110,7 @@ impl Puback {
         Ok(())
     }
 
+    #[doc(hidden)]
     fn read_packet_id(bytes: &mut impl Read) -> u16 {
         let mut packet_id_buffer = [0u8; 2];
         let _ = bytes.read_exact(&mut packet_id_buffer);
