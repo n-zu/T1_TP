@@ -1,5 +1,6 @@
 use crate::packet_reader;
 use crate::packet_reader::{ErrorKind, PacketError};
+use std::io;
 use std::io::Read;
 
 #[doc(hidden)]
@@ -8,6 +9,8 @@ const FIXED_RESERVED_BITS: u8 = 0;
 const MSG_INVALID_RESERVED_BITS: &str = "Reserved bits are not equal to 0";
 #[doc(hidden)]
 const MSG_PACKET_TYPE_PUBACK: &str = "Packet type must be 4 for a Puback packet";
+#[doc(hidden)]
+const MSG_PACKET_MORE_BYTES_THAN_EXPECTED: &str = "Puback packet contains more bytes than expected";
 #[doc(hidden)]
 const PUBACK_CONTROL_PACKET_TYPE: u8 = 4;
 
@@ -48,6 +51,7 @@ impl Puback {
         Self::verify_control_packet_type(&control_byte)?;
         let mut remaining_bytes = packet_reader::read_packet_bytes(bytes)?;
         let packet_id = Self::read_packet_id(&mut remaining_bytes);
+        Self::verify_packet_end(&mut remaining_bytes)?;
         Ok(Self { packet_id })
     }
 
@@ -114,12 +118,27 @@ impl Puback {
         let _ = bytes.read_exact(&mut packet_id_buffer);
         u16::from_be_bytes(packet_id_buffer)
     }
+
+    #[doc(hidden)]
+    fn verify_packet_end(bytes: &mut impl Read) -> Result<(), PacketError> {
+        let mut buff = [0u8; 1];
+        match bytes.read_exact(&mut buff) {
+            Ok(()) => Err(PacketError::new_msg(
+                "Puback packet contains more bytes than expected",
+            )),
+            Err(err) if err.kind() == io::ErrorKind::UnexpectedEof => Ok(()),
+            Err(_) => Err(PacketError::new_msg("Error at reading packet")),
+        }
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use crate::packet_reader::{ErrorKind, PacketError};
-    use crate::puback::{Puback, MSG_INVALID_RESERVED_BITS, MSG_PACKET_TYPE_PUBACK};
+    use crate::puback::{
+        Puback, MSG_INVALID_RESERVED_BITS, MSG_PACKET_MORE_BYTES_THAN_EXPECTED,
+        MSG_PACKET_TYPE_PUBACK,
+    };
     use std::io::Cursor;
 
     #[test]
@@ -164,6 +183,17 @@ mod tests {
         let expected = Puback { packet_id: 0 };
         let result = Puback::read_from(&mut stream, control_byte).unwrap();
         assert_eq!(expected, result);
+    }
+
+    #[test]
+    fn test_puback_packet_can_not_have_more_bytes_than_expected() {
+        let control_byte = 0b01000000u8;
+        let remaining_length = 3u8;
+        let data_buffer: Vec<u8> = vec![remaining_length, 0, 0, 1];
+        let mut stream = Cursor::new(data_buffer);
+        let expected_error = PacketError::new_msg(MSG_PACKET_MORE_BYTES_THAN_EXPECTED);
+        let result = Puback::read_from(&mut stream, control_byte).unwrap_err();
+        assert_eq!(expected_error, result);
     }
 
     #[test]
