@@ -1,4 +1,4 @@
-use crate::packet_reader::{self, RemainingLength};
+use crate::packet_reader::{self, QoSLevel, RemainingLength};
 use crate::packet_reader::{ErrorKind, PacketError};
 use crate::utf8::Field;
 use std::io::Read;
@@ -17,12 +17,6 @@ const PUBLISH_PACKET_TYPE: u8 = 0b00110000;
 const SINGLE_LEVEL_WILDCARD: char = '+';
 #[doc(hidden)]
 const MULTI_LEVEL_WILDCARD: char = '#';
-
-#[derive(Debug, PartialEq)]
-pub enum QoSLevel {
-    QoSLevel0,
-    QoSLevel1,
-}
 
 #[derive(Debug, PartialEq)]
 pub enum RetainFlag {
@@ -224,7 +218,7 @@ impl Publish {
     #[doc(hidden)]
     fn verify_control_packet_type(first_byte_buffer: &[u8; 1]) -> Result<(), PacketError> {
         let first_byte = first_byte_buffer[0];
-        let control_packet_type = (first_byte & 0b110000) >> 4;
+        let control_packet_type = (first_byte & 0b11110000) >> 4;
         if control_packet_type != PUBLISH_CONTROL_PACKET_TYPE {
             return Err(PacketError::new_kind(
                 MSG_PACKET_TYPE_PUBLISH,
