@@ -129,4 +129,20 @@ mod tests {
         let result = Puback::read_from(&mut stream, control_byte).unwrap();
         assert_eq!(expected, result);
     }
+
+    #[test]
+    fn test_encoding_puback_packet_with_packet_id_0() {
+        let puback = Puback::new(0);
+        let result = puback.encode();
+        let expected: Vec<u8> = vec![0b01000000, 0b10, 0b0, 0b0];
+        assert_eq!(expected, result)
+    }
+
+    #[test]
+    fn test_encoding_puback_packet_with_packet_id_120() {
+        let puback = Puback::new(120);
+        let result = puback.encode();
+        let expected: Vec<u8> = vec![0b01000000, 0b10, 0b0, 120];
+        assert_eq!(expected, result)
+    }
 }
