@@ -15,12 +15,14 @@ pub enum ErrorKind {
     InvalidProtocol,
     InvalidProtocolLevel,
     InvalidFlags,
+    InvalidReservedBytes,
     ClientDisconnected,
     InvalidQoSLevel,
     InvalidDupFlag,
     InvalidControlPacketType,
     ErrorAtReadingPacket,
     TopicNameMustBeAtLeastOneCharacterLong,
+    TopicNameMustNotHaveWildcards,
     Other,
 }
 

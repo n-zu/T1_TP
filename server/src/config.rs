@@ -5,50 +5,36 @@ use std::{
     io::{BufRead, BufReader, Read},
 };
 
-/// Contiene toda la informacion de configuracion
-/// necesaria para iniciar el servidor
+/// Config struct contains information which is needed from a Server
 pub struct Config {
-    /// Puerto al que se conecta el servidor
+    /// Port to be connected
     port: u16,
-    /// Path del archivo sobre el cual se realizara un dump
+    /// Path to dump file
     dump_path: String,
-    /// Intervalo de tiempo para el cual se realizara un dump
+    /// Time interval between two consecutive dump
     dump_time: u32,
-    /// Path de archivo de log
+    /// Path to log file
     log_path: String,
 }
 
 impl Config {
-    /// Crea un struct Config a partir de la informacion
-    /// que se encuentran en el archivo de configuracion
-    ///
+    /// Returns a Config struct based on the path file
     /// # Arguments
     ///
-    /// * `path` - Ruta del archivo que contiene la informacion.
-    /// El formato del archivo es 'campo=valor' (sin espacios)
-    /// en el siguiente orden: port, dump_path, dump_time, log_path
-    ///
-    /// # Returns
-    ///
-    /// * `Option<Config>` - Struct con la configuracion del servidor.
+    /// * `path` - Path file
+    /// Each line of the file must consist of 'field=value' in the following order: port, dump_path, dump_time, log_path
     ///
     /// # Errors
-    /// Si no existe el archivo o el formato es invalido, devuelve None
+    /// If the file following the path does not have the correct format, this function returns None
     pub fn new(path: &str) -> Option<Config> {
         let config_file = File::open(path).ok()?;
         Config::new_from_file(config_file)
     }
 
-    /// Crea un struct Config a partir de un archivo de configuracion
+    /// Returns a Config struct from a valid configuration file
     ///
-    /// # Arguments
-    ///
-    /// * `config_file` - Archivo de configuracion
-    ///
-    /// # Return
-    ///
-    /// * `Option<Config>` - Struct con la configuracion del servidor
-    pub fn new_from_file<F: Read>(config_file: F) -> Option<Config> {
+    /// If config_file path does not have the correct format, this function returns None
+    pub fn new_from_file(config_file: impl Read) -> Option<Config> {
         let mut buffered = BufReader::new(config_file);
 
         let port = get_value_from_line(&mut buffered, "port")?;
@@ -67,22 +53,22 @@ impl Config {
         })
     }
 
-    /// Devuelve el puerto del servidor
+    /// Returns port from Config struct
     pub fn port(&self) -> u16 {
         self.port
     }
 
-    /// Devuelve el path del archivo sobre el cual se realizara un dump
+    /// Returns dump_path from Config struct
     pub fn dump_path(&self) -> &str {
         &self.dump_path
     }
 
-    /// Devuelve el intervalo de tiempo para el cual se realizara un dump
+    /// Returns dump_time from Config struct
     pub fn dump_time(&self) -> u32 {
         self.dump_time
     }
 
-    /// Devuelve el path de archivo de log
+    /// Returns log_path from Config struct
     pub fn log_path(&self) -> &str {
         &self.log_path
     }

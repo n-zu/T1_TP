@@ -1,4 +1,8 @@
 #![allow(dead_code)]
+<<<<<<< HEAD
+=======
+
+>>>>>>> 959fca88829b5444922f16e871fbb4c476a1b4b2
 use std::io::Read;
 
 use packets::{
@@ -43,7 +47,6 @@ pub struct Connect {
     password: Option<String>,
     last_will: Option<LastWill>,
     keep_alive: u16,
-
     response: Connack,
 }
 

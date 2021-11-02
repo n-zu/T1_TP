@@ -1,5 +1,4 @@
 #![allow(dead_code)]
-
 use std::vec;
 
 use packets::{
@@ -40,7 +39,7 @@ pub struct Publish {
     /// Identifies the information channel to which payload data is published.
     topic_name: Field,
     /// Contains the Application Message that is being published
-    topic_message: Field,
+    topic_message: Option<String>,
     /// Identifies the packet if the QoS level is 1 or 2
     packet_identifier: Option<u16>,
 }
@@ -81,7 +80,7 @@ impl Publish {
             qos,
             retain,
             topic_name: Field::new_from_string(topic_name)?,
-            topic_message: Field::new_from_string(topic_message)?,
+            topic_message: Option::from(topic_message.to_string()),
             packet_identifier,
         })
     }
@@ -118,8 +117,8 @@ impl Publish {
         self.topic_name.decode()
     }
 
-    pub fn topic_message(&self) -> &str {
-        self.topic_message.decode()
+    pub fn topic_message(&self) -> Option<&String> {
+        self.topic_message.as_ref()
     }
 
     pub fn packet_identifier(&self) -> Option<u16> {
@@ -158,7 +157,7 @@ impl Publish {
     fn fixed_header(&self) -> Result<Vec<u8>, PacketError> {
         let mut fixed_header = vec![];
         let variable_header_len = self.variable_header().len();
-        let message_len = self.topic_message.encode().len();
+        let message_len = self.topic_message.as_ref().unwrap().len();
         let remaining_length = RemainingLength::from_uncoded(variable_header_len + message_len)?;
         let control_byte = self.control_byte();
         fixed_header.push(control_byte);
@@ -170,7 +169,7 @@ impl Publish {
         let mut bytes = vec![];
         bytes.append(&mut self.fixed_header()?);
         bytes.append(&mut self.variable_header());
-        bytes.append(&mut self.topic_message.encode());
+        bytes.append(&mut self.topic_message.as_ref().unwrap().as_bytes().to_vec());
         Ok(bytes)
     }
 }
@@ -189,10 +188,9 @@ mod tests {
             packet.encode().unwrap(),
             [
                 0b00110000, // control_byte
-                16,         // remaining_length
+                14,         // remaining_length
                 0, 5, // largo topic_name
                 116, 111, 112, 105, 99, // topic
-                0, 7, // largo topic_message
                 109, 101, 115, 115, 97, 103, 101 // message
             ]
         );
@@ -206,10 +204,9 @@ mod tests {
             packet.encode().unwrap(),
             [
                 0b00110001, // control_byte
-                16,         // remaining_length
+                14,         // remaining_length
                 0, 5, // largo topic_name
                 116, 111, 112, 105, 99, // topic
-                0, 7, // largo topic_message
                 109, 101, 115, 115, 97, 103, 101 // message
             ]
         );
@@ -230,11 +227,10 @@ mod tests {
             packet.encode().unwrap(),
             [
                 0b00110010, // control_byte
-                18,         // remaining_length
+                16,         // remaining_length
                 0, 5, // largo topic_name
                 116, 111, 112, 105, 99, // topic
                 0, 153, // packet_identifier
-                0, 7, // largo topic_message
                 109, 101, 115, 115, 97, 103, 101 // message
             ]
         );
@@ -255,11 +251,10 @@ mod tests {
             packet.encode().unwrap(),
             [
                 0b00110010, // control_byte
-                18,         // remaining_length
+                16,         // remaining_length
                 0, 5, // largo topic_name
                 116, 111, 112, 105, 99, // topic
                 1, 94, // packet_identifier
-                0, 7, // largo topic_message
                 109, 101, 115, 115, 97, 103, 101 // message
             ]
         );
@@ -318,10 +313,10 @@ mod tests {
             packet.encode().unwrap(),
             [
                 0b00110010, // control_byte
-                11,         // remaining_length
+                9,          // remaining_length
                 0, 5, // largo topic_name
                 116, 111, 112, 105, 99, // topic
-                1, 94, 0, 0 // packet_identifier + zero length payload
+                1, 94, // packet_identifier + zero length payload
             ]
         );
     }

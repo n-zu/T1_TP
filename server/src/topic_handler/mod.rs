@@ -44,6 +44,7 @@ impl Topic {
 }
 
 impl TopicHandler {
+    /// Subscribe a client_id into a set of topics given a Subscribe packet
     pub fn subscribe(&self, packet: &Subscribe, client_id: &str) -> Result<(), TopicHandlerError> {
         let topics: Vec<&str> = packet
             .topic_filters()
@@ -58,6 +59,7 @@ impl TopicHandler {
         Ok(())
     }
 
+    /// Sends a Publish packet to the clients who are subscribed into a certain topic
     pub fn publish(
         &self,
         packet: &Publish,
@@ -74,6 +76,7 @@ impl TopicHandler {
         Ok(())
     }
 
+    /// Unsubscribe a client_id from a set of topics given a Unsubscribe packet
     pub fn unsubscribe(
         &self,
         _packet: Unsubscribe,
