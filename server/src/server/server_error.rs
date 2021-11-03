@@ -1,6 +1,7 @@
 use std::{fmt, io};
 
-use packets::packet_reader::PacketError;
+use packets::packet_reader::{ErrorKind, PacketError};
+use tracing::warn;
 
 #[derive(Debug)]
 pub struct ServerError {
@@ -13,6 +14,7 @@ pub enum ServerErrorKind {
     ProtocolViolation,
     RepeatedId,
     ClientDisconnected,
+    Idle,
     Other,
     _NonExhaustive,
 }
@@ -31,7 +33,11 @@ impl std::error::Error for ServerError {
 
 impl From<io::Error> for ServerError {
     fn from(error: io::Error) -> Self {
-        ServerError::new_msg(&error.to_string())
+        if error.kind() == io::ErrorKind::WouldBlock {
+            ServerError::new_kind("Would block", ServerErrorKind::Idle)
+        } else {
+            ServerError::new_msg(&error.to_string())
+        }
     }
 }
 
@@ -43,7 +49,11 @@ impl From<ServerError> for io::Error {
 
 impl From<PacketError> for ServerError {
     fn from(packet_error: PacketError) -> Self {
-        ServerError::new_msg(&packet_error.to_string())
+        if packet_error.kind() == ErrorKind::Idle {
+            ServerError::new_kind(&packet_error.to_string(), ServerErrorKind::Idle)
+        } else {
+            ServerError::new_msg(&packet_error.to_string())
+        }
     }
 }
 

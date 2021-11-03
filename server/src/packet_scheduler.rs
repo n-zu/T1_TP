@@ -5,6 +5,8 @@ use std::{
     thread::{self, JoinHandle},
 };
 
+use tracing::info;
+
 use crate::server::{Packet, Server};
 
 pub struct PacketScheduler {

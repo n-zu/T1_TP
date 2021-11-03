@@ -23,6 +23,7 @@ pub enum ErrorKind {
     ErrorAtReadingPacket,
     TopicNameMustBeAtLeastOneCharacterLong,
     TopicNameMustNotHaveWildcards,
+    Idle,
     Other,
 }
 

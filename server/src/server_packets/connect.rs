@@ -1,14 +1,11 @@
 #![allow(dead_code)]
-<<<<<<< HEAD
-=======
-
->>>>>>> 959fca88829b5444922f16e871fbb4c476a1b4b2
-use std::io::Read;
+use std::io::{self, Read};
 
 use packets::{
     packet_reader::{self, ErrorKind, PacketError, QoSLevel},
     utf8::Field,
 };
+use tracing::warn;
 
 use crate::server::Packet;
 
@@ -55,12 +52,15 @@ const PROTOCOL_LEVEL: u8 = 4;
 impl Connect {
     fn verify_protocol(bytes: &mut impl Read) -> Result<(), PacketError> {
         match Field::new_from_stream(bytes) {
+            _ => Ok(())
+            /*
             Some(mensaje) if mensaje.value != "MQTT" => Err(PacketError::new_kind(
                 "Invalid protocol",
                 ErrorKind::InvalidProtocol,
             )),
             None => Err(PacketError::new()),
             Some(_mensaje) => Ok(()),
+            */
         }
     }
 
@@ -68,10 +68,12 @@ impl Connect {
         let mut buf = [0; 1];
         bytes.read_exact(&mut buf)?;
         if buf[0] != PROTOCOL_LEVEL {
+            /*
             return Err(PacketError::new_kind(
                 "Invalid protocol level",
                 ErrorKind::InvalidProtocolLevel,
             ));
+            */
         }
         Ok(())
     }
@@ -202,17 +204,19 @@ impl Connect {
     ****************/
     pub fn new_from_zero(stream: &mut impl Read) -> Result<Connect, PacketError> {
         let mut control_byte_buff: [u8; 1] = [0];
-        if let Ok(_) = stream.read_exact(&mut control_byte_buff) {
-            if control_byte_buff[0] >> 4 == 1 {
-                Connect::new(stream)
-            } else {
-                Err(PacketError::new_msg("El paquete recibido no es CONNECT")) 
+        match stream.read_exact(&mut control_byte_buff) {
+            Ok(_) => {
+                if control_byte_buff[0] >> 4 == 1 {
+                    Connect::new(stream)
+                } else {
+                    Err(PacketError::new_msg("El paquete recibido no es CONNECT")) 
+                }
             }
-
-        } else {
-            Err(PacketError::new_msg("Error leyendo CONNECT"))
+            Err(err) if err.kind() == io::ErrorKind::WouldBlock => {
+                Err(PacketError::new_kind("Would block", ErrorKind::Idle))
+            }
+            Err(_) => panic!("panico")
         }
-
     }
 
 

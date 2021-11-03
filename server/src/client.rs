@@ -9,7 +9,7 @@ use std::{
 
 use packets::publish::Publish;
 
-use crate::server_packets::Connect;
+use crate::{server::ServerResult, server_packets::Connect};
 
 pub struct Client {
     id: String,
@@ -50,5 +50,14 @@ impl Client {
 
     pub fn unacknowledged(&mut self, publish: Publish) {
         todo!()
+    }
+
+    pub fn clean_session(&self) -> bool {
+        *self.connect.clean_session()
+    }
+
+    pub fn reconnect(&mut self, new_client: Client) -> ServerResult<()> {
+        self.stream = new_client.stream;
+        Ok(())
     }
 }
