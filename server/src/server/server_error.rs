@@ -1,7 +1,6 @@
 use std::{fmt, io};
 
 use packets::packet_reader::{ErrorKind, PacketError};
-use tracing::warn;
 
 #[derive(Debug)]
 pub struct ServerError {
@@ -14,6 +13,7 @@ pub enum ServerErrorKind {
     ProtocolViolation,
     RepeatedId,
     ClientDisconnected,
+    ClientNotFound,
     Idle,
     Other,
     _NonExhaustive,

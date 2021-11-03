@@ -8,6 +8,7 @@ mod config;
 mod packet_scheduler;
 mod server;
 mod server_packets;
+mod session;
 mod topic_handler;
 
 fn main() {

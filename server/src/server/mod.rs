@@ -2,30 +2,39 @@
 
 use core::panic;
 use std::{
-    collections::HashMap,
     io::{self, Read},
     net::{SocketAddr, TcpListener, TcpStream},
-    sync::{Arc, Mutex, RwLock},
+    sync::{Arc, Mutex},
     thread::{self, JoinHandle},
     time::Duration,
     vec,
 };
 
-use tracing::{error, info, warn};
+use tracing::{debug, error, info, warn};
 
 use packets::packet_reader::{ErrorKind, PacketError};
 
-mod server_error;
-use server_error::ServerError;
+pub mod server_error;
+pub use server_error::ServerError;
 
 const MPSC_BUF_SIZE: usize = 256;
 const SLEEP_DUR: Duration = Duration::from_secs(2);
 
 use packets::publish::Publish;
 
-use crate::{client::Client, config::Config, packet_scheduler::PacketScheduler, server::server_error::ServerErrorKind, server_packets::{Connack, Connect, Disconnect, Subscribe, connack::CONNACK_CONNECTION_ACCEPTED}, topic_handler::{Publisher, TopicHandler}};
+use crate::{
+    client::Client,
+    config::Config,
+    packet_scheduler::PacketScheduler,
+    server::server_error::ServerErrorKind,
+    server_packets::{Connack, Connect, Disconnect, Subscribe},
+    session::Session,
+    topic_handler::{Publisher, TopicHandler},
+};
 
 pub type ServerResult<T> = Result<T, ServerError>;
+
+type ClientId = String;
 
 const RETURN_CODE_CONNECTION_ACCEPTED: u8 = 0;
 
@@ -34,7 +43,7 @@ pub enum Packet {
     ConnackType(Connack),
     PublishTypee(Publish),
     SubscribeType(Subscribe),
-    DisconnectType(Disconnect)
+    DisconnectType(Disconnect),
 }
 
 pub enum PacketType {
@@ -55,7 +64,7 @@ pub enum PacketType {
 /// MQTT V3.1.1 protocol
 pub struct Server {
     /// Clients connected to the server
-    clients: RwLock<HashMap<String, Mutex<Client>>>,
+    session: Session,
     /// Initial Server setup
     config: Config,
     /// Manages the Publish / Subscribe tree
@@ -86,15 +95,11 @@ fn get_code_type(code: u8) -> Result<PacketType, PacketError> {
 }
 
 impl Publisher for Server {
-    fn send_publish(&self, user_id: &str, publish: &Publish) {
-        self.clients
-            .read()
-            .unwrap()
-            .get(user_id)
-            .unwrap()
-            .lock()
-            .unwrap()
-            .write_all(&publish.encode().unwrap())
+    fn send_publish(&self, id: &str, publish: &Publish) {
+        self.session
+            .client_do(&id.to_owned(), |mut client| {
+                client.send_publish(publish.clone());
+            })
             .unwrap();
     }
 }
@@ -104,14 +109,19 @@ impl Server {
     pub fn new(config: Config) -> Arc<Self> {
         info!("Iniciando servidor");
         Arc::new(Self {
-            clients: RwLock::new(HashMap::new()),
+            session: Session::new(),
             config,
             topic_handler: TopicHandler::new(),
             client_handlers: Mutex::new(vec![]),
         })
     }
 
-    fn read_packet(&self, control_byte: u8, stream: &mut TcpStream, client_id: &str) -> Result<Packet, ServerError> {
+    fn read_packet(
+        &self,
+        control_byte: u8,
+        stream: &mut TcpStream,
+        id: &ClientId,
+    ) -> ServerResult<Packet> {
         let buf: [u8; 1] = [control_byte];
 
         let code = control_byte >> 4;
@@ -132,11 +142,11 @@ impl Server {
             PacketType::Unsubscribe => todo!(),
             PacketType::Pingreq => {
                 todo!()
-            },
+            }
             PacketType::Disconnect => {
                 let packet = Disconnect::read_from(buf[0], stream).unwrap();
                 Ok(Packet::DisconnectType(packet))
-            },
+            }
             _ => Err(ServerError::new_kind(
                 "Codigo de paquete inesperado",
                 ServerErrorKind::ProtocolViolation,
@@ -144,12 +154,11 @@ impl Server {
         }
     }
 
-    fn receive_packet(&self, stream: &mut TcpStream, client_id: &str) -> Result<Packet, ServerError> {
+    fn receive_packet(&self, stream: &mut TcpStream, id: &ClientId) -> Result<Packet, ServerError> {
         let mut buf = [0u8; 1];
         match stream.read_exact(&mut buf) {
-            Ok(_) => Ok(self.read_packet(buf[0], stream, client_id)?),
+            Ok(_) => Ok(self.read_packet(buf[0], stream, id)?),
             Err(error) if error.kind() == io::ErrorKind::UnexpectedEof => {
-                error!("Cliente se desconecto de forma inesperada");
                 Err(ServerError::new_kind(
                     "Cliente se desconecto sin avisar",
                     ServerErrorKind::ClientDisconnected,
@@ -162,49 +171,40 @@ impl Server {
         }
     }
 
-    fn handle_connect(&self, connect: Connect, client_id: &str) -> Result<(), ServerError> {
-        // Como la conexion se maneja antes de entrar al loop de paquetes
-        // si se llega a este punto es porque se mando un segundo connect
-        // Por lo tanto, se debe desconectar al cliente
+    fn handle_connect(&self, connect: Connect, id: &ClientId) -> Result<(), ServerError> {
         error!(
-            "El cliente con id {} envio un segundo connect. Se procede a su desconexion",
-            client_id
+            "El cliente con id <{}> envio un segundo CONNECT. Se procede a su desconexion",
+            id
         );
-        self.disconnect(client_id)?;
+        self.session.disconnect(id)?;
         Ok(())
     }
 
-    fn handle_publish(&self, publish: Publish, client_id: &str) -> Result<(), ServerError> {
-        //self.get_client(client_id)?.unacknowledged(publish);
-
+    fn handle_publish(&self, publish: Publish, id: &ClientId) -> Result<(), ServerError> {
+        debug!("Recibido PUBLISH de <{}>", id);
         self.topic_handler.publish(&publish, self).unwrap();
         Ok(())
     }
 
-    fn handle_subscribe(&self, subscribe: Subscribe, client_id: &str) -> Result<(), ServerError> {
-        info!("Recibido subscribe de <{}>", client_id);
-        self.topic_handler.subscribe(&subscribe, client_id).unwrap();
+    fn handle_subscribe(&self, subscribe: Subscribe, id: &ClientId) -> Result<(), ServerError> {
+        debug!("Recibido SUBSCRIBE de <{}>", id);
+        self.topic_handler.subscribe(&subscribe, id).unwrap();
         Ok(())
     }
 
-    fn handle_disconnect(&self, disconnect: Disconnect, client_id: &str) -> ServerResult<()> {
-        info!("DISCONNECT");
-        self.client_do(client_id, |client| {
-            client.disconnect();
-            info!("desconectado");
-        }).unwrap();
-        info!("sali del client_do");
+    fn handle_disconnect(&self, disconnect: Disconnect, id: &ClientId) -> ServerResult<()> {
+        debug!("Recibido DISCONNECT de <{}>", id);
+        self.session.disconnect(id).unwrap();
         Ok(())
     }
 
-    pub fn handle_packet(&self, packet: Packet, client_id: String) -> ServerResult<()> {
+    pub fn handle_packet(&self, packet: Packet, id: &ClientId) -> ServerResult<()> {
         match packet {
-            Packet::ConnectType(packet) => self.handle_connect(packet, &client_id),
-            Packet::PublishTypee(packet) => self.handle_publish(packet, &client_id),
-            Packet::SubscribeType(packet) => self.handle_subscribe(packet, &client_id),
+            Packet::ConnectType(packet) => self.handle_connect(packet, &id),
+            Packet::PublishTypee(packet) => self.handle_publish(packet, &id),
+            Packet::SubscribeType(packet) => self.handle_subscribe(packet, &id),
             Packet::DisconnectType(packet) => {
-                self.handle_disconnect(packet, &client_id).unwrap();
-                info!("sali de handle_disconnect");
+                self.handle_disconnect(packet, &id).unwrap();
                 Ok(())
             }
             _ => Err(ServerError::new_kind(
@@ -218,121 +218,29 @@ impl Server {
         loop {
             match Connect::new_from_zero(stream) {
                 Ok(packet) => {
-                    info!("Recibido CONNECT de cliente {}", packet.client_id());
+                    info!(
+                        "Recibido CONNECT de cliente <{}>: {:?}",
+                        packet.client_id(),
+                        packet
+                    );
                     let stream_copy = stream.try_clone()?;
-                    return Ok(Client::new(packet, stream_copy))
+                    return Ok(Client::new(packet, stream_copy));
                 }
                 Err(err) if err.kind() == ErrorKind::InvalidFlags => continue,
-                Err(err) => {
-                    return Err(ServerError::from(err))
-                }
+                Err(err) => return Err(ServerError::from(err)),
             }
         }
     }
 
-    fn is_present(&self, client_id: &str) -> bool {
-        self.clients.read().unwrap().get(client_id).is_some()
-    }
-
-    fn add_client(&self, client: Client) {
-        self.clients.write().unwrap().insert(client.id().to_owned(), Mutex::new(client));
-    }
-
-    fn new_client(&self, client: Client) -> ServerResult<()> {
-        info!("new_client: {}", client.id());
-        if self.is_present(client.id()) {
-            info!("Cliente <{}> se encuentra en el servidor", client.id());
-            if self.is_alive(client.id()).unwrap()  {
-                //error!("Se intento conectar <{}> pero ya habia una conexion con la misma id", client.id());
-                return Err(ServerError::new_kind(
-                    "Cliente con la misma id se encuentra conectado", 
-                    ServerErrorKind::RepeatedId));
-            } else {
-                if client.clean_session() {
-                    info!("eliminando");
-
-                    self.remove_client(client.id());
-                    let client_id = client.id().to_owned();
-                    self.remove_client(&client_id);
-                    self.add_client(client);
-                    self.send_connack(&client_id, 0, CONNACK_CONNECTION_ACCEPTED)?;
-                    return Ok(())
-                } else {
-                    info!("Se reconecto <{}> (clean_session = false)", client.id());
-                    let mut result: ServerResult<()> = Ok(());
-                    let client_id = client.id().to_owned();
-                    self.client_do(&client_id, |mut old_client| {
-                        result = old_client.reconnect(client);
-                    }).unwrap();
-                    self.send_connack(&client_id, 1, CONNACK_CONNECTION_ACCEPTED)?;
-                    result
-                }
-            }
-        } else {
-            info!("Primera aparicion en el SV");
-            let client_id = client.id().to_owned();
-            self.add_client(client);
-            self.send_connack(&client_id, 0, CONNACK_CONNECTION_ACCEPTED).unwrap();
-
-            Ok(())
-        }
-    }
-
-    fn send_connack(&self, client_id: &str, session_present: u8, return_code: u8) -> Result<(), ServerError> {
-        let connack = Connack::new(session_present, return_code);
-        self.client_do(client_id, |mut client| {
-            client.write_all(&connack.encode()).unwrap();
-        })
-    }
-
-    fn is_alive(&self, client_id: &str) -> ServerResult<bool> {
-        let mut alive = false;
-        self.client_do(client_id, |client| {
-            alive = client.alive()
-        }).unwrap();
-        Ok(alive)
-    }
-
-    fn disconnect(&self, client_id: &str) -> Result<(), ServerError> {
-        self.client_do(client_id, |client| {
-            client.disconnect()
-        })?;
-        Ok(())
-    }
-
-    fn client_do<F>(&self, client_id: &str, action: F) -> Result<(), ServerError>
-    where F: FnOnce(std::sync::MutexGuard<'_, Client, >) -> () {
-        action(self.clients
-            .read()
-            .expect("Lock envenenado")
-            .get(client_id)
-            .unwrap()
-            .lock()
-            .expect("Lock envenenado"));
-        Ok(())
-    }
-
-    fn remove_client(&self, client_id: &str) {
-        info!("CLIENTE A PUNTO DE SER ELIMINADO");
-        self.clients.write().unwrap().remove(client_id).unwrap();
-        info!("CLIENTE ELIMINADO");
-    }
-
-    fn connect_client(
-        &self,
-        stream: &mut TcpStream,
-        addr: SocketAddr,
-    ) -> ServerResult<String> {
+    fn connect_client(&self, stream: &mut TcpStream, addr: SocketAddr) -> ServerResult<String> {
         loop {
             match self.wait_for_connect(stream) {
                 Ok(client) => {
-                    let client_id = client.id().to_owned();
-                    self.new_client(client)?;
-                    return Ok(client_id)
+                    let id = client.id().to_owned();
+                    self.session.connect(client)?;
+                    return Ok(id);
                 }
-                Err(err) if err.kind() == ServerErrorKind::Idle => {
-                    continue
-                },
+                Err(err) if err.kind() == ServerErrorKind::Idle => continue,
                 Err(err) => {
                     error!(
                         "Error recibiendo Connect de cliente <{}>: {}",
@@ -342,39 +250,35 @@ impl Server {
                     return Err(ServerError::new_kind(
                         "Error de conexion",
                         ServerErrorKind::ProtocolViolation,
-                    ))
+                    ));
                 }
             }
         }
     }
 
-    fn client_loop(self: Arc<Self>, client_id: String, mut stream: TcpStream) {
-        info!("Entrando al loop de {}", client_id);
-        let mut packet_scheduler = PacketScheduler::new(self.clone(), &client_id);
-        while self.is_alive(&client_id).unwrap() {
-            match self.receive_packet(&mut stream, &client_id) {
+    fn client_loop(self: Arc<Self>, id: String, mut stream: TcpStream) {
+        debug!("Entrando al loop de {}", id);
+        let mut packet_scheduler = PacketScheduler::new(self.clone(), &id);
+        while self.session.connected(&id) {
+            match self.receive_packet(&mut stream, &id) {
                 Ok(packet) => {
+                    self.session.refresh(&id);
                     packet_scheduler.new_packet(packet);
+                }
+                Err(err) if err.kind() == ServerErrorKind::ClientDisconnected => {
+                    warn!("Cliente <{}> se desconecto sin avisar", id);
+                    self.session.disconnect(&id).unwrap();
                 }
                 Err(err) if err.kind() == ServerErrorKind::Idle => {
                     continue;
                 }
                 Err(err) => {
-                    error!("Error grave: {}", err.to_string());
+                    error!("Error inesperado: {}", err.to_string());
                 }
             }
         }
-        info!("llegue hasta aca");
-        self.client_do(&client_id, |client| {
-            warn!("sali del loop");
-            if client.clean_session() {
-                info!("a removerlo");
-                self.remove_client(&client_id);
-            }
-        }).unwrap();
-        info!("Conexion finalizada con <{}>", client_id);
-
-        // Implementar Drop para PacketScheduler
+        debug!("Conexion finalizada con <{}>", id);
+        self.session.finish_session(&id);
     }
 
     fn manage_client(self: Arc<Self>, mut stream: TcpStream, addr: SocketAddr) {
@@ -382,11 +286,11 @@ impl Server {
             Err(err) => match err.kind() {
                 ServerErrorKind::ProtocolViolation => {}
                 ServerErrorKind::RepeatedId => {
-                    //info!("Id repetida, conexion rechazada");
-                },
-                _ => panic!("Error inesperado")
+                    error!("Conexion {} con id, rechazada", addr);
+                }
+                _ => panic!("Error inesperado"),
             },
-            Ok(client_id) => self.client_loop(client_id, stream),
+            Ok(id) => self.client_loop(id, stream),
         }
     }
 
@@ -399,8 +303,9 @@ impl Server {
             }
             Ok((stream, addr)) => {
                 info!("Aceptada conexion TCP con {}", addr);
-                // En la implementacion original habia un set_nonblocking, para que lo precisamos?
-                stream.set_nonblocking(true).unwrap();
+                stream
+                    .set_nonblocking(true)
+                    .expect("No se pudo establecer conexion no bloqueante");
                 let sv_copy = self.clone();
                 // No funcionan los nombres en el trace
                 let handle = thread::Builder::new()
