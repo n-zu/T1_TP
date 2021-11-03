@@ -17,6 +17,8 @@ const PUBLISH_PACKET_TYPE: u8 = 0b00110000;
 const SINGLE_LEVEL_WILDCARD: char = '+';
 #[doc(hidden)]
 const MULTI_LEVEL_WILDCARD: char = '#';
+#[doc(hidden)]
+const MSG_INVALID_PACKET_ID: &str = "Packet identifier must be greater than zero";
 
 #[derive(Debug, PartialEq)]
 pub enum RetainFlag {
@@ -56,7 +58,6 @@ impl Publish {
     ///
     /// It assumes the first byte is read by the server/client
     ///
-    /// returns: Result<Publish, PacketError>
     ///
     /// # Errors
     ///
@@ -101,7 +102,7 @@ impl Publish {
         Self::verify_control_packet_type(&control_byte)?;
         let mut remaining_bytes = packet_reader::read_packet_bytes(stream)?;
         let topic_name = Self::verify_topic_name(&mut remaining_bytes)?;
-        let packet_id = Self::verify_packet_id(&mut remaining_bytes, &qos_level);
+        let packet_id = Self::verify_packet_id(&mut remaining_bytes, &qos_level)?;
         let payload = Self::read_payload(&mut remaining_bytes);
 
         Ok(Self {
@@ -217,14 +218,20 @@ impl Publish {
     }
 
     #[doc(hidden)]
-    fn verify_packet_id(bytes: &mut impl Read, qos_level: &QoSLevel) -> Option<u16> {
+    fn verify_packet_id(
+        bytes: &mut impl Read,
+        qos_level: &QoSLevel,
+    ) -> Result<Option<u16>, PacketError> {
         if *qos_level != QoSLevel::QoSLevel1 {
-            return None;
+            return Ok(None);
         }
         let mut packet_id_buffer = [0u8; 2];
         let _ = bytes.read_exact(&mut packet_id_buffer);
         let packet_id = u16::from_be_bytes(packet_id_buffer);
-        Some(packet_id)
+        if packet_id == 0 {
+            return Err(PacketError::new_msg(MSG_INVALID_PACKET_ID));
+        }
+        Ok(Some(packet_id))
     }
 
     #[doc(hidden)]
@@ -294,7 +301,8 @@ mod tests {
     use crate::packet_reader::{ErrorKind, PacketError};
     use crate::publish::{
         DupFlag, Publish, QoSLevel, RetainFlag, MSG_DUP_FLAG_1_WITH_QOS_LEVEL_0,
-        MSG_PACKET_TYPE_PUBLISH, MSG_TOPIC_NAME_ONE_CHAR, MSG_TOPIC_WILDCARDS,
+        MSG_INVALID_PACKET_ID, MSG_PACKET_TYPE_PUBLISH, MSG_TOPIC_NAME_ONE_CHAR,
+        MSG_TOPIC_WILDCARDS,
     };
     use crate::utf8::Field;
     use std::io::Cursor;
@@ -480,6 +488,26 @@ mod tests {
             MSG_TOPIC_WILDCARDS,
             ErrorKind::TopicNameMustNotHaveWildcards,
         );
+        let result = Publish::read_from(&mut stream, control_byte).unwrap_err();
+        assert_eq!(expected_error, result);
+    }
+
+    #[test]
+    fn test_publish_packet_can_not_have_packet_id_0() {
+        let control_byte = 0b110010u8; // primer byte con los flags con QoS level 0;
+        let mut remaining_data: Vec<u8> = vec![];
+        let mut topic = Field::new_from_string("a/b").unwrap().encode();
+        let mut payload = "los pollos hermanos".as_bytes().to_vec();
+        let mut packet_id_buf: Vec<u8> = vec![0b0, 0b0]; // Packet identifier 0
+        remaining_data.append(&mut topic);
+        remaining_data.append(&mut packet_id_buf);
+        remaining_data.append(&mut payload);
+
+        let mut bytes = vec![];
+        bytes.push(remaining_data.len() as u8);
+        bytes.append(&mut remaining_data);
+        let mut stream = Cursor::new(bytes);
+        let expected_error = PacketError::new_msg(MSG_INVALID_PACKET_ID);
         let result = Publish::read_from(&mut stream, control_byte).unwrap_err();
         assert_eq!(expected_error, result);
     }

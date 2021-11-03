@@ -1,3 +1,5 @@
+#![allow(unused)]
+
 use crate::packet_reader;
 use crate::packet_reader::{ErrorKind, PacketError};
 use std::io;
@@ -23,6 +25,10 @@ pub struct Puback {
 
 impl Puback {
     /// Returns a new Puback packet with given packet_id
+    ///
+    /// # Errors
+    ///
+    /// If packet_id is zero, this functions returns a [ErrorKind::InvalidProtocol]
     pub fn new(packet_id: u16) -> Result<Self, PacketError> {
         Self::verify_packet_id(&packet_id)?;
         Ok(Self { packet_id })
@@ -43,9 +49,9 @@ impl Puback {
     /// use packets::puback::Puback;
     /// let control_byte = 0b01000000u8;
     /// let remaining_length = 2u8;
-    /// let data_buffer: Vec<u8> = vec![remaining_length, 0, 0];
+    /// let data_buffer: Vec<u8> = vec![remaining_length, 0, 1];
     /// let mut stream = Cursor::new(data_buffer);
-    /// let expected = Puback::new(0);
+    /// let expected = Puback::new(1).unwrap();
     /// let result = Puback::read_from(&mut stream, control_byte).unwrap();
     /// assert_eq!(expected, result);
     /// ```
@@ -66,7 +72,7 @@ impl Puback {
     ///
     /// let puback = Puback::new(1).unwrap();
     /// let result = puback.encode();
-    /// let expected: Vec<u8> = vec![0b01000000, 0b10, 0b0, 0b0];
+    /// let expected: Vec<u8> = vec![0b01000000, 0b10, 0b0, 0b1];
     /// assert_eq!(expected, result)
     /// ```
     pub fn encode(&self) -> Vec<u8> {
