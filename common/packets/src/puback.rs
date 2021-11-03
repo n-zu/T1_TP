@@ -13,6 +13,8 @@ const MSG_PACKET_TYPE_PUBACK: &str = "Packet type must be 4 for a Puback packet"
 const MSG_PACKET_MORE_BYTES_THAN_EXPECTED: &str = "Puback packet contains more bytes than expected";
 #[doc(hidden)]
 const PUBACK_CONTROL_PACKET_TYPE: u8 = 4;
+#[doc(hidden)]
+const MSG_INVALID_PACKET_ID: &str = "Packet identifier must be greater than zero";
 
 #[derive(Debug, PartialEq)]
 pub struct Puback {
@@ -21,8 +23,9 @@ pub struct Puback {
 
 impl Puback {
     /// Returns a new Puback packet with given packet_id
-    pub fn new(packet_id: u16) -> Self {
-        Self { packet_id }
+    pub fn new(packet_id: u16) -> Result<Self, PacketError> {
+        Self::verify_packet_id(&packet_id)?;
+        Ok(Self { packet_id })
     }
     /// Creates a new Puback packet from a given stream of bytes.
     ///
@@ -61,7 +64,7 @@ impl Puback {
     /// ```
     /// use packets::puback::Puback;
     ///
-    /// let puback = Puback::new(0);
+    /// let puback = Puback::new(1).unwrap();
     /// let result = puback.encode();
     /// let expected: Vec<u8> = vec![0b01000000, 0b10, 0b0, 0b0];
     /// assert_eq!(expected, result)
@@ -130,14 +133,25 @@ impl Puback {
             Err(_) => Err(PacketError::new_msg("Error at reading packet")),
         }
     }
+
+    #[doc(hidden)]
+    fn verify_packet_id(packet_id: &u16) -> Result<(), PacketError> {
+        if *packet_id == 0 {
+            return Err(PacketError::new_kind(
+                MSG_INVALID_PACKET_ID,
+                ErrorKind::InvalidProtocol,
+            ));
+        }
+        Ok(())
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use crate::packet_reader::{ErrorKind, PacketError};
     use crate::puback::{
-        Puback, MSG_INVALID_RESERVED_BITS, MSG_PACKET_MORE_BYTES_THAN_EXPECTED,
-        MSG_PACKET_TYPE_PUBACK,
+        Puback, MSG_INVALID_PACKET_ID, MSG_INVALID_RESERVED_BITS,
+        MSG_PACKET_MORE_BYTES_THAN_EXPECTED, MSG_PACKET_TYPE_PUBACK,
     };
     use std::io::Cursor;
 
@@ -197,18 +211,18 @@ mod tests {
     }
 
     #[test]
-    fn test_encoding_puback_packet_with_packet_id_0() {
-        let puback = Puback::new(0);
-        let result = puback.encode();
-        let expected: Vec<u8> = vec![0b01000000, 0b10, 0b0, 0b0];
-        assert_eq!(expected, result)
+    fn test_puback_with_packet_id_0_should_raise_invalid_protocol_error() {
+        let result = Puback::new(0).unwrap_err();
+        let expected_error =
+            PacketError::new_kind(MSG_INVALID_PACKET_ID, ErrorKind::InvalidProtocol);
+        assert_eq!(expected_error, result)
     }
 
     #[test]
-    fn test_encoding_puback_packet_with_packet_id_120() {
-        let puback = Puback::new(120);
+    fn test_encoding_puback_packet_with_packet_id_1() {
+        let puback = Puback::new(1).unwrap();
         let result = puback.encode();
-        let expected: Vec<u8> = vec![0b01000000, 0b10, 0b0, 120];
+        let expected: Vec<u8> = vec![0b01000000, 0b10, 0b0, 1];
         assert_eq!(expected, result)
     }
 }
