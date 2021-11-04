@@ -135,7 +135,7 @@ impl Server {
                 Ok(Packet::ConnectType(packet))
             }
             PacketType::Publish => {
-                let packet = Publish::read_from(stream, &buf).unwrap();
+                let packet = Publish::read_from(stream, control_byte).unwrap();
                 Ok(Packet::PublishTypee(packet))
             }
             PacketType::Puback => todo!(),
