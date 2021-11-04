@@ -7,6 +7,7 @@ use std::{
 use threadpool_error::ThreadPoolError;
 mod threadpool_error;
 type Job = Box<dyn FnOnce() + Send + 'static>;
+type WorkerId = usize;
 
 // Cuanto debe esperar a que se libere un thread (máximo)
 // antes de verificar si hubo alguno que haya hecho panic
@@ -14,27 +15,34 @@ type Job = Box<dyn FnOnce() + Send + 'static>;
 // Si es muy chico, pierde más tiempo verificando si perdió alguno
 const THREAD_WAIT_TIMEOUT: Duration = Duration::from_micros(1000); // 0.001s
 
+/// ThreadPool implementation
+/// Allows to execute jobs concurrently
+/// with a fixed number of threads
 pub struct ThreadPool {
     thread_manager_handler: Option<JoinHandle<()>>,
     job_sender: Option<Sender<Job>>,
 }
 
+// Información que se guarda el ThreadManager de cada worker thread
 struct ThreadInfo {
-    handler: Option<JoinHandle<()>>,
-    alive_receiver: Receiver<bool>,
-    job_sender: Sender<Job>,
+    handler: Option<JoinHandle<()>>, // El handler para hacer join al thread
+    job_sender: Sender<Job>,         // El canal para envíar tareas al thread
+    alive_receiver: Receiver<bool>, // Un receiver por el que no se envía info, se usa para verificar
+                                    // si se dropeó el sender, en cuyo caso el thread paniqueó
 }
 
+// Estructura que se ejecuta en el thread de la Threadpool, que se encarga
+// de hacer de intermediario entre la interfaz de la ThreadPool y los worker threads
 struct ThreadManager {
-    threads: Vec<ThreadInfo>,
-    ready_receiver: Receiver<usize>,
-    job_receiver: Receiver<Job>,
-    ready_sender: Option<Sender<usize>>,
+    threads: Vec<ThreadInfo>,           // El vector de threads
+    ready_receiver: Receiver<WorkerId>, // Por donde se recibe la id de los threads que están libres
+    job_receiver: Receiver<Job>,        // Por donde se reciben las tareas
+    ready_sender: Option<Sender<WorkerId>>, // Una copia del receiver que se usa para saber que threads están libres
+                                            // (se guarda para dársela a los threads que se revivan al haber paniqueado)
 }
 
 impl ThreadManager {
-    // Crea el ThreadManager, que se encarga de hacer de intermediario entre
-    // la interfaz de la ThreadPool y los threads workers
+    // Crea el ThreadManager con amount threads, recive tareas por el job_receiver hasta que se cierre el sender
     fn new(amount: usize, job_receiver: Receiver<Job>) -> Self {
         let (ready_sender, ready_receiver) = channel();
 
@@ -61,7 +69,7 @@ impl ThreadManager {
     // Obtiene el índice del un thread worker libre
     // Espera hasta que haya uno disponible, y en caso de que no haya ninguno,
     // intenta resucitar threads que puedan haber paniqueado
-    fn get_free_thread(&mut self) -> usize {
+    fn get_free_thread(&mut self) -> WorkerId {
         let mut resultado = self.ready_receiver.recv_timeout(THREAD_WAIT_TIMEOUT);
         while resultado.is_err() {
             // Cabe la posibilidad que alguno haya paniqueado, asi que intento arreglarlo
@@ -87,7 +95,7 @@ impl ThreadManager {
     }
 
     // Resucita un thread muerto. Le hace join y lo inicia de nuevo, actualizando los channels
-    fn reset_thread(thread: &mut ThreadInfo, id: usize, ready_sender: Sender<usize>) {
+    fn reset_thread(thread: &mut ThreadInfo, id: WorkerId, ready_sender: Sender<WorkerId>) {
         if let Some(handle) = thread.handler.take() {
             let _res = handle.join();
         }
@@ -104,7 +112,7 @@ impl ThreadManager {
     }
 
     // Crea el vector de amount threads workers, inicializándolos con sus canales de comunicación
-    fn intialize_threads(amount: usize, ready_sender: Sender<usize>) -> Vec<ThreadInfo> {
+    fn intialize_threads(amount: usize, ready_sender: Sender<WorkerId>) -> Vec<ThreadInfo> {
         let mut threads = Vec::new();
         for i in 0..amount {
             let (alive_sender, alive_receiver) = channel();
@@ -183,8 +191,8 @@ impl Drop for ThreadPool {
 fn worker(
     job_receiver: Receiver<Job>,
     _alive: Sender<bool>,
-    ready_sender: Sender<usize>,
-    id: usize,
+    ready_sender: Sender<WorkerId>,
+    id: WorkerId,
 ) {
     if let Err(_err) = ready_sender.send(id) {
         return;
