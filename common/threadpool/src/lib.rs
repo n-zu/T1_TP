@@ -19,9 +19,9 @@ const THREAD_WAIT_TIMEOUT: Duration = Duration::from_micros(1000); // 0.001s
 /// Allows to execute jobs concurrently
 /// with a fixed number of threads
 pub struct ThreadPool {
-    thread_manager_handler: Option<JoinHandle<()>>,
-    job_sender: Option<Sender<Job>>,
-}
+    thread_manager_handler: Option<JoinHandle<()>>, // Handler del thread que ejecuta al ThreadManager
+    job_sender: Option<Sender<Job>>, // Sender por el que se le envían las tareas al ThreadManager
+} // Estan en Options para poder dropearlos en el destructor y destrabar al ThreadManager, dejandoles None
 
 // Información que se guarda el ThreadManager de cada worker thread
 struct ThreadInfo {
@@ -37,8 +37,8 @@ struct ThreadManager {
     threads: Vec<ThreadInfo>,           // El vector de threads
     ready_receiver: Receiver<WorkerId>, // Por donde se recibe la id de los threads que están libres
     job_receiver: Receiver<Job>,        // Por donde se reciben las tareas
-    ready_sender: Option<Sender<WorkerId>>, // Una copia del receiver que se usa para saber que threads están libres
-                                            // (se guarda para dársela a los threads que se revivan al haber paniqueado)
+    ready_sender: Sender<WorkerId>, // Una copia del receiver que se usa para saber que threads están libres
+                                    // (se guarda para dársela a los threads que se revivan al haber paniqueado)
 }
 
 impl ThreadManager {
@@ -52,7 +52,7 @@ impl ThreadManager {
             threads,
             ready_receiver,
             job_receiver,
-            ready_sender: Some(ready_sender),
+            ready_sender,
         }
     }
 
@@ -81,15 +81,10 @@ impl ThreadManager {
 
     // Recorre la lista de threads y revive a aquellos que estén muertos (lo hace con el ready_receiver)
     fn recover_threads(&mut self) {
-        let ready_sender = self
-            .ready_sender
-            .clone()
-            .expect("Error: ready_sender was dropped but the threadpool is still executing");
-
         for (id, thread) in self.threads.iter_mut().enumerate() {
             if let Err(mpsc::TryRecvError::Disconnected) = thread.alive_receiver.try_recv() {
                 // Murio el thread
-                Self::reset_thread(thread, id, ready_sender.clone());
+                Self::reset_thread(thread, id, self.ready_sender.clone());
             }
         }
     }
