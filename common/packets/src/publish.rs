@@ -20,13 +20,13 @@ const MULTI_LEVEL_WILDCARD: char = '#';
 #[doc(hidden)]
 const MSG_INVALID_PACKET_ID: &str = "Packet identifier must be greater than zero";
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub enum RetainFlag {
     RetainFlag0,
     RetainFlag1,
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub enum DupFlag {
     DupFlag0,
     DupFlag1,
@@ -35,7 +35,7 @@ pub enum DupFlag {
 #[doc(hidden)]
 const PUBLISH_CONTROL_PACKET_TYPE: u8 = 3;
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 /// Publish packet structure for server/client side
 pub struct Publish {
     pub packet_id: Option<u16>,

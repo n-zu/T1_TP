@@ -29,7 +29,7 @@ use crate::{
     packet_scheduler::PacketScheduler,
     server::server_error::ServerErrorKind,
     server_packets::{Connack, Connect, Subscribe},
-    topic_handler::{Publisher, TopicHandler},
+    topic_handler::TopicHandler,
 };
 
 pub enum Packet {
@@ -84,20 +84,6 @@ fn get_code_type(code: u8) -> Result<PacketType, PacketError> {
             "Tipo de paquete invalido/no soportado",
             ErrorKind::InvalidControlPacketType,
         )),
-    }
-}
-
-impl Publisher for Server {
-    fn send_publish(&self, user_id: &str, publish: &Publish) {
-        self.clients
-            .read()
-            .unwrap()
-            .get(user_id)
-            .unwrap()
-            .lock()
-            .unwrap()
-            .write_all(&publish.encode().unwrap())
-            .unwrap();
     }
 }
 
@@ -202,7 +188,7 @@ impl Server {
     #[doc(hidden)]
     fn handle_publish(&self, publish: Publish, client_id: &str) -> Result<(), ServerError> {
         info!("Recibido Publish de <{}>", client_id);
-        self.topic_handler.publish(&publish, self).unwrap();
+        //self.topic_handler.publish(&publish, self).unwrap();
         Ok(())
     }
 

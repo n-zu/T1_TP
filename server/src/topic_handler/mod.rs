@@ -2,7 +2,7 @@
 
 use std::{
     collections::{HashMap, HashSet},
-    sync::RwLock,
+    sync::{mpsc::Sender, RwLock},
 };
 
 pub mod topic_handler_error;
@@ -18,9 +18,10 @@ pub struct Unsubscribe;
 
 type Subtopics = HashMap<String, Topic>;
 type Subscribers = HashSet<String>;
-
-pub trait Publisher {
-    fn send_publish(&self, user_id: &str, packet: &Publish);
+type ClientId = String;
+pub struct Message {
+    pub client_id: ClientId,
+    pub packet: Publish,
 }
 
 const SEP: &str = "/";
@@ -63,16 +64,13 @@ impl TopicHandler {
     pub fn publish(
         &self,
         packet: &Publish,
-        server: &impl Publisher,
+        sender: Sender<Message>,
     ) -> Result<(), TopicHandlerError> {
         let full_topic = packet.topic_name.as_ref();
         let mut subs: Subscribers = HashSet::new();
 
-        get_subs_rec(&self.root, full_topic, &mut subs)?;
+        pub_rec(&self.root, full_topic, &mut subs, sender, packet)?;
 
-        for sub in subs {
-            server.send_publish(&sub, packet);
-        }
         Ok(())
     }
 
@@ -99,10 +97,12 @@ impl TopicHandler {
 
 // Lo tuve que hacer recursivo porque sino era un caos el tema de mantener todos los
 // locks desbloqueados, ya que no los podia dropear porque perdia las referencias internas
-fn get_subs_rec(
+fn pub_rec(
     node: &Topic,
     topic_name: &str,
     subs: &mut Subscribers,
+    sender: Sender<Message>,
+    packet: &Publish,
 ) -> Result<(), TopicHandlerError> {
     match topic_name.split_once(SEP) {
         // Aca se le puede agregar tratamiento especial para *, #, etc.
@@ -110,12 +110,20 @@ fn get_subs_rec(
         Some((topic_name, rest)) => {
             let subtopics = node.subtopics.read()?;
             if let Some(subtopic) = subtopics.get(topic_name) {
-                get_subs_rec(subtopic, rest, subs)?;
+                pub_rec(subtopic, rest, subs, sender, packet)?;
             }
         }
         None => {
             let subscribers = node.subscribers.read()?;
-            subs.extend(subscribers.iter().cloned());
+            for sub in subscribers.iter() {
+                if !subs.contains(sub) {
+                    sender.send(Message {
+                        client_id: sub.to_string(),
+                        packet: packet.clone(),
+                    })?;
+                    subs.insert(sub.clone());
+                }
+            }
         }
     }
 
@@ -210,36 +218,11 @@ fn remove_client_rec(node: &Topic, user_id: &str) -> Result<(), TopicHandlerErro
 
 #[cfg(test)]
 mod tests {
-    use std::{io::Cursor, sync::RwLock};
+    use std::{collections::HashSet, io::Cursor, sync::mpsc::channel};
 
     use crate::server_packets::Subscribe;
 
-    use super::Publisher;
     use packets::{publish::Publish, utf8::Field};
-
-    struct ServerMock<'a> {
-        pub expected_users: Vec<String>,
-        pub expected_packet: &'a Publish,
-        pub times_called: RwLock<u8>,
-    }
-
-    impl<'a> ServerMock<'a> {
-        fn new(expected_users: Vec<String>, expected_packet: &'a Publish) -> Self {
-            Self {
-                expected_users,
-                expected_packet,
-                times_called: RwLock::new(0),
-            }
-        }
-    }
-
-    impl Publisher for ServerMock<'_> {
-        fn send_publish(&self, user_id: &str, packet: &Publish) {
-            assert_eq!(self.expected_packet, packet);
-            assert!(self.expected_users.contains(&user_id.to_string()));
-            *self.times_called.write().unwrap() += 1;
-        }
-    }
 
     fn build_publish(topic: &str, message: &str) -> Publish {
         let mut bytes = Vec::new();
@@ -267,35 +250,75 @@ mod tests {
         let subscribe = build_subscribe("topic");
         let publish = build_publish("topic", "unMensaje");
         let handler = super::TopicHandler::new();
-        let server = ServerMock::new(vec!["user".to_string()], &publish);
+        let (sender, receiver) = channel();
 
         handler.subscribe(&subscribe, "user").unwrap();
-        handler.publish(&publish, &server).unwrap();
-        assert_eq!(1, *server.times_called.read().unwrap());
+        handler.publish(&publish, sender).unwrap();
+
+        let message = receiver.recv().unwrap();
+        assert_eq!(message.client_id, "user");
+        assert_eq!(message.packet.topic_name(), "topic");
     }
 
     #[test]
     fn test_one_subscribe_one_publish_multi_level_topic() {
-        let subscribe = build_subscribe("topic/asd/dsa");
-        let publish = build_publish("topic/asd/dsa", "unMensaje");
+        let subscribe = build_subscribe("topic/auto/casa");
+        let publish = build_publish("topic/auto/casa", "unMensaje");
         let handler = super::TopicHandler::new();
-        let server = ServerMock::new(vec!["user".to_string()], &publish);
+
+        let (sender, receiver) = channel();
 
         handler.subscribe(&subscribe, "user").unwrap();
-        handler.publish(&publish, &server).unwrap();
-        assert_eq!(1, *server.times_called.read().unwrap());
+        handler.publish(&publish, sender).unwrap();
+
+        let message = receiver.recv().unwrap();
+        assert!(message.client_id == "user");
+        assert_eq!(message.packet.topic_name(), "topic/auto/casa");
     }
 
     #[test]
     fn test_two_subscribe_one_publish_multi_level_topic() {
-        let subscribe = build_subscribe("topic/asd/dsa");
-        let publish = build_publish("topic/asd/dsa", "unMensaje");
+        let subscribe = build_subscribe("topic/auto/casa");
+        let publish = build_publish("topic/auto/casa", "unMensaje");
         let handler = super::TopicHandler::new();
-        let server = ServerMock::new(vec!["user".to_string(), "user2".to_string()], &publish);
+
+        let (sender, receiver) = channel();
 
         handler.subscribe(&subscribe, "user").unwrap();
         handler.subscribe(&subscribe, "user2").unwrap();
-        handler.publish(&publish, &server).unwrap();
-        assert_eq!(2, *server.times_called.read().unwrap());
+        handler.publish(&publish, sender).unwrap();
+
+        let mut pending_users: HashSet<String> = ["user".to_string(), "user2".to_string()]
+            .iter()
+            .cloned()
+            .collect();
+        for msg in receiver {
+            assert!(pending_users.contains(&msg.client_id));
+            pending_users.remove(&msg.client_id);
+            assert!(msg.packet.topic_name() == "topic/auto/casa");
+        }
+    }
+
+    #[test]
+    fn test_5000_subscribers() {
+        let subscribe = build_subscribe("topic/auto/casa");
+        let publish = build_publish("topic/auto/casa", "unMensaje");
+        let handler = super::TopicHandler::new();
+
+        let (sender, receiver) = channel();
+
+        let mut pending_users = HashSet::new();
+        for i in 0..5000 {
+            let id = format!("user{}", i);
+            handler.subscribe(&subscribe, &id).unwrap();
+            pending_users.insert(id);
+        }
+        handler.publish(&publish, sender).unwrap();
+
+        for msg in receiver {
+            assert!(pending_users.contains(&msg.client_id));
+            pending_users.remove(&msg.client_id);
+            assert!(msg.packet.topic_name() == "topic/auto/casa");
+        }
     }
 }
