@@ -1,6 +1,7 @@
 use server::Server;
 use tracing_subscriber::{fmt, prelude::__tracing_subscriber_SubscriberExt, Registry};
-
+#[allow(dead_code, unused_imports)]
+use threadpool;
 use crate::config::Config;
 
 mod client;
