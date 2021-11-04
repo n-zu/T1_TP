@@ -1,4 +1,5 @@
 use std::{
+    rc::Rc,
     sync::mpsc::{self, channel, Receiver, Sender},
     thread::{self, JoinHandle},
     time::Duration,
@@ -18,10 +19,11 @@ const THREAD_WAIT_TIMEOUT: Duration = Duration::from_micros(1000); // 0.001s
 /// ThreadPool implementation
 /// Allows to execute jobs concurrently
 /// with a fixed number of threads
+#[derive(Clone)]
 pub struct ThreadPool {
-    thread_manager_handler: Option<JoinHandle<()>>, // Handler del thread que ejecuta al ThreadManager
-    job_sender: Option<Sender<Job>>, // Sender por el que se le envían las tareas al ThreadManager
-} // Estan en Options para poder dropearlos en el destructor y destrabar al ThreadManager, dejandoles None
+    job_sender: Sender<Job>, // Sender por el que se le envían las tareas al ThreadManager
+    thread_manager_handler: Rc<ManagerHandle>, // Handler del thread que ejecuta al ThreadManager
+} // Es importante que el sender este definido primero para que se dropee antes, sino el manager va a quedar bloqueado
 
 // Información que se guarda el ThreadManager de cada worker thread
 struct ThreadInfo {
@@ -39,6 +41,18 @@ struct ThreadManager {
     job_receiver: Receiver<Job>,        // Por donde se reciben las tareas
     ready_sender: Sender<WorkerId>, // Una copia del receiver que se usa para saber que threads están libres
                                     // (se guarda para dársela a los threads que se revivan al haber paniqueado)
+}
+
+// Guarda el handle del thread que ejecuta al ThreadManager, cosa de hacerle join cuando se dropee
+struct ManagerHandle(Option<JoinHandle<()>>);
+
+impl Drop for ManagerHandle {
+    fn drop(&mut self) {
+        // Si falla acá mucho no se puede hacer
+        if let Some(handle) = self.0.take() {
+            let _res = handle.join();
+        }
+    }
 }
 
 impl ThreadManager {
@@ -136,8 +150,8 @@ impl ThreadPool {
         });
 
         ThreadPool {
-            thread_manager_handler: Some(handler),
-            job_sender: Some(sender),
+            job_sender: sender,
+            thread_manager_handler: Rc::new(ManagerHandle(Some(handler))),
         }
     }
 
@@ -146,10 +160,7 @@ impl ThreadPool {
     where
         F: FnOnce() + Send + 'static,
     {
-        self.job_sender
-            .as_ref()
-            .ok_or_else(ThreadPoolError::new)?
-            .send(Box::new(job))?;
+        self.job_sender.send(Box::new(job))?;
         Ok(())
     }
 }
@@ -164,19 +175,6 @@ impl Drop for ThreadManager {
                 drop(thread);
 
                 let _res = handle.join();
-            }
-        }
-    }
-}
-
-impl Drop for ThreadPool {
-    fn drop(&mut self) {
-        // Si falla en esta instancia mucho no se puede hacer
-        if let Some(job_sender) = self.job_sender.take() {
-            // Dropeo el job_sender, con lo que el manager sale del loop
-            let _res = drop(job_sender);
-            if let Some(handler) = self.thread_manager_handler.take() {
-                let _res = handler.join();
             }
         }
     }
@@ -246,6 +244,30 @@ mod tests {
             });
         }
         drop(threadpool);
+
+        assert_eq!(*x.lock().unwrap(), y);
+    }
+
+    #[test]
+    fn test_cloning_threadpool() {
+        let x = Arc::new(Mutex::new(0));
+        let mut y = 0;
+
+        let threadpool = ThreadPool::new(10);
+        let threadpool_2 = threadpool.clone();
+        for i in 0..1000 {
+            y += i;
+            let x_copy = x.clone();
+            let mut curr_threadpool = &threadpool;
+            if i % 2 == 0 {
+                curr_threadpool = &threadpool_2;
+            }
+            let _res = curr_threadpool.spawn(move || {
+                *x_copy.lock().unwrap() += i;
+            });
+        }
+        drop(threadpool);
+        drop(threadpool_2);
 
         assert_eq!(*x.lock().unwrap(), y);
     }
