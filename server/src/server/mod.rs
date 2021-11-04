@@ -1,15 +1,9 @@
 #![allow(dead_code, unused_variables)]
 
 use core::panic;
-use std::{
-    io::{self, Read},
-    net::{SocketAddr, TcpListener, TcpStream},
-    sync::{Arc, Mutex},
-    thread::{self, JoinHandle},
-    time::Duration,
-    vec,
-};
+use std::{io::{self, Read}, net::{SocketAddr, TcpListener, TcpStream}, sync::{Arc, Mutex}, thread::{self, JoinHandle}, time::Duration, vec};
 
+use threadpool::ThreadPool;
 use tracing::{debug, error, info, warn};
 
 use packets::packet_reader::{ErrorKind, PacketError};
@@ -25,7 +19,6 @@ use packets::publish::Publish;
 use crate::{
     client::Client,
     config::Config,
-    packet_scheduler::PacketScheduler,
     server::server_error::ServerErrorKind,
     server_packets::{Connack, Connect, Disconnect, Subscribe},
     session::Session,
@@ -71,6 +64,7 @@ pub struct Server {
     topic_handler: TopicHandler,
     /// Vector with the handlers of the clients running in parallel
     client_handlers: Mutex<Vec<JoinHandle<()>>>,
+    pool: Mutex<ThreadPool>
 }
 
 // Temporal
@@ -106,13 +100,14 @@ impl Publisher for Server {
 
 impl Server {
     /// Creates a new Server
-    pub fn new(config: Config) -> Arc<Self> {
+    pub fn new(config: Config, threadpool_size: usize) -> Arc<Self> {
         info!("Iniciando servidor");
         Arc::new(Self {
             session: Session::new(),
             config,
             topic_handler: TopicHandler::new(),
             client_handlers: Mutex::new(vec![]),
+            pool: Mutex::new(ThreadPool::new(threadpool_size))
         })
     }
 
@@ -176,7 +171,7 @@ impl Server {
             "El cliente con id <{}> envio un segundo CONNECT. Se procede a su desconexion",
             id
         );
-        self.session.disconnect(id)?;
+        self.session.disconnect(id, false)?;
         Ok(())
     }
 
@@ -194,7 +189,7 @@ impl Server {
 
     fn handle_disconnect(&self, disconnect: Disconnect, id: &ClientId) -> ServerResult<()> {
         debug!("Recibido DISCONNECT de <{}>", id);
-        self.session.disconnect(id).unwrap();
+        self.session.disconnect(id, true).unwrap();
         Ok(())
     }
 
@@ -233,6 +228,7 @@ impl Server {
     }
 
     fn connect_client(&self, stream: &mut TcpStream, addr: SocketAddr) -> ServerResult<String> {
+        info!("Conectando <{}>", addr);
         loop {
             match self.wait_for_connect(stream) {
                 Ok(client) => {
@@ -256,18 +252,25 @@ impl Server {
         }
     }
 
-    fn client_loop(self: Arc<Self>, id: String, mut stream: TcpStream) {
+    fn to_threadpool(self: &Arc<Self>, id: &ClientId, packet: Packet) {
+        let sv_copy = self.clone();
+        let id_copy = id.to_owned();
+        self.pool.lock().unwrap().spawn(move || {
+            sv_copy.handle_packet(packet, &id_copy).unwrap()
+        }).unwrap()
+    }
+
+    fn client_loop(self: Arc<Self>, id: ClientId, mut stream: TcpStream) {
         debug!("Entrando al loop de {}", id);
-        let mut packet_scheduler = PacketScheduler::new(self.clone(), &id);
         while self.session.connected(&id) {
             match self.receive_packet(&mut stream, &id) {
                 Ok(packet) => {
                     self.session.refresh(&id);
-                    packet_scheduler.new_packet(packet);
+                    self.to_threadpool(&id, packet);
                 }
                 Err(err) if err.kind() == ServerErrorKind::ClientDisconnected => {
                     warn!("Cliente <{}> se desconecto sin avisar", id);
-                    self.session.disconnect(&id).unwrap();
+                    self.session.disconnect(&id, false).unwrap();
                 }
                 Err(err) if err.kind() == ServerErrorKind::Idle => {
                     continue;

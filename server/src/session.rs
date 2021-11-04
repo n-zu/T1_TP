@@ -49,8 +49,8 @@ impl Session {
         Ok(())
     }
 
-    pub fn disconnect(&self, id: &ClientId) -> ServerResult<()> {
-        self.client_do(id, |client| client.disconnect())
+    pub fn disconnect(&self, id: &ClientId, gracefully: bool) -> ServerResult<()> {
+        self.client_do(id, |client| client.disconnect(gracefully))
     }
 
     fn client_add(&self, client: Client) {
