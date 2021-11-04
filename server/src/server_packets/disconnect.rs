@@ -56,7 +56,7 @@ impl Disconnect {
     /// Reads a Disconnect packet from a stream of bytes
     ///
     /// # Errors
-    /// 
+    ///
     /// Returns error if the packet fields do not meet the
     /// requirements of the MQTT V3.1.1 standard
     /// (packet type should be Disconnect, reserved bytes should be 0,
