@@ -1,6 +1,8 @@
 use std::{
-    rc::Rc,
-    sync::mpsc::{self, channel, Receiver, Sender},
+    sync::{
+        mpsc::{self, channel, Receiver, Sender},
+        Arc,
+    },
     thread::{self, JoinHandle},
     time::Duration,
 };
@@ -22,7 +24,7 @@ const THREAD_WAIT_TIMEOUT: Duration = Duration::from_micros(1000); // 0.001s
 #[derive(Clone)]
 pub struct ThreadPool {
     job_sender: Sender<Job>, // Sender por el que se le envían las tareas al ThreadManager
-    thread_manager_handler: Rc<ManagerHandle>, // Handler del thread que ejecuta al ThreadManager
+    thread_manager_handler: Arc<ManagerHandle>, // Handler del thread que ejecuta al ThreadManager
 } // Es importante que el sender este definido primero para que se dropee antes, sino el manager va a quedar bloqueado
 
 // Información que se guarda el ThreadManager de cada worker thread
@@ -151,7 +153,7 @@ impl ThreadPool {
 
         ThreadPool {
             job_sender: sender,
-            thread_manager_handler: Rc::new(ManagerHandle(Some(handler))),
+            thread_manager_handler: Arc::new(ManagerHandle(Some(handler))),
         }
     }
 
@@ -203,7 +205,10 @@ fn worker(
 #[cfg(test)]
 mod tests {
     use super::ThreadPool;
-    use std::sync::{Arc, Mutex};
+    use std::{
+        sync::{Arc, Mutex},
+        thread,
+    };
 
     #[test]
     fn test_sum_numbers() {
@@ -270,5 +275,33 @@ mod tests {
         drop(threadpool_2);
 
         assert_eq!(*x.lock().unwrap(), y);
+    }
+
+    #[test]
+    fn test_cloning_threadpool_multithread() {
+        let x = Arc::new(Mutex::new(0));
+
+        let threadpool = ThreadPool::new(10);
+        let threadpool_clone = ThreadPool::new(10);
+        let x_clone = x.clone();
+        let handle = thread::spawn(move || {
+            sum(x_clone, threadpool_clone);
+        });
+        let y = sum(x.clone(), threadpool);
+        let _res = handle.join();
+
+        assert_eq!(*x.lock().unwrap(), y * 2);
+    }
+
+    fn sum(x: Arc<Mutex<i32>>, threadpool: ThreadPool) -> i32 {
+        let mut y = 0;
+        for i in 0..1000 {
+            y += i;
+            let x_copy = x.clone();
+            let _res = threadpool.spawn(move || {
+                *x_copy.lock().unwrap() += i;
+            });
+        }
+        y
     }
 }
