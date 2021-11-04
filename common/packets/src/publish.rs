@@ -367,8 +367,7 @@ mod tests {
         let mut payload = "mensaje".as_bytes().to_vec();
         remaining_data.append(&mut topic);
         remaining_data.append(&mut payload);
-        let mut bytes = vec![];
-        bytes.push(remaining_data.len() as u8);
+        let mut bytes = vec![remaining_data.len() as u8];
         bytes.append(&mut remaining_data);
         let mut stream = Cursor::new(bytes);
         let expected = Publish {
@@ -394,12 +393,11 @@ mod tests {
         remaining_data.append(&mut packet_id_buf);
         remaining_data.append(&mut payload);
 
-        let mut bytes = vec![];
-        bytes.push(remaining_data.len() as u8);
+        let mut bytes = vec![remaining_data.len() as u8];
         bytes.append(&mut remaining_data);
         let mut stream = Cursor::new(bytes);
         let expected = Publish {
-            packet_id: Option::from(10 as u16),
+            packet_id: Option::from(10_u16),
             topic_name: "a/b".to_string(),
             qos: QoSLevel::QoSLevel1,
             retain_flag: RetainFlag::RetainFlag0,
@@ -419,8 +417,7 @@ mod tests {
         remaining_data.append(&mut topic);
         remaining_data.append(&mut payload);
 
-        let mut bytes = vec![];
-        bytes.push(remaining_data.len() as u8);
+        let mut bytes = vec![remaining_data.len() as u8];
         bytes.append(&mut remaining_data);
         let mut stream = Cursor::new(bytes);
         let expected = Publish {
@@ -445,8 +442,7 @@ mod tests {
         remaining_data.append(&mut topic);
         remaining_data.append(&mut payload);
 
-        let mut bytes = vec![];
-        bytes.push(remaining_data.len() as u8);
+        let mut bytes = vec![remaining_data.len() as u8];
         bytes.append(&mut remaining_data);
         let mut stream = Cursor::new(bytes);
         let expected = Publish {
@@ -470,8 +466,7 @@ mod tests {
         remaining_data.append(&mut topic);
         remaining_data.append(&mut payload);
 
-        let mut bytes = vec![];
-        bytes.push(remaining_data.len() as u8);
+        let mut bytes = vec![remaining_data.len() as u8];
         bytes.append(&mut remaining_data);
         let mut stream = Cursor::new(bytes);
         let expected_error = PacketError::new_kind(
@@ -490,8 +485,7 @@ mod tests {
         remaining_data.append(&mut topic);
         remaining_data.append(&mut payload);
 
-        let mut bytes = vec![];
-        bytes.push(remaining_data.len() as u8);
+        let mut bytes = vec![remaining_data.len() as u8];
         bytes.append(&mut remaining_data);
         let mut stream = Cursor::new(bytes);
         let expected_error = PacketError::new_kind(
