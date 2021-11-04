@@ -13,6 +13,9 @@ const SUCCESS_MAXIMUM_QOS_1: u8 = 1;
 const FAILURE: u8 = 0x80;
 
 impl Suback {
+    /// Returns a new Suback packet struct from a given subscribe packet id
+    ///
+    /// The subscribe_packet_id should be the same from the subscribe packet this Suback is acknowledging
     pub fn new(subscribe_packet_id: u16) -> Self {
         Self {
             return_codes: Vec::new(),
@@ -20,6 +23,13 @@ impl Suback {
         }
     }
 
+    /// Returns a new Suback packet struct from a given subscribe packet id and given return codes
+    ///
+    /// The subscribe_packet_id should be the same from the subscribe packet this Suback is acknowledging
+    ///
+    /// # Errors
+    ///
+    /// Allowed return codes are 0x00, 0x01, 0x80. If a return code doesn't match any of those, this function returns a [ErrorKind::InvalidReturnCode]
     pub fn new_from_vec(
         return_codes: Vec<u8>,
         subscribe_packet_id: u16,
@@ -31,6 +41,20 @@ impl Suback {
         })
     }
 
+    /// Returns this Suback packet representation following MQTT v3.1.1 protocol
+    /// # Errors
+    ///
+    /// If remaining length of this packet is greater than 256 MB, this function returns a PacketError
+    ///
+    /// # Examples
+    ///
+    /// ```
+    ///  let return_codes: Vec<u8> = vec![0, 1, 1, 1];
+    ///  let mut suback = Suback::new_from_vec(return_codes, 1).unwrap();
+    ///  let encoded_suback = suback.encode().unwrap();
+    ///  let expected: Vec<u8> = vec![CONTROL_BYTE, 6, 0, 1, 0, 1, 1, 1];
+    ///  assert_eq!(encoded_suback, expected)
+    /// ```
     pub fn encode(&mut self) -> Result<Vec<u8>, PacketError> {
         let mut bytes = vec![];
         bytes.append(&mut self.fixed_header()?);
@@ -39,12 +63,18 @@ impl Suback {
         Ok(bytes)
     }
 
+    /// Adds a return code into the Suback packet
+    ///
+    /// # Errors
+    ///
+    /// Allowed return codes are 0x00, 0x01, 0x80. If a return code doesn't match any of those, this function returns a [ErrorKind::InvalidReturnCode]
     pub fn add_return_code(&mut self, return_code: u8) -> Result<(), PacketError> {
         Self::verify_return_code(&return_code)?;
         self.return_codes.push(return_code);
         Ok(())
     }
 
+    #[doc(hidden)]
     fn verify_return_codes_from_vec(return_codes: &Vec<u8>) -> Result<(), PacketError> {
         for code in return_codes {
             Self::verify_return_code(code)?;
@@ -52,6 +82,7 @@ impl Suback {
         Ok(())
     }
 
+    #[doc(hidden)]
     fn verify_return_code(return_code: &u8) -> Result<(), PacketError> {
         if !Self::is_return_code_valid(&return_code) {
             return Err(PacketError::new_kind(
@@ -62,12 +93,14 @@ impl Suback {
         Ok(())
     }
 
+    #[doc(hidden)]
     fn is_return_code_valid(return_code: &u8) -> bool {
         *return_code == SUCCESS_MAXIMUM_QOS_0
             || *return_code == SUCCESS_MAXIMUM_QOS_1
             || *return_code == FAILURE
     }
 
+    #[doc(hidden)]
     fn fixed_header(&self) -> Result<Vec<u8>, PacketError> {
         let mut fixed_header: Vec<u8> = vec![CONTROL_BYTE];
         let remaining_length =
@@ -77,6 +110,7 @@ impl Suback {
         Ok(fixed_header)
     }
 
+    #[doc(hidden)]
     fn variable_header(&self) -> Vec<u8> {
         let mut variable_header: Vec<u8> = vec![];
         variable_header.append(&mut self.subscribe_packet_id.to_be_bytes().to_vec());
