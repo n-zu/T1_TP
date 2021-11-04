@@ -1,18 +1,30 @@
 #![allow(dead_code)]
 
-use std::{io::{self, Write}, net::TcpStream, sync::{Mutex, atomic::{AtomicI8, Ordering}}, time::SystemTime};
+use std::{
+    collections::{HashMap},
+    io::{self, Write},
+    net::TcpStream,
+    sync::{
+        atomic::{AtomicI8, Ordering},
+        Mutex,
+    },
+    time::SystemTime,
+};
 
 type ClientId = String;
+type PacketId = u16;
 
-use packets::publish::Publish;
+use packets::publish::{Publish, QoSLevel};
 use tracing::{debug, error, info};
 
-use crate::{server::{ServerError, ServerResult}, server_packets::{Connack, Connect}};
+use crate::{
+    server::{ServerError, ServerResult},
+    server_packets::{Connack, Connect},
+};
 
 const CONNECTED: i8 = 0;
 const DISCONNECTED_GRACEFULLY: i8 = 1;
 const DISCONNECTED_UNGRACEFULLY: i8 = 2;
-
 
 /// Represents the state of a client on the server
 pub struct Client {
@@ -26,7 +38,7 @@ pub struct Client {
     /// Time in which the last package was received
     last_activity: SystemTime,
     /// Unacknowledge packets
-    unacknowledged: Mutex<Vec<Publish>>,
+    unacknowledged: Mutex<HashMap<PacketId, Publish>>,
 }
 
 impl Client {
@@ -37,7 +49,7 @@ impl Client {
             status: AtomicI8::new(CONNECTED),
             connect,
             last_activity: SystemTime::now(),
-            unacknowledged: Mutex::new(vec![]),
+            unacknowledged: Mutex::new(HashMap::new()),
         }
     }
 
@@ -45,36 +57,39 @@ impl Client {
         &self.id
     }
 
-    pub fn connected(&self) -> bool {
-        if self.status.load(Ordering::Relaxed) != CONNECTED {
-            return false;
-        }
-        if SystemTime::now()
+    fn check_keep_alive(&self) -> bool {
+        SystemTime::now()
             .duration_since(self.last_activity)
-            .unwrap()
+            .expect("Error inesperado de keep_alive")
             .as_secs()
             > *self.connect.keep_alive() as u64
-        {
-            debug!("TIMEOUT: <{}>", self.id);
-            self.status.store(DISCONNECTED_UNGRACEFULLY, Ordering::Relaxed);
-            return false;
-        }
-        true
+    }
+
+    fn connected_internal(&self) -> bool {
+        self.status.load(Ordering::Relaxed) == CONNECTED
+    }
+
+    pub fn connected(&self) -> bool {
+        self.status.load(Ordering::Relaxed) == CONNECTED
+    }
+
+    fn send_last_will(&self) {
+        todo!()
     }
 
     pub fn disconnect(&self, gracefully: bool) {
         if gracefully {
-            self.status.store(DISCONNECTED_GRACEFULLY, Ordering::Relaxed)
+            self.status
+                .store(DISCONNECTED_GRACEFULLY, Ordering::Relaxed);
+            self.send_last_will();
         } else {
-            self.status.store(DISCONNECTED_UNGRACEFULLY, Ordering::Relaxed)
+            self.status
+                .store(DISCONNECTED_UNGRACEFULLY, Ordering::Relaxed)
         }
     }
 
-    pub fn connect(&self) {
-        self.status.store(CONNECTED, Ordering::Relaxed)
-    }
-
-    pub fn write_all(&mut self, buf: &[u8]) -> io::Result<()> {
+    // TODO: probablemente no sea buena idea que sea publico
+    pub fn write_all(&self, buf: &[u8]) -> io::Result<()> {
         self.stream.lock().unwrap().write_all(buf)
     }
 
@@ -93,7 +108,7 @@ impl Client {
             error!("Se intento reconectar un usuario que ya esta conectado");
             Err(ServerError::new_msg("Usuario ya conectado"))
         } else {
-            info!("Reconectado");
+            info!("Reconectado <{}>", self.id);
             self.stream = new_client.stream;
             self.status.store(CONNECTED, Ordering::Relaxed);
             Ok(())
@@ -104,14 +119,45 @@ impl Client {
         self.last_activity = SystemTime::now();
     }
 
-    pub fn send_unacknowledged(&mut self) {
-        // Recorro los unacklowledged y los envio al cliente
+    /*
+    pub fn acknowledge(&self, puback: Puback) {
+        // Elimina el paquete del hashmap
         todo!()
     }
+    */
 
-    pub fn send_publish(&mut self, _publish: &Publish) {
-        // Lo que se haga aca depende del QoS del paquete y
-        // el estado de conexion del cliente
-        todo!()
+    // Esta en publico porque el server quiza quiera reenviar paquetes
+    // antes de una reconexion
+    pub fn send_unacknowledged(&self) {
+        for (id, publish) in self.unacknowledged.lock().unwrap().iter() {
+            debug!("Reenviando paquete con id <{}> a cliente <{}>", id, self.id);
+            self.write_all(&publish.encode().unwrap()).unwrap();
+        }
+    }
+
+    fn add_unacknowledged(&self, publish: &Publish) {
+        self.unacknowledged
+        .lock()
+        .unwrap()
+        .insert(*publish.packet_id().unwrap(), publish.clone());
+    }
+
+    pub fn send_publish(&self, publish: &Publish) {
+        if self.connected_internal() {
+            self.write_all(&mut publish.encode().unwrap()).unwrap();
+            if publish.qos == QoSLevel::QoSLevel1 {
+                // TODO: que pasa si el paquete ya existe en el HashMap?
+                self.add_unacknowledged(publish);
+            }
+        } else {
+            if publish.qos == QoSLevel::QoSLevel1 {
+                self.add_unacknowledged(publish);
+            }
+        }
+
+        match publish.qos() {
+            QoSLevel::QoSLevel0 => self.write_all(&mut publish.encode().unwrap()).unwrap(),
+            QoSLevel::QoSLevel1 => {}
+        }
     }
 }

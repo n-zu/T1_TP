@@ -75,7 +75,7 @@ impl Session {
     }
 
     fn send_connack(&self, id: &ClientId, session_present: u8, return_code: u8) {
-        self.client_do(id, |mut client| {
+        self.client_do(id, |client| {
             client
                 .write_all(&Connack::new(session_present, return_code).encode())
                 .unwrap();
@@ -84,7 +84,7 @@ impl Session {
     }
 
     fn restore_session(&self, id: &ClientId) {
-        self.client_do(id, |mut client| {
+        self.client_do(id, |client| {
             client.send_unacknowledged();
         })
         .unwrap();

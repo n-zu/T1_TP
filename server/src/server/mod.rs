@@ -1,7 +1,14 @@
 #![allow(dead_code, unused_variables)]
 
 use core::panic;
-use std::{io::{self, Read}, net::{SocketAddr, TcpListener, TcpStream}, sync::{Arc, Mutex}, thread::{self, JoinHandle}, time::Duration, vec};
+use std::{
+    io::{self, Read},
+    net::{SocketAddr, TcpListener, TcpStream},
+    sync::{Arc, Mutex},
+    thread::{self, JoinHandle},
+    time::Duration,
+    vec,
+};
 
 use threadpool::ThreadPool;
 use tracing::{debug, error, info, warn};
@@ -13,6 +20,8 @@ pub use server_error::ServerError;
 
 const MPSC_BUF_SIZE: usize = 256;
 const SLEEP_DUR: Duration = Duration::from_secs(2);
+
+const CONNECTION_WAIT_TIMEOUT: Duration = Duration::from_secs(180);
 
 use packets::publish::Publish;
 
@@ -64,7 +73,7 @@ pub struct Server {
     topic_handler: TopicHandler,
     /// Vector with the handlers of the clients running in parallel
     client_handlers: Mutex<Vec<JoinHandle<()>>>,
-    pool: Mutex<ThreadPool>
+    pool: Mutex<ThreadPool>,
 }
 
 // Temporal
@@ -91,8 +100,8 @@ fn get_code_type(code: u8) -> Result<PacketType, PacketError> {
 impl Publisher for Server {
     fn send_publish(&self, id: &str, publish: &Publish) {
         self.session
-            .client_do(&id.to_owned(), |mut client| {
-                client.send_publish(publish.clone());
+            .client_do(&id.to_owned(), |client| {
+                client.send_publish(publish);
             })
             .unwrap();
     }
@@ -107,7 +116,7 @@ impl Server {
             config,
             topic_handler: TopicHandler::new(),
             client_handlers: Mutex::new(vec![]),
-            pool: Mutex::new(ThreadPool::new(threadpool_size))
+            pool: Mutex::new(ThreadPool::new(threadpool_size)),
         })
     }
 
@@ -255,12 +264,15 @@ impl Server {
     fn to_threadpool(self: &Arc<Self>, id: &ClientId, packet: Packet) {
         let sv_copy = self.clone();
         let id_copy = id.to_owned();
-        self.pool.lock().unwrap().spawn(move || {
-            sv_copy.handle_packet(packet, &id_copy).unwrap()
-        }).unwrap()
+        self.pool
+            .lock()
+            .expect("Lock envenenado")
+            .spawn(move || sv_copy.handle_packet(packet, &id_copy).unwrap())
+            .unwrap()
     }
 
     fn client_loop(self: Arc<Self>, id: ClientId, mut stream: TcpStream) {
+        // TODO: TcpStream timeout
         debug!("Entrando al loop de {}", id);
         while self.session.connected(&id) {
             match self.receive_packet(&mut stream, &id) {
@@ -272,11 +284,9 @@ impl Server {
                     warn!("Cliente <{}> se desconecto sin avisar", id);
                     self.session.disconnect(&id, false).unwrap();
                 }
-                Err(err) if err.kind() == ServerErrorKind::Idle => {
-                    continue;
-                }
                 Err(err) => {
                     error!("Error inesperado: {}", err.to_string());
+                    self
                 }
             }
         }
@@ -306,9 +316,7 @@ impl Server {
             }
             Ok((stream, addr)) => {
                 info!("Aceptada conexion TCP con {}", addr);
-                stream
-                    .set_nonblocking(true)
-                    .expect("No se pudo establecer conexion no bloqueante");
+                stream.set_read_timeout(Some(CONNECTION_WAIT_TIMEOUT))?;
                 let sv_copy = self.clone();
                 // No funcionan los nombres en el trace
                 let handle = thread::Builder::new()

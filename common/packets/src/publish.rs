@@ -19,19 +19,19 @@ const SINGLE_LEVEL_WILDCARD: char = '+';
 #[doc(hidden)]
 const MULTI_LEVEL_WILDCARD: char = '#';
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub enum QoSLevel {
     QoSLevel0,
     QoSLevel1,
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub enum RetainFlag {
     RetainFlag0,
     RetainFlag1,
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub enum DupFlag {
     DupFlag0,
     DupFlag1,
@@ -65,6 +65,19 @@ pub struct Publish {
     pub retain_flag: RetainFlag,
     pub dup_flag: DupFlag,
     pub payload: Option<String>,
+}
+
+impl Clone for Publish {
+    fn clone(&self) -> Self {
+        Self {
+            packet_id: self.packet_id.clone(),
+            topic_name: self.topic_name.clone(),
+            qos: self.qos.clone(),
+            retain_flag: self.retain_flag.clone(),
+            dup_flag: self.dup_flag.clone(),
+            payload: self.payload.clone(),
+        }
+    }
 }
 
 impl Publish {
