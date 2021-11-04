@@ -6,7 +6,7 @@ use packets::packet_reader::PacketError;
 
 use crate::connack::Connack;
 use crate::connect::Connect;
-use crate::publish::{Publish};
+use crate::publish::Publish;
 use crate::subscribe::Subscribe;
 
 pub struct Client {
@@ -14,6 +14,7 @@ pub struct Client {
 }
 
 impl Client {
+    #![allow(dead_code)]
     pub fn new(address: &str) -> Result<Client, PacketError> {
         Ok(Client {
             stream: TcpStream::connect(address)?,
