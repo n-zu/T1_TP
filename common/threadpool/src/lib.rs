@@ -9,7 +9,10 @@ mod threadpool_error;
 type Job = Box<dyn FnOnce() + Send + 'static>;
 
 // Cuanto debe esperar a que se libere un thread (máximo)
-const THREAD_WAIT_TIMEOUT: Duration = Duration::from_millis(200);
+// antes de verificar si hubo alguno que haya hecho panic
+// Si es muy grande, hay más chances de que no se entere que perdió un thread
+// Si es muy chico, pierde más tiempo verificando si perdió alguno
+const THREAD_WAIT_TIMEOUT: Duration = Duration::from_micros(1000); // 0.001s
 
 pub struct ThreadPool {
     thread_manager_handler: Option<JoinHandle<()>>,
@@ -30,11 +33,13 @@ struct ThreadManager {
 }
 
 impl ThreadManager {
+    // Crea el ThreadManager, que se encarga de hacer de intermediario entre
+    // la interfaz de la ThreadPool y los threads workers
     fn new(amount: usize, job_receiver: Receiver<Job>) -> Self {
         let (ready_sender, ready_receiver) = channel();
 
         let ready_sender_clone = ready_sender.clone();
-        let threads = intialize_threads(amount, ready_sender_clone);
+        let threads = Self::intialize_threads(amount, ready_sender_clone);
         ThreadManager {
             threads,
             ready_receiver,
@@ -43,26 +48,30 @@ impl ThreadManager {
         }
     }
 
+    // Comienza a esperar por una tarea. Cuando se cierra el job_sender que tiene
+    // la threadpool sale del ciclo infinito
     fn run(&mut self) {
         while let Ok(job) = self.job_receiver.recv() {
             let i = self.get_free_thread();
             // Nunca debería fallar ya que me mandó la señal de que está listo
             let _res = self.threads[i].job_sender.send(job);
-
-            self.recover_threads();
         }
     }
 
+    // Obtiene el índice del un thread worker libre
+    // Espera hasta que haya uno disponible, y en caso de que no haya ninguno,
+    // intenta resucitar threads que puedan haber paniqueado
     fn get_free_thread(&mut self) -> usize {
         let mut resultado = self.ready_receiver.recv_timeout(THREAD_WAIT_TIMEOUT);
         while resultado.is_err() {
-            // Cabe la posibilidad que hayan paniqueado todos los threads, asi que intento arreglarlos
+            // Cabe la posibilidad que alguno haya paniqueado, asi que intento arreglarlo
             self.recover_threads();
             resultado = self.ready_receiver.recv_timeout(THREAD_WAIT_TIMEOUT);
         }
         resultado.unwrap()
     }
 
+    // Recorre la lista de threads y revive a aquellos que estén muertos (lo hace con el ready_receiver)
     fn recover_threads(&mut self) {
         let ready_sender = self
             .ready_sender
@@ -77,6 +86,7 @@ impl ThreadManager {
         }
     }
 
+    // Resucita un thread muerto. Le hace join y lo inicia de nuevo, actualizando los channels
     fn reset_thread(thread: &mut ThreadInfo, id: usize, ready_sender: Sender<usize>) {
         if let Some(handle) = thread.handler.take() {
             let _res = handle.join();
@@ -92,10 +102,30 @@ impl ThreadManager {
         thread.job_sender = job_sender;
         thread.alive_receiver = alive_receiver;
     }
+
+    // Crea el vector de amount threads workers, inicializándolos con sus canales de comunicación
+    fn intialize_threads(amount: usize, ready_sender: Sender<usize>) -> Vec<ThreadInfo> {
+        let mut threads = Vec::new();
+        for i in 0..amount {
+            let (alive_sender, alive_receiver) = channel();
+            let (job_sender, job_receiver) = channel();
+            let rs = ready_sender.clone();
+
+            let handler = thread::spawn(move || worker(job_receiver, alive_sender, rs, i));
+
+            threads.push(ThreadInfo {
+                handler: Some(handler),
+                alive_receiver,
+                job_sender,
+            });
+        }
+        threads
+    }
 }
 
 impl ThreadPool {
-    #![allow(dead_code)]
+    /// Creates a new threadpool with the given amount of threads.
+    /// The threadpool uses an extra thread for internal processing.
     pub fn new(amount: usize) -> ThreadPool {
         let (sender, receiver): (Sender<Job>, Receiver<Job>) = mpsc::channel();
         let handler = thread::spawn(move || {
@@ -108,6 +138,7 @@ impl ThreadPool {
         }
     }
 
+    /// Submits a job to the threadpool.
     pub fn spawn<F>(&self, job: F) -> Result<(), ThreadPoolError>
     where
         F: FnOnce() + Send + 'static,
@@ -120,34 +151,16 @@ impl ThreadPool {
     }
 }
 
-fn intialize_threads(amount: usize, ready_sender: Sender<usize>) -> Vec<ThreadInfo> {
-    let mut threads = Vec::new();
-    for i in 0..amount {
-        let (alive_sender, alive_receiver) = channel();
-        let (job_sender, job_receiver) = channel();
-        let rs = ready_sender.clone();
-
-        let handler = thread::spawn(move || worker(job_receiver, alive_sender, rs, i));
-
-        threads.push(ThreadInfo {
-            handler: Some(handler),
-            alive_receiver,
-            job_sender,
-        });
-    }
-    threads
-}
-
 impl Drop for ThreadManager {
     fn drop(&mut self) {
-        if let Some(ready_sender) = self.ready_sender.take() {
+        while let Some(mut thread) = self.threads.pop() {
             // Si falla en esta instancia mucho no se puede hacer
-            drop(ready_sender);
-            while let Some(mut thread) = self.threads.pop() {
-                if let Some(handle) = thread.handler.take() {
-                    drop(thread);
-                    let _res = handle.join();
-                }
+            if let Some(handle) = thread.handler.take() {
+                // Dropeo el thread, que tiene el channel con el que se le envian las tareas,
+                // con lo que la función sale del loop
+                drop(thread);
+
+                let _res = handle.join();
             }
         }
     }
@@ -155,8 +168,9 @@ impl Drop for ThreadManager {
 
 impl Drop for ThreadPool {
     fn drop(&mut self) {
+        // Si falla en esta instancia mucho no se puede hacer
         if let Some(job_sender) = self.job_sender.take() {
-            // Si falla en esta instancia mucho no se puede hacer
+            // Dropeo el job_sender, con lo que el manager sale del loop
             let _res = drop(job_sender);
             if let Some(handler) = self.thread_manager_handler.take() {
                 let _res = handler.join();
@@ -165,6 +179,7 @@ impl Drop for ThreadPool {
     }
 }
 
+// Función que ejecuta cada thread worker
 fn worker(
     job_receiver: Receiver<Job>,
     _alive: Sender<bool>,
