@@ -1,7 +1,6 @@
+use crate::config::Config;
 use server::Server;
 use tracing_subscriber::{fmt, prelude::__tracing_subscriber_SubscriberExt, Registry};
-
-use crate::config::Config;
 
 mod client;
 mod config;
