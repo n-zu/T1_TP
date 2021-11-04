@@ -1,6 +1,7 @@
 mod client;
 mod connack;
 mod connect;
+mod disconnect;
 mod publish;
 mod subscribe;
 
