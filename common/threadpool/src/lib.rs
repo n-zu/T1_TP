@@ -282,7 +282,7 @@ mod tests {
         let x = Arc::new(Mutex::new(0));
 
         let threadpool = ThreadPool::new(10);
-        let threadpool_clone = ThreadPool::new(10);
+        let threadpool_clone = threadpool.clone();
         let x_clone = x.clone();
         let handle = thread::spawn(move || {
             sum(x_clone, threadpool_clone);
