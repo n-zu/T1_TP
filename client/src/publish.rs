@@ -130,8 +130,9 @@ impl Publish {
         let mut variable_header = vec![];
         variable_header.append(&mut self.topic_name.encode());
         if let Some(packet_identifier) = self.packet_identifier {
-            variable_header.push(packet_identifier.to_be_bytes()[0]);
-            variable_header.push(packet_identifier.to_be_bytes()[1]);
+            let packet_id_representation = packet_identifier.to_be_bytes();
+            variable_header.push(packet_id_representation[0]);
+            variable_header.push(packet_id_representation[1]);
         }
 
         variable_header

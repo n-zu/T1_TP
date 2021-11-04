@@ -2,6 +2,7 @@ mod client;
 mod connack;
 mod connect;
 mod controller;
+mod disconnect;
 mod publish;
 mod subscribe;
 use crate::controller::Controller;
