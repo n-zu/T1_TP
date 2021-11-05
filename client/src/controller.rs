@@ -33,8 +33,11 @@ impl Controller {
     fn handle_connect(&self, _: &Button) {
         println!("Connect button clicked");
         let addr: Entry = self.builder.object("server_address").unwrap();
+        let port: Entry = self.builder.object("server_port").unwrap();
         let id: Entry = self.builder.object("client_id").unwrap();
-        let mut cliente = Client::new(&addr.text().to_string()).unwrap();
+        let full_addr = format!("{}:{}", &addr.text().to_string(), &port.text().to_string());
+
+        let mut cliente = Client::new(&full_addr).unwrap();
         let connect = ConnectBuilder::new(&id.text().to_string(), 0, true)
             .unwrap()
             .build()
