@@ -50,6 +50,7 @@ pub enum ErrorKind {
     ErrorAtReadingPacket,
     TopicNameMustBeAtLeastOneCharacterLong,
     TopicNameMustNotHaveWildcards,
+    InvalidReturnCode,
     Other,
 }
 
@@ -212,7 +213,7 @@ mod tests {
         let mut bytes = vec![10, 10];
         bytes.append(&mut (0u8..10u8).collect());
 
-        let mut stream = Cursor::new(bytes.clone());
+        let mut stream = Cursor::new(bytes);
         let remaining = RemainingLength::from_encoded(&mut stream).unwrap();
 
         assert_eq!(10, remaining.decode());
