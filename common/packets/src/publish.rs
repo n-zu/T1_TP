@@ -267,7 +267,7 @@ impl Publish {
             control_byte |= DUP_FLAG;
         }
 
-        control_byte |= (self.qos.clone() as u8) << QOS_SHIFT;
+        control_byte |= (self.qos as u8) << QOS_SHIFT;
 
         if self.retain_flag == RetainFlag::RetainFlag1 {
             control_byte |= RETAIN_FLAG;
@@ -289,7 +289,7 @@ impl Publish {
 
     #[doc(hidden)]
     fn set_max_qos(&mut self, max_qos: QoSLevel) {
-        if (max_qos.clone() as u8) < (self.qos.clone() as u8) {
+        if (max_qos as u8) < (self.qos as u8) {
             self.qos = max_qos;
         }
     }

@@ -5,7 +5,7 @@ use std::{
     io::{self, Cursor, Read},
 };
 
-#[derive(Debug, PartialEq, Eq, Clone)]
+#[derive(Debug, PartialEq, Eq, Clone, Copy)]
 pub enum QoSLevel {
     QoSLevel0,
     QoSLevel1,
