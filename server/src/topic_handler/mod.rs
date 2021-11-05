@@ -1,14 +1,14 @@
 #![allow(dead_code)]
 
 use std::{
-    collections::{HashMap, HashSet},
+    collections::HashMap,
     sync::{mpsc::Sender, RwLock},
 };
 
 pub mod topic_handler_error;
-use packets::publish::Publish;
+use packets::{packet_reader::QoSLevel, publish::Publish};
 
-use crate::server_packets::Subscribe;
+use crate::server_packets::{subscribe::TopicFilter, Subscribe};
 
 use self::topic_handler_error::TopicHandlerError;
 
@@ -16,12 +16,16 @@ use self::topic_handler_error::TopicHandlerError;
 pub struct Unsubscribe;
 /************************************************************/
 
-type Subtopics = HashMap<String, Topic>;
-type Subscribers = HashSet<String>;
 type ClientId = String;
+type Subtopics = HashMap<ClientId, Topic>;
+type Subscribers = HashMap<ClientId, SubscriptionData>;
 pub struct Message {
     pub client_id: ClientId,
     pub packet: Publish,
+}
+
+struct SubscriptionData {
+    qos: QoSLevel,
 }
 
 const SEP: &str = "/";
@@ -39,7 +43,7 @@ impl Topic {
     fn new() -> Self {
         Topic {
             subtopics: RwLock::new(HashMap::new()),
-            subscribers: RwLock::new(HashSet::new()),
+            subscribers: RwLock::new(HashMap::new()),
         }
     }
 }
@@ -47,14 +51,13 @@ impl Topic {
 impl TopicHandler {
     /// Subscribe a client_id into a set of topics given a Subscribe packet
     pub fn subscribe(&self, packet: &Subscribe, client_id: &str) -> Result<(), TopicHandlerError> {
-        let topics: Vec<&str> = packet
-            .topic_filters()
-            .iter()
-            .map(|t| t.topic_name.as_ref())
-            .collect();
+        let topics: Vec<&TopicFilter> = packet.topic_filters().iter().collect();
 
-        for topic in topics {
-            subscribe_rec(&self.root, topic, client_id)?;
+        for topic_filter in topics {
+            let data = SubscriptionData {
+                qos: topic_filter.qos,
+            };
+            subscribe_rec(&self.root, &topic_filter.topic_name, client_id, data)?;
         }
 
         Ok(())
@@ -67,9 +70,8 @@ impl TopicHandler {
         sender: Sender<Message>,
     ) -> Result<(), TopicHandlerError> {
         let full_topic = packet.topic_name.as_ref();
-        let mut subs: Subscribers = HashSet::new();
 
-        pub_rec(&self.root, full_topic, &mut subs, sender, packet)?;
+        pub_rec(&self.root, full_topic, sender, packet)?;
 
         Ok(())
     }
@@ -100,7 +102,6 @@ impl TopicHandler {
 fn pub_rec(
     node: &Topic,
     topic_name: &str,
-    subs: &mut Subscribers,
     sender: Sender<Message>,
     packet: &Publish,
 ) -> Result<(), TopicHandlerError> {
@@ -110,19 +111,18 @@ fn pub_rec(
         Some((topic_name, rest)) => {
             let subtopics = node.subtopics.read()?;
             if let Some(subtopic) = subtopics.get(topic_name) {
-                pub_rec(subtopic, rest, subs, sender, packet)?;
+                pub_rec(subtopic, rest, sender, packet)?;
             }
         }
         None => {
             let subscribers = node.subscribers.read()?;
-            for sub in subscribers.iter() {
-                if !subs.contains(sub) {
-                    sender.send(Message {
-                        client_id: sub.to_string(),
-                        packet: packet.clone(),
-                    })?;
-                    subs.insert(sub.clone());
-                }
+            for (id, data) in subscribers.iter() {
+                let mut to_be_sent = packet.clone();
+                to_be_sent.set_max_qos(data.qos);
+                sender.send(Message {
+                    client_id: id.to_string(),
+                    packet: to_be_sent,
+                })?;
             }
         }
     }
@@ -130,7 +130,12 @@ fn pub_rec(
     Ok(())
 }
 
-fn subscribe_rec(node: &Topic, topic_name: &str, user_id: &str) -> Result<(), TopicHandlerError> {
+fn subscribe_rec(
+    node: &Topic,
+    topic_name: &str,
+    user_id: &str,
+    sub_data: SubscriptionData,
+) -> Result<(), TopicHandlerError> {
     match topic_name.split_once(SEP) {
         // Aca se le puede agregar tratamiento especial para *, #, etc.
         Some((topic_name, rest)) => {
@@ -148,11 +153,13 @@ fn subscribe_rec(node: &Topic, topic_name: &str, user_id: &str) -> Result<(), To
 
             // En principio siempre tiene que entrar a este if, pero lo pongo para no unwrappear
             if let Some(subtopic) = subtopics.get(topic_name) {
-                subscribe_rec(subtopic, rest, user_id)?;
+                subscribe_rec(subtopic, rest, user_id, sub_data)?;
             }
         }
         None => {
-            node.subscribers.write()?.insert(user_id.to_string());
+            node.subscribers
+                .write()?
+                .insert(user_id.to_string(), sub_data);
         }
     }
 
@@ -206,7 +213,7 @@ fn remove_client_rec(node: &Topic, user_id: &str) -> Result<(), TopicHandlerErro
     }
 
     let subs_read = node.subscribers.read()?;
-    if subs_read.contains(user_id) {
+    if subs_read.contains_key(user_id) {
         drop(subs_read);
         node.subscribers.write()?.remove(user_id);
     }
@@ -222,7 +229,7 @@ mod tests {
 
     use crate::server_packets::Subscribe;
 
-    use packets::{publish::Publish, utf8::Field};
+    use packets::{packet_reader::QoSLevel, publish::Publish, utf8::Field};
 
     fn build_publish(topic: &str, message: &str) -> Publish {
         let mut bytes = Vec::new();
@@ -230,7 +237,7 @@ mod tests {
         bytes.extend([0, 1]); // identifier
         bytes.extend(Field::new_from_string(message).unwrap().encode());
         bytes.insert(0, bytes.len() as u8);
-        let header = 0b00110010u8;
+        let header = 0b00110010u8; // QoS level 1, dup false, retain false
         Publish::read_from(&mut Cursor::new(bytes), header).unwrap()
     }
 
@@ -238,7 +245,7 @@ mod tests {
         let mut bytes: Vec<u8> = Vec::new();
         bytes.extend([0, 5]); // identifier
         bytes.extend(Field::new_from_string(topic).unwrap().encode());
-        bytes.push(1); // QoS level 1
+        bytes.push(0); // QoS level 0
 
         bytes.insert(0, bytes.len() as u8);
         let header = [0b10000010];
@@ -320,5 +327,19 @@ mod tests {
             pending_users.remove(&msg.client_id);
             assert!(msg.packet.topic_name() == "topic/auto/casa");
         }
+    }
+
+    #[test]
+    fn test_should_reduce_qos() {
+        let subscribe = build_subscribe("topic"); // Suscripción QoS 0
+        let publish = build_publish("topic", "unMensaje"); // Publicación QoS 1
+        let handler = super::TopicHandler::new();
+        let (sender, receiver) = channel();
+
+        handler.subscribe(&subscribe, "user").unwrap();
+        handler.publish(&publish, sender).unwrap();
+
+        let message = receiver.recv().unwrap();
+        assert_eq!(message.packet.qos, QoSLevel::QoSLevel0);
     }
 }

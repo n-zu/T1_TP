@@ -287,8 +287,8 @@ impl Publish {
         Ok(fixed_header)
     }
 
-    #[doc(hidden)]
-    fn set_max_qos(&mut self, max_qos: QoSLevel) {
+    /// Sets the QoS of this packet to max_qos if the current level is greater than it
+    pub fn set_max_qos(&mut self, max_qos: QoSLevel) {
         if (max_qos as u8) < (self.qos as u8) {
             self.qos = max_qos;
         }
