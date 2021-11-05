@@ -30,16 +30,6 @@ const SUBACK_CONTROL_PACKET_TYPE: u8 = 9;
 const MSG_PACKET_TYPE_SUBACK: &str = "Packet type must be 9 for a Suback packet";
 
 impl Suback {
-    /// Returns a new Suback packet struct from a given subscribe packet id
-    ///
-    /// The subscribe_packet_id should be the same from the subscribe packet this Suback is acknowledging
-    pub fn new(subscribe_packet_id: u16) -> Self {
-        Self {
-            return_codes: Vec::new(),
-            subscribe_packet_id,
-        }
-    }
-
     /// Returns a new Suback packet struct from a given subscribe packet id and given return codes
     /// The subscribe_packet_id should be the same from the subscribe packet this Suback is acknowledging
     /// The order of return codes in the Suback packet must match the order of Topic Filters in the Subscribe Packet
@@ -114,17 +104,6 @@ impl Suback {
             return_codes,
             subscribe_packet_id,
         })
-    }
-
-    /// Adds a return code into the Suback packet
-    ///
-    /// # Errors
-    ///
-    /// Allowed return codes are 0x00, 0x01, 0x80. If a return code doesn't match any of those, this function returns a [ErrorKind::InvalidReturnCode]
-    pub fn add_return_code(&mut self, return_code: u8) -> Result<(), PacketError> {
-        Self::verify_return_code(&return_code)?;
-        self.return_codes.push(return_code);
-        Ok(())
     }
 
     #[doc(hidden)]
