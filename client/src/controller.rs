@@ -8,6 +8,7 @@ use gtk::{
 use crate::{
     client::Client,
     connect::{ConnectBuilder, QoSLevel},
+    publish::Publish,
     subscribe::{Subscribe, Topic},
 };
 
@@ -29,6 +30,7 @@ impl Controller {
     fn setup_handlers(self: &Rc<Self>) {
         self.setup_connect();
         self.setup_subscribe();
+        self.setup_publish();
     }
 
     fn setup_connect(self: &Rc<Self>) {
@@ -75,6 +77,36 @@ impl Controller {
 
         if let Some(client) = self.client.lock().unwrap().as_mut() {
             client.subscribe(packet).unwrap();
+        }
+    }
+
+    fn setup_publish(self: &Rc<Self>) {
+        let cont_clone = self.clone();
+        let publish: Button = self.builder.object("publish_button").unwrap();
+        publish.connect_clicked(move |button: &Button| {
+            cont_clone.handle_publish(button);
+        });
+    }
+
+    fn handle_publish(self: &Rc<Self>, _: &Button) {
+        println!("Publish button clicked");
+        let topic: Entry = self.builder.object("pub_topic").unwrap();
+        let qos = QoSLevel::QoSLevel0; // TODO
+        let retain = false; // TODO
+        let msg: Entry = self.builder.object("pub_msg").unwrap();
+
+        let packet = Publish::new(
+            false, // TODO
+            qos,
+            retain,
+            &topic.text().to_string(),
+            &msg.text().to_string(),
+            None, // TODO
+        )
+        .unwrap();
+
+        if let Some(client) = self.client.lock().unwrap().as_mut() {
+            client.publish(packet).unwrap();
         }
     }
 }

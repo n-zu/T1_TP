@@ -39,13 +39,13 @@
                         <property name="expand">False</property>
                         <property name="fill">True</property>
                         <property name="position">0</property>
-                        <property name="placeholder" translatable="yes">localhost</property>
                       </packing>
                     </child>
                     <child>
                       <object class="GtkEntry" id="server_address">
                         <property name="visible">True</property>
                         <property name="can_focus">True</property>
+                        <property name="text" translatable="yes">localhost</property>
                       </object>
                       <packing>
                         <property name="expand">False</property>
@@ -79,13 +79,13 @@
                         <property name="expand">False</property>
                         <property name="fill">True</property>
                         <property name="position">0</property>
-                        <property name="text" translatable="yes">1883</property>
                       </packing>
                     </child>
                     <child>
                       <object class="GtkEntry" id="server_port">
                         <property name="visible">True</property>
                         <property name="can_focus">True</property>
+                        <property name="text" translatable="yes">1883</property>
                       </object>
                       <packing>
                         <property name="expand">False</property>
@@ -119,13 +119,13 @@
                         <property name="expand">False</property>
                         <property name="fill">True</property>
                         <property name="position">0</property>
-                        <property name="text" translatable="yes">client</property>
                       </packing>
                     </child>
                     <child>
                       <object class="GtkEntry" id="client_id">
                         <property name="visible">True</property>
                         <property name="can_focus">True</property>
+                        <property name="text" translatable="yes">client</property>
                       </object>
                       <packing>
                         <property name="expand">False</property>
@@ -579,9 +579,10 @@
                       </packing>
                     </child>
                     <child>
-                      <object class="GtkEntry" id="sub_topic">
+                      <object class="GtkEntry" id="pub_topic">
                         <property name="visible">True</property>
                         <property name="can_focus">True</property>
+                        <property name="text" translatable="yes">top/sub</property>
                       </object>
                       <packing>
                         <property name="expand">False</property>
@@ -756,12 +757,13 @@
                   </packing>
                 </child>
                 <child>
-                  <object class="GtkEntry">
+                  <object class="GtkEntry" id="pub_msg">
                     <property name="height_request">100</property>
                     <property name="visible">True</property>
                     <property name="can_focus">True</property>
                     <property name="hexpand">False</property>
                     <property name="vexpand">True</property>
+                    <property name="text" translatable="yes">Topic test message: Lorem, ipsum dolor sit amet consectetur adipisicing elit. Autem, dolore!</property>
                   </object>
                   <packing>
                     <property name="expand">False</property>
@@ -823,9 +825,10 @@
                       </packing>
                     </child>
                     <child>
-                      <object class="GtkEntry">
+                      <object class="GtkEntry" id="sub_topic">
                         <property name="visible">True</property>
                         <property name="can_focus">True</property>
+                        <property name="text" translatable="yes">top/sub</property>
                       </object>
                       <packing>
                         <property name="expand">False</property>
