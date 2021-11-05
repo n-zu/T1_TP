@@ -1,14 +1,13 @@
-use crate::packet_reader::{self, RemainingLength};
+use crate::packet_reader::{self, QoSLevel, RemainingLength};
 use crate::packet_reader::{ErrorKind, PacketError};
 use crate::utf8::Field;
+use std::convert::TryInto;
 use std::io::Read;
 
 #[doc(hidden)]
 const RETAIN_FLAG: u8 = 0b00000001;
 #[doc(hidden)]
-const QOS_LEVEL_0_FLAG: u8 = 0b00000000;
-#[doc(hidden)]
-const QOS_LEVEL_1_FLAG: u8 = 0b00000010;
+const QOS_SHIFT: u8 = 1;
 #[doc(hidden)]
 const DUP_FLAG: u8 = 0b00001000;
 #[doc(hidden)]
@@ -17,12 +16,8 @@ const PUBLISH_PACKET_TYPE: u8 = 0b00110000;
 const SINGLE_LEVEL_WILDCARD: char = '+';
 #[doc(hidden)]
 const MULTI_LEVEL_WILDCARD: char = '#';
-
-#[derive(Debug, PartialEq)]
-pub enum QoSLevel {
-    QoSLevel0,
-    QoSLevel1,
-}
+#[doc(hidden)]
+const MSG_INVALID_PACKET_ID: &str = "Packet identifier must be greater than zero";
 
 #[derive(Debug, PartialEq)]
 pub enum RetainFlag {
@@ -57,15 +52,12 @@ const MSG_TOPIC_WILDCARDS: &str = "Topic name must not have wildcards";
 const MSG_DUP_FLAG_1_WITH_QOS_LEVEL_0: &str = "It can not be dup flag 1 with QoS level 0";
 
 impl Publish {
+    #![allow(dead_code)]
     ///
     /// Returns a Publish packet with a valid state
     ///
-    /// # Arguments
+    /// It assumes the first byte is read by the server/client
     ///
-    /// * `stream`: &mut impl Read
-    /// * `first_byte_buffer`: [u8; 1], it assumes the first byte is read by the server/client into the buffer
-    ///
-    /// returns: Result<Publish, PacketError>
     ///
     /// # Errors
     ///
@@ -76,10 +68,11 @@ impl Publish {
     ///
     /// ```
     /// use std::io::Cursor;
-    /// use packets::publish::{DupFlag, QoSLevel, RetainFlag, Publish};
+    /// use packets::packet_reader::QoSLevel;
+    /// use packets::publish::{DupFlag, RetainFlag, Publish};
     /// use packets::utf8::Field;
     ///
-    ///  let first_byte_buffer = [0b110010; 1]; // primer byte con los flags con QoS level 1;
+    ///  let control_byte = 0b110010; // primer byte con los flags con QoS level 1;
     ///  let mut remaining_data: Vec<u8> = vec![];
     ///  let mut topic = Field::new_from_string("a/b").unwrap().encode();    ///
     ///  let mut payload = "mensaje".as_bytes().to_vec();
@@ -99,20 +92,17 @@ impl Publish {
     ///             dup_flag: DupFlag::DupFlag0,
     ///             payload: Option::from("mensaje".to_string()),
     ///         };
-    ///  let result = Publish::read_from(&mut stream, &first_byte_buffer).unwrap();
+    ///  let result = Publish::read_from(&mut stream, control_byte).unwrap();
     ///  assert_eq!(expected, result);
     /// ```
-    pub fn read_from(
-        stream: &mut impl Read,
-        first_byte_buffer: &[u8; 1],
-    ) -> Result<Publish, PacketError> {
-        let retain_flag = Self::verify_retain_flag(first_byte_buffer);
-        let qos_level = Self::verify_qos_level_flag(first_byte_buffer)?;
-        let dup_flag = Self::verify_dup_flag(first_byte_buffer, &qos_level)?;
-        Self::verify_control_packet_type(first_byte_buffer)?;
+    pub fn read_from(stream: &mut impl Read, control_byte: u8) -> Result<Publish, PacketError> {
+        let retain_flag = Self::verify_retain_flag(&control_byte);
+        let qos_level = Self::verify_qos_level_flag(&control_byte)?;
+        let dup_flag = Self::verify_dup_flag(&control_byte, &qos_level)?;
+        Self::verify_control_packet_type(&control_byte)?;
         let mut remaining_bytes = packet_reader::read_packet_bytes(stream)?;
         let topic_name = Self::verify_topic_name(&mut remaining_bytes)?;
-        let packet_id = Self::verify_packet_id(&mut remaining_bytes, &qos_level);
+        let packet_id = Self::verify_packet_id(&mut remaining_bytes, &qos_level)?;
         let payload = Self::read_payload(&mut remaining_bytes);
 
         Ok(Self {
@@ -177,9 +167,8 @@ impl Publish {
     }
 
     #[doc(hidden)]
-    fn verify_retain_flag(first_byte_buffer: &[u8; 1]) -> RetainFlag {
-        let first_byte = first_byte_buffer[0];
-        let retain_flag = first_byte & 0b1;
+    fn verify_retain_flag(control_byte: &u8) -> RetainFlag {
+        let retain_flag = control_byte & 0b1;
         if retain_flag == 0 {
             RetainFlag::RetainFlag0
         } else {
@@ -188,26 +177,14 @@ impl Publish {
     }
 
     #[doc(hidden)]
-    fn verify_qos_level_flag(first_byte_buffer: &[u8; 1]) -> Result<QoSLevel, PacketError> {
-        let first_byte = first_byte_buffer[0];
-        let qos_level = (first_byte & 0b110) >> 1;
-        match qos_level {
-            0 => Ok(QoSLevel::QoSLevel0),
-            1 => Ok(QoSLevel::QoSLevel1),
-            _ => Err(PacketError::new_kind(
-                "Invalid QoS level",
-                ErrorKind::InvalidQoSLevel,
-            )),
-        }
+    fn verify_qos_level_flag(control_byte: &u8) -> Result<QoSLevel, PacketError> {
+        let qos_level = (control_byte & 0b110) >> 1;
+        qos_level.try_into()
     }
 
     #[doc(hidden)]
-    fn verify_dup_flag(
-        first_byte_buffer: &[u8; 1],
-        qos_level: &QoSLevel,
-    ) -> Result<DupFlag, PacketError> {
-        let first_byte = first_byte_buffer[0];
-        let dup_flag = (first_byte & 0b1000) >> 3;
+    fn verify_dup_flag(control_byte: &u8, qos_level: &QoSLevel) -> Result<DupFlag, PacketError> {
+        let dup_flag = (control_byte & 0b1000) >> 3;
         if *qos_level == QoSLevel::QoSLevel0 && dup_flag == 1 {
             return Err(PacketError::new_kind(
                 MSG_DUP_FLAG_1_WITH_QOS_LEVEL_0,
@@ -222,9 +199,8 @@ impl Publish {
     }
 
     #[doc(hidden)]
-    fn verify_control_packet_type(first_byte_buffer: &[u8; 1]) -> Result<(), PacketError> {
-        let first_byte = first_byte_buffer[0];
-        let control_packet_type = (first_byte & 0b110000) >> 4;
+    fn verify_control_packet_type(control_byte: &u8) -> Result<(), PacketError> {
+        let control_packet_type = (control_byte & 0b11110000) >> 4;
         if control_packet_type != PUBLISH_CONTROL_PACKET_TYPE {
             return Err(PacketError::new_kind(
                 MSG_PACKET_TYPE_PUBLISH,
@@ -235,14 +211,20 @@ impl Publish {
     }
 
     #[doc(hidden)]
-    fn verify_packet_id(bytes: &mut impl Read, qos_level: &QoSLevel) -> Option<u16> {
+    fn verify_packet_id(
+        bytes: &mut impl Read,
+        qos_level: &QoSLevel,
+    ) -> Result<Option<u16>, PacketError> {
         if *qos_level != QoSLevel::QoSLevel1 {
-            return None;
+            return Ok(None);
         }
         let mut packet_id_buffer = [0u8; 2];
         let _ = bytes.read_exact(&mut packet_id_buffer);
         let packet_id = u16::from_be_bytes(packet_id_buffer);
-        Some(packet_id)
+        if packet_id == 0 {
+            return Err(PacketError::new_msg(MSG_INVALID_PACKET_ID));
+        }
+        Ok(Some(packet_id))
     }
 
     #[doc(hidden)]
@@ -284,10 +266,9 @@ impl Publish {
         if self.dup_flag == DupFlag::DupFlag1 {
             control_byte |= DUP_FLAG;
         }
-        match self.qos {
-            QoSLevel::QoSLevel0 => control_byte |= QOS_LEVEL_0_FLAG,
-            QoSLevel::QoSLevel1 => control_byte |= QOS_LEVEL_1_FLAG,
-        }
+
+        control_byte |= (self.qos as u8) << QOS_SHIFT;
+
         if self.retain_flag == RetainFlag::RetainFlag1 {
             control_byte |= RETAIN_FLAG;
         }
@@ -305,13 +286,20 @@ impl Publish {
         fixed_header.append(&mut remaining_length.encode());
         Ok(fixed_header)
     }
+
+    #[doc(hidden)]
+    fn set_max_qos(&mut self, max_qos: QoSLevel) {
+        if (max_qos as u8) < (self.qos as u8) {
+            self.qos = max_qos;
+        }
+    }
 }
 
 #[cfg(test)]
 mod tests {
-    use crate::packet_reader::{ErrorKind, PacketError};
+    use crate::packet_reader::{ErrorKind, PacketError, QoSLevel};
     use crate::publish::{
-        DupFlag, Publish, QoSLevel, RetainFlag, MSG_DUP_FLAG_1_WITH_QOS_LEVEL_0,
+        DupFlag, Publish, RetainFlag, MSG_DUP_FLAG_1_WITH_QOS_LEVEL_0, MSG_INVALID_PACKET_ID,
         MSG_PACKET_TYPE_PUBLISH, MSG_TOPIC_NAME_ONE_CHAR, MSG_TOPIC_WILDCARDS,
     };
     use crate::utf8::Field;
@@ -319,49 +307,39 @@ mod tests {
 
     #[test]
     fn test_dup_flag_0_with_qos_level_different_from_0_should_raise_invalid_dup_flag() {
-        let first_byte_buffer = [0b111000u8; 1];
+        let control_byte = 0b111000u8;
         let dummy: Vec<u8> = vec![0b111000];
         let mut stream = Cursor::new(dummy);
         let expected_error =
             PacketError::new_kind(MSG_DUP_FLAG_1_WITH_QOS_LEVEL_0, ErrorKind::InvalidDupFlag);
-        let result = Publish::read_from(&mut stream, &first_byte_buffer).unwrap_err();
-        assert_eq!(result, expected_error);
-    }
-
-    #[test]
-    fn test_qos_level_2_should_raise_invalid_qos_level_error() {
-        let first_byte_buffer = [0b110100u8; 1];
-        let dummy: Vec<u8> = vec![0b110100];
-        let mut stream = Cursor::new(dummy);
-        let expected_error = PacketError::new_kind("Invalid QoS level", ErrorKind::InvalidQoSLevel);
-        let result = Publish::read_from(&mut stream, &first_byte_buffer).unwrap_err();
+        let result = Publish::read_from(&mut stream, control_byte).unwrap_err();
         assert_eq!(result, expected_error);
     }
 
     #[test]
     fn test_qos_level_3_should_raise_invalid_qos_level_error() {
-        let first_byte_buffer = [0b110110u8; 1];
+        let control_byte = 0b110110u8;
         let dummy: Vec<u8> = vec![0b110110];
         let mut stream = Cursor::new(dummy);
         let expected_error = PacketError::new_kind("Invalid QoS level", ErrorKind::InvalidQoSLevel);
-        let result = Publish::read_from(&mut stream, &first_byte_buffer).unwrap_err();
+        let result = Publish::read_from(&mut stream, control_byte).unwrap_err();
         assert_eq!(result, expected_error);
     }
 
     #[test]
     fn test_packet_control_type_5_should_raise_invalid_control_packet_type_error() {
-        let first_byte_buffer = [0b100000u8; 1];
+        let control_byte = 0b100000u8;
         let dummy: Vec<u8> = vec![0b100000];
         let mut stream = Cursor::new(dummy);
         let expected_error =
             PacketError::new_kind(MSG_PACKET_TYPE_PUBLISH, ErrorKind::InvalidControlPacketType);
-        let result = Publish::read_from(&mut stream, &first_byte_buffer).unwrap_err();
+        let result = Publish::read_from(&mut stream, control_byte).unwrap_err();
         assert_eq!(result, expected_error);
     }
 
     #[test]
     fn test_publish_packet_with_qos_level_0_must_not_have_a_packet_id() {
-        let first_byte_buffer = [0b110000u8; 1]; // primer byte con los flags con QoS level 0;
+        let control_byte = 0b110000u8; // primer byte con los flags con QoS level 0;
         let mut remaining_data: Vec<u8> = vec![];
         let mut topic = Field::new_from_string("a/b").unwrap().encode();
         let mut payload = "mensaje".as_bytes().to_vec();
@@ -378,13 +356,13 @@ mod tests {
             dup_flag: DupFlag::DupFlag0,
             payload: Option::from("mensaje".to_string()),
         };
-        let result = Publish::read_from(&mut stream, &first_byte_buffer).unwrap();
+        let result = Publish::read_from(&mut stream, control_byte).unwrap();
         assert_eq!(expected, result);
     }
 
     #[test]
     fn test_publish_packet_with_qos_level_1_must_have_a_packet_id() {
-        let first_byte_buffer = [0b110010u8; 1]; // primer byte con los flags con QoS level 1;
+        let control_byte = 0b110010u8; // primer byte con los flags con QoS level 1;
         let mut remaining_data: Vec<u8> = vec![];
         let mut topic = Field::new_from_string("a/b").unwrap().encode();
         let mut payload = "mensaje".as_bytes().to_vec();
@@ -404,13 +382,13 @@ mod tests {
             dup_flag: DupFlag::DupFlag0,
             payload: Option::from("mensaje".to_string()),
         };
-        let result = Publish::read_from(&mut stream, &first_byte_buffer).unwrap();
+        let result = Publish::read_from(&mut stream, control_byte).unwrap();
         assert_eq!(expected, result);
     }
 
     #[test]
     fn test_publish_packet_might_have_zero_length_payload() {
-        let first_byte_buffer = [0b110000u8; 1]; // primer byte con los flags con QoS level 0;
+        let control_byte = 0b110000u8; // primer byte con los flags con QoS level 0;
         let mut remaining_data: Vec<u8> = vec![];
         let mut topic = Field::new_from_string("a/b").unwrap().encode();
         let mut payload = "".as_bytes().to_vec();
@@ -428,14 +406,14 @@ mod tests {
             dup_flag: DupFlag::DupFlag0,
             payload: Option::from("".to_string()),
         };
-        let result = Publish::read_from(&mut stream, &first_byte_buffer).unwrap();
+        let result = Publish::read_from(&mut stream, control_byte).unwrap();
         assert_eq!(expected, result);
         assert_eq!(expected.payload().unwrap(), "");
     }
 
     #[test]
     fn test_publish_packet_topics_should_be_case_sensitive() {
-        let first_byte_buffer = [0b110000u8; 1]; // primer byte con los flags con QoS level 0;
+        let control_byte = 0b110000u8; // primer byte con los flags con QoS level 0;
         let mut remaining_data: Vec<u8> = vec![];
         let mut topic = Field::new_from_string("a/B").unwrap().encode();
         let mut payload = "aa".as_bytes().to_vec();
@@ -453,13 +431,13 @@ mod tests {
             dup_flag: DupFlag::DupFlag0,
             payload: Option::from("".to_string()),
         };
-        let result = Publish::read_from(&mut stream, &first_byte_buffer).unwrap();
+        let result = Publish::read_from(&mut stream, control_byte).unwrap();
         assert_ne!(expected, result);
     }
 
     #[test]
     fn test_publish_packet_topic_name_must_be_at_least_one_character_long() {
-        let first_byte_buffer = [0b110000u8; 1]; // primer byte con los flags con QoS level 0;
+        let control_byte = 0b110000u8; // primer byte con los flags con QoS level 0;
         let mut remaining_data: Vec<u8> = vec![];
         let mut topic = Field::new_from_string("").unwrap().encode();
         let mut payload = "aa".as_bytes().to_vec();
@@ -473,12 +451,12 @@ mod tests {
             MSG_TOPIC_NAME_ONE_CHAR,
             ErrorKind::TopicNameMustBeAtLeastOneCharacterLong,
         );
-        let result = Publish::read_from(&mut stream, &first_byte_buffer).unwrap_err();
+        let result = Publish::read_from(&mut stream, control_byte).unwrap_err();
         assert_eq!(expected_error, result);
     }
     #[test]
     fn test_topic_name_can_not_have_wildcards() {
-        let first_byte_buffer = [0b110000u8; 1]; // primer byte con los flags con QoS level 0;
+        let control_byte = 0b110000u8; // primer byte con los flags con QoS level 0;
         let mut remaining_data: Vec<u8> = vec![];
         let mut topic = Field::new_from_string("asd/#").unwrap().encode();
         let mut payload = "mensaje".as_bytes().to_vec();
@@ -492,7 +470,49 @@ mod tests {
             MSG_TOPIC_WILDCARDS,
             ErrorKind::TopicNameMustNotHaveWildcards,
         );
-        let result = Publish::read_from(&mut stream, &first_byte_buffer).unwrap_err();
+        let result = Publish::read_from(&mut stream, control_byte).unwrap_err();
         assert_eq!(expected_error, result);
+    }
+
+    #[test]
+    fn test_publish_packet_can_not_have_packet_id_0() {
+        let control_byte = 0b110010u8; // primer byte con los flags con QoS level 1;
+        let mut remaining_data: Vec<u8> = vec![];
+        let mut topic = Field::new_from_string("a/b").unwrap().encode();
+        let mut payload = "los pollos hermanos".as_bytes().to_vec();
+        let mut packet_id_buf: Vec<u8> = vec![0b0, 0b0]; // Packet identifier 0
+        remaining_data.append(&mut topic);
+        remaining_data.append(&mut packet_id_buf);
+        remaining_data.append(&mut payload);
+
+        let mut bytes = vec![];
+        bytes.push(remaining_data.len() as u8);
+        bytes.append(&mut remaining_data);
+        let mut stream = Cursor::new(bytes);
+        let expected_error = PacketError::new_msg(MSG_INVALID_PACKET_ID);
+        let result = Publish::read_from(&mut stream, control_byte).unwrap_err();
+        assert_eq!(expected_error, result);
+    }
+
+    #[test]
+    fn test_max_qos() {
+        let control_byte = 0b110100u8; // primer byte con los flags con QoS level 2;
+        let mut remaining_data: Vec<u8> = vec![];
+        let mut topic = Field::new_from_string("a/b").unwrap().encode();
+        let mut payload = "aa".as_bytes().to_vec();
+        remaining_data.append(&mut topic);
+        remaining_data.append(&mut payload);
+
+        let mut bytes = vec![];
+        bytes.push(remaining_data.len() as u8);
+        bytes.append(&mut remaining_data);
+        let mut stream = Cursor::new(bytes);
+        let mut result = Publish::read_from(&mut stream, control_byte).unwrap();
+
+        assert_eq!(*result.qos(), QoSLevel::QoSLevel2);
+        result.set_max_qos(QoSLevel::QoSLevel1);
+        assert_eq!(*result.qos(), QoSLevel::QoSLevel1);
+        result.set_max_qos(QoSLevel::QoSLevel0);
+        assert_eq!(*result.qos(), QoSLevel::QoSLevel0);
     }
 }
