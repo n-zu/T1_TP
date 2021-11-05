@@ -41,8 +41,8 @@ impl Suback {
     }
 
     /// Returns a new Suback packet struct from a given subscribe packet id and given return codes
-    ///
     /// The subscribe_packet_id should be the same from the subscribe packet this Suback is acknowledging
+    /// The order of return codes in the Suback packet must match the order of Topic Filters in the Subscribe Packet
     ///
     /// # Errors
     ///

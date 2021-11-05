@@ -65,7 +65,7 @@ impl TopicHandler {
         packet: &Publish,
         server: &impl Publisher,
     ) -> Result<(), TopicHandlerError> {
-        let full_topic = packet.topic_name.as_ref();
+        let full_topic = packet.topic_name();
         let mut subs: Subscribers = HashSet::new();
 
         get_subs_rec(&self.root, full_topic, &mut subs)?;
