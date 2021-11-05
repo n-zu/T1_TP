@@ -48,7 +48,7 @@ impl Client {
         Ok(())
     }
 
-    fn wait_for_packets(mut stream: TcpStream) {
+    pub fn wait_for_packets(mut stream: TcpStream) {
         let mut buf = [0u8; 1];
         while stream.read_exact(&mut buf).is_ok() {
             println!("Llego un paquete: {:?}", buf);
@@ -64,4 +64,13 @@ impl Client {
         self.stream.write_all(&publish.encode()?)?;
         Ok(())
     }
+
+    pub fn start_listening(&mut self) {
+        println!("Start Listening");
+        let stream_listener = self.stream.try_clone().unwrap();
+        self.thread_pool.spawn(move || {
+            Self::wait_for_packets(stream_listener);
+        }).expect("Error creating listener thread");
+    }
+
 }

@@ -39,6 +39,7 @@
                         <property name="expand">False</property>
                         <property name="fill">True</property>
                         <property name="position">0</property>
+                        <property name="placeholder" translatable="yes">localhost</property>
                       </packing>
                     </child>
                     <child>
@@ -78,6 +79,7 @@
                         <property name="expand">False</property>
                         <property name="fill">True</property>
                         <property name="position">0</property>
+                        <property name="text" translatable="yes">1883</property>
                       </packing>
                     </child>
                     <child>
@@ -117,6 +119,7 @@
                         <property name="expand">False</property>
                         <property name="fill">True</property>
                         <property name="position">0</property>
+                        <property name="text" translatable="yes">client</property>
                       </packing>
                     </child>
                     <child>
@@ -576,7 +579,7 @@
                       </packing>
                     </child>
                     <child>
-                      <object class="GtkEntry">
+                      <object class="GtkEntry" id="sub_topic">
                         <property name="visible">True</property>
                         <property name="can_focus">True</property>
                       </object>
@@ -697,7 +700,7 @@
                       </packing>
                     </child>
                     <child>
-                      <object class="GtkButton">
+                      <object class="GtkButton" id="publish_button">
                         <property name="label" translatable="yes">PUBLICAR</property>
                         <property name="visible">True</property>
                         <property name="can_focus">True</property>
@@ -897,7 +900,7 @@
                       </packing>
                     </child>
                     <child>
-                      <object class="GtkButton">
+                      <object class="GtkButton" id="subscribe_button">
                         <property name="label" translatable="yes">Suscribirse</property>
                         <property name="visible">True</property>
                         <property name="can_focus">True</property>
