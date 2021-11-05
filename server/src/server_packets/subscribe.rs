@@ -1,6 +1,6 @@
 #![allow(dead_code)]
 
-use std::io::Read;
+use std::{convert::TryFrom, io::Read};
 
 use packets::{
     packet_reader::{self, ErrorKind, PacketError, QoSLevel},
@@ -40,11 +40,7 @@ impl Subscribe {
 
     /// Gets the QoSLevel of a topic filter
     fn get_qos(byte: u8) -> Result<QoSLevel, PacketError> {
-        match byte {
-            0 => Ok(QoSLevel::QoSLevel0),
-            1 | 2 => Ok(QoSLevel::QoSLevel1),
-            _ => Err(PacketError::new()),
-        }
+        QoSLevel::try_from(byte)
     }
 
     /// Creates a new Subscribe packet from the given stream.
@@ -96,6 +92,15 @@ impl Subscribe {
     /// Get a reference to the subscribe's topic filters.
     pub fn topic_filters(&self) -> &[TopicFilter] {
         self.topic_filters.as_ref()
+    }
+
+    #[doc(hidden)]
+    fn set_max_qos(&mut self, max_qos: QoSLevel) {
+        for topic_filter in self.topic_filters.iter_mut() {
+            if (topic_filter.qos as u8) > (max_qos as u8) {
+                topic_filter.qos = max_qos;
+            }
+        }
     }
 }
 
@@ -161,7 +166,7 @@ mod tests {
         let mut v: Vec<u8> = Vec::new();
         v.extend_from_slice(&[123, 5]); // identifier
         v.extend(Field::new_from_string("first").unwrap().encode());
-        v.push(2); // QoS level 2 should set to 1
+        v.push(2); // QoS level 2
         v.extend(Field::new_from_string("second").unwrap().encode());
         v.push(0); // QoS level 0
 
@@ -171,7 +176,7 @@ mod tests {
         assert_eq!(packet.topic_filters().first().unwrap().topic_name, "first");
         assert_eq!(
             packet.topic_filters().first().unwrap().qos,
-            QoSLevel::QoSLevel1
+            QoSLevel::QoSLevel2
         );
         assert_eq!(packet.topic_filters()[1].topic_name, "second");
         assert_eq!(packet.topic_filters()[1].qos, QoSLevel::QoSLevel0);
@@ -195,7 +200,7 @@ mod tests {
         let mut v: Vec<u8> = Vec::new();
         v.extend_from_slice(&[0, 5]); // identifier
         v.extend(Field::new_from_string("unTopic").unwrap().encode());
-        v.push(4); // QoS level 4
+        v.push(3); // QoS level 3
 
         v.insert(0, v.len() as u8);
         let packet = Subscribe::new(&mut Cursor::new(v), &FIRST_BYTE);
