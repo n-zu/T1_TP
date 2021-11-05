@@ -68,9 +68,10 @@ impl Client {
     pub fn start_listening(&mut self) {
         println!("Start Listening");
         let stream_listener = self.stream.try_clone().unwrap();
-        self.thread_pool.spawn(move || {
-            Self::wait_for_packets(stream_listener);
-        }).expect("Error creating listener thread");
+        self.thread_pool
+            .spawn(move || {
+                Self::wait_for_packets(stream_listener);
+            })
+            .expect("Error creating listener thread");
     }
-
 }

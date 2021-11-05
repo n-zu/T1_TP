@@ -5,7 +5,11 @@ use gtk::{
     Builder, Button, Entry,
 };
 
-use crate::{client::Client, connect::{ConnectBuilder,QoSLevel}, subscribe::{Subscribe, Topic}};
+use crate::{
+    client::Client,
+    connect::{ConnectBuilder, QoSLevel},
+    subscribe::{Subscribe, Topic},
+};
 
 pub struct Controller {
     builder: Builder,
@@ -63,18 +67,14 @@ impl Controller {
     fn handle_subscribe(&self, _: &Button) {
         println!("Subscribe button clicked");
         let topic: Entry = self.builder.object("sub_topic").unwrap();
-        let qos = QoSLevel::QoSLevel0;// TODO
+        let qos = QoSLevel::QoSLevel0; // TODO
 
         let topic = Topic::new(&topic.text().to_string(), qos).unwrap();
 
-        let packet = Subscribe::new(
-            vec![topic],
-            0,
-        );
+        let packet = Subscribe::new(vec![topic], 0);
 
         if let Some(client) = self.client.lock().unwrap().as_mut() {
             client.subscribe(packet).unwrap();
         }
-
     }
 }
