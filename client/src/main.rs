@@ -1,4 +1,5 @@
 mod client;
+mod client_error;
 mod connack;
 mod connect;
 mod controller;
