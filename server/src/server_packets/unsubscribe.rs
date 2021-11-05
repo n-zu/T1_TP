@@ -1,3 +1,4 @@
+#![allow(unused)]
 use packets::packet_reader;
 use packets::packet_reader::{ErrorKind, PacketError};
 use packets::utf8::Field;
@@ -16,12 +17,24 @@ const MSG_AT_LEAST_ONE_TOPIC_FILTER: &str =
     "Unsubscribe packet must contain at least one topic filter";
 
 #[derive(Debug)]
+/// Server-side Unsubscribe packet struct
 pub struct Unsubscribe {
     packet_id: u16,
     topic_filters: Vec<String>,
 }
 
 impl Unsubscribe {
+    /// Reads from a stream of bytes and returns a valid Unsubscribe packet
+    /// It is assumed that the first byte was read into control_byte parameter
+    ///
+    ///
+    /// # Errors
+    ///
+    /// This function returns a PacketError if:
+    /// - Control packet type is different from 10
+    /// - Reserved bits are not 0b0010
+    /// - Remaining length is greater than 256 MB
+    /// - Topic filter is empty
     pub fn read_from(bytes: &mut impl Read, control_byte: u8) -> Result<Unsubscribe, PacketError> {
         Self::verify_control_packet_type(&control_byte)?;
         Self::verify_reserved_bits(&control_byte)?;
@@ -33,6 +46,16 @@ impl Unsubscribe {
             packet_id,
             topic_filters,
         })
+    }
+
+    /// Gets packet id from current Unsubscribe packet
+    pub fn packet_id(&self) -> u16 {
+        self.packet_id
+    }
+
+    /// Gets topic filters from current Unsubscribe packet
+    pub fn topic_filters(&self) -> &Vec<String> {
+        &self.topic_filters
     }
 
     #[doc(hidden)]
@@ -82,16 +105,6 @@ impl Unsubscribe {
             ));
         }
         Ok(())
-    }
-    #[doc(hidden)]
-    /// Gets packet id from current Unsubscribe packet
-    pub fn packet_id(&self) -> u16 {
-        self.packet_id
-    }
-    #[doc(hidden)]
-    /// Gets topic filters from current Unsubscribe packet
-    pub fn topic_filters(&self) -> &Vec<String> {
-        &self.topic_filters
     }
 }
 

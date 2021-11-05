@@ -73,7 +73,6 @@ impl Publish {
         let topic_name = Self::verify_topic_name(&mut remaining_bytes)?;
         let packet_id = Self::verify_packet_id(&mut remaining_bytes, &qos_level)?;
         let payload = Self::read_payload(&mut remaining_bytes);
-
         Ok(Self {
             packet_id,
             topic_name: topic_name.value,
