@@ -1,5 +1,10 @@
 #![allow(dead_code)]
+<<<<<<< HEAD
 use std::io::{self, Read};
+=======
+
+use std::{convert::TryFrom, io::Read};
+>>>>>>> ff83bcaeabcf0ef0698ea45039c0c1d3fb497b17
 
 use packets::{
     packet_reader::{self, ErrorKind, PacketError, QoSLevel},
@@ -19,8 +24,8 @@ const PROTOCOL_LEVEL_3_1_1: u8 = 0x04;
 const RESERVED: u8 = 0x1;
 const CLEAN_SESSION: u8 = 0x2;
 const WILL_FLAG: u8 = 0x4;
-const WILL_QOS_0: u8 = 0x8;
-const WILL_QOS_1: u8 = 0x10;
+const WILL_QOS: u8 = 0x18;
+const WILL_QOS_SHIFT: u8 = 3;
 const WILL_RETAIN: u8 = 0x20;
 const PASSWORD_FLAG: u8 = 0x40;
 const USERNAME_FLAG: u8 = 0x80;
@@ -75,20 +80,17 @@ impl Connect {
     }
 
     fn get_will(buf: [u8; 1]) -> Result<Option<LastWill>, PacketError> {
+        let qos = QoSLevel::try_from((buf[0] & WILL_QOS) >> WILL_QOS_SHIFT)?;
         if buf[0] & WILL_FLAG != 0 {
             return Ok(Some(LastWill {
                 retain: buf[0] & WILL_RETAIN != 0,
-                qos: if buf[0] & WILL_QOS_0 == 0 {
-                    QoSLevel::QoSLevel0
-                } else {
-                    QoSLevel::QoSLevel1
-                },
+                qos,
                 topic: String::new(),
                 message: String::new(),
             }));
         }
 
-        if buf[0] & WILL_QOS_0 != 0 || buf[0] & WILL_QOS_1 != 0 || buf[0] & WILL_RETAIN != 0 {
+        if buf[0] & WILL_RETAIN != 0 || qos != QoSLevel::QoSLevel0 {
             return Err(PacketError::new_kind(
                 "Invalid flags",
                 ErrorKind::InvalidFlags,
@@ -253,11 +255,13 @@ impl Connect {
 #[cfg(test)]
 mod tests {
 
+    use packets::packet_reader::QoSLevel;
+
     use super::ErrorKind;
     use super::Field;
+    use crate::server_packets::connect::WILL_QOS_SHIFT;
     use crate::server_packets::connect::{
-        Connect, CLEAN_SESSION, PASSWORD_FLAG, RESERVED, USERNAME_FLAG, WILL_FLAG, WILL_QOS_0,
-        WILL_QOS_1, WILL_RETAIN,
+        Connect, CLEAN_SESSION, PASSWORD_FLAG, RESERVED, USERNAME_FLAG, WILL_FLAG, WILL_RETAIN,
     };
     use std::io::Cursor;
 
@@ -339,7 +343,7 @@ mod tests {
     fn test_will_flag_0_topic_message_1() {
         let mut v = Field::new_from_string("MQTT").unwrap().encode();
         v.push(4u8); // Nivel
-        v.push(WILL_QOS_0 | WILL_QOS_1 | WILL_RETAIN); //Flags
+        v.push(((QoSLevel::QoSLevel1 as u8) << WILL_QOS_SHIFT) | WILL_RETAIN); //Flags
         v.append(&mut Field::new_from_string("id").unwrap().encode());
         v.append(&mut vec![0u8, 60u8]); //Keep alive
 

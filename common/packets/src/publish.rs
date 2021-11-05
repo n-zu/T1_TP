@@ -1,14 +1,13 @@
 use crate::packet_reader::{self, QoSLevel, RemainingLength};
 use crate::packet_reader::{ErrorKind, PacketError};
-use crate::utf8::{self, Field};
+use crate::utf8::Field;
+use std::convert::TryInto;
 use std::io::Read;
 
 #[doc(hidden)]
 const RETAIN_FLAG: u8 = 0b00000001;
 #[doc(hidden)]
-const QOS_LEVEL_0_FLAG: u8 = 0b00000000;
-#[doc(hidden)]
-const QOS_LEVEL_1_FLAG: u8 = 0b00000010;
+const QOS_SHIFT: u8 = 1;
 #[doc(hidden)]
 const DUP_FLAG: u8 = 0b00001000;
 #[doc(hidden)]
@@ -51,7 +50,7 @@ impl From<PacketError> for PublishError {
 #[doc(hidden)]
 const PUBLISH_CONTROL_PACKET_TYPE: u8 = 3;
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 /// Publish packet structure for server/client side
 pub struct Publish {
     pub packet_id: Option<u16>,
@@ -76,6 +75,7 @@ impl Clone for Publish {
 }
 
 impl Publish {
+    #![allow(dead_code)]
     ///
     /// Returns a Publish packet with a valid state
     ///
@@ -151,14 +151,7 @@ impl Publish {
     #[doc(hidden)]
     fn verify_qos_level_flag(control_byte: &u8) -> Result<QoSLevel, PacketError> {
         let qos_level = (control_byte & 0b110) >> 1;
-        match qos_level {
-            0 => Ok(QoSLevel::QoSLevel0),
-            1 => Ok(QoSLevel::QoSLevel1),
-            _ => Err(PacketError::new_kind(
-                "Invalid QoS level",
-                ErrorKind::InvalidQoSLevel,
-            )),
-        }
+        qos_level.try_into()
     }
 
     #[doc(hidden)]
@@ -262,10 +255,9 @@ impl Publish {
         if self.dup_flag == DupFlag::DupFlag1 {
             control_byte |= DUP_FLAG;
         }
-        match self.qos {
-            QoSLevel::QoSLevel0 => control_byte |= QOS_LEVEL_0_FLAG,
-            QoSLevel::QoSLevel1 => control_byte |= QOS_LEVEL_1_FLAG,
-        }
+
+        control_byte |= (self.qos as u8) << QOS_SHIFT;
+
         if self.retain_flag == RetainFlag::RetainFlag1 {
             control_byte |= RETAIN_FLAG;
         }
@@ -292,24 +284,20 @@ impl Publish {
         Ok(fixed_header)
     }
 
-    pub fn encode(&self) -> Result<Vec<u8>, PacketError> {
-        let mut bytes = vec![];
-        bytes.append(&mut self.fixed_header()?);
-        bytes.append(&mut self.variable_header());
-        if let Some(payload) = self.payload.as_ref() {
-            bytes.append(&mut self.encoded_payload());
+    /// Sets the QoS of this packet to max_qos if the current level is greater than it
+    pub fn set_max_qos(&mut self, max_qos: QoSLevel) {
+        if (max_qos as u8) < (self.qos as u8) {
+            self.qos = max_qos;
         }
-        Ok(bytes)
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use crate::packet_reader::{ErrorKind, PacketError};
+    use crate::packet_reader::{ErrorKind, PacketError, QoSLevel};
     use crate::publish::{
-        DupFlag, Publish, QoSLevel, RetainFlag, MSG_DUP_FLAG_1_WITH_QOS_LEVEL_0,
-        MSG_INVALID_PACKET_ID, MSG_PACKET_TYPE_PUBLISH, MSG_TOPIC_NAME_ONE_CHAR,
-        MSG_TOPIC_WILDCARDS,
+        DupFlag, Publish, RetainFlag, MSG_DUP_FLAG_1_WITH_QOS_LEVEL_0, MSG_INVALID_PACKET_ID,
+        MSG_PACKET_TYPE_PUBLISH, MSG_TOPIC_NAME_ONE_CHAR, MSG_TOPIC_WILDCARDS,
     };
     use crate::utf8::Field;
     use std::io::Cursor;
@@ -322,16 +310,6 @@ mod tests {
         let mut stream = Cursor::new(dummy);
         let expected_error =
             PacketError::new_kind(MSG_DUP_FLAG_1_WITH_QOS_LEVEL_0, ErrorKind::InvalidDupFlag);
-        let result = Publish::read_from(&mut stream, control_byte).unwrap_err();
-        assert_eq!(result, expected_error);
-    }
-
-    #[test]
-    fn test_qos_level_2_should_raise_invalid_qos_level_error() {
-        let control_byte = 0b110100u8;
-        let dummy: Vec<u8> = vec![0b110100];
-        let mut stream = Cursor::new(dummy);
-        let expected_error = PacketError::new_kind("Invalid QoS level", ErrorKind::InvalidQoSLevel);
         let result = Publish::read_from(&mut stream, control_byte).unwrap_err();
         assert_eq!(result, expected_error);
     }
@@ -502,7 +480,7 @@ mod tests {
 
     #[test]
     fn test_publish_packet_can_not_have_packet_id_0() {
-        let control_byte = 0b110010u8; // primer byte con los flags con QoS level 0;
+        let control_byte = 0b110010u8; // primer byte con los flags con QoS level 1;
         let mut remaining_data: Vec<u8> = vec![];
         let mut topic = Field::new_from_string("a/b").unwrap().encode();
         let mut payload = "los pollos hermanos".as_bytes().to_vec();
@@ -518,5 +496,27 @@ mod tests {
         let expected_error = PacketError::new_msg(MSG_INVALID_PACKET_ID);
         let result = Publish::read_from(&mut stream, control_byte).unwrap_err();
         assert_eq!(expected_error, result);
+    }
+
+    #[test]
+    fn test_max_qos() {
+        let control_byte = 0b110100u8; // primer byte con los flags con QoS level 2;
+        let mut remaining_data: Vec<u8> = vec![];
+        let mut topic = Field::new_from_string("a/b").unwrap().encode();
+        let mut payload = "aa".as_bytes().to_vec();
+        remaining_data.append(&mut topic);
+        remaining_data.append(&mut payload);
+
+        let mut bytes = vec![];
+        bytes.push(remaining_data.len() as u8);
+        bytes.append(&mut remaining_data);
+        let mut stream = Cursor::new(bytes);
+        let mut result = Publish::read_from(&mut stream, control_byte).unwrap();
+
+        assert_eq!(*result.qos(), QoSLevel::QoSLevel2);
+        result.set_max_qos(QoSLevel::QoSLevel1);
+        assert_eq!(*result.qos(), QoSLevel::QoSLevel1);
+        result.set_max_qos(QoSLevel::QoSLevel0);
+        assert_eq!(*result.qos(), QoSLevel::QoSLevel0);
     }
 }

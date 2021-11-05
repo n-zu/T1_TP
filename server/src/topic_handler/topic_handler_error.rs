@@ -1,10 +1,10 @@
 use std::{
     error::Error,
     fmt::Display,
-    sync::{PoisonError, RwLockReadGuard, RwLockWriteGuard},
+    sync::{mpsc::SendError, PoisonError, RwLockReadGuard, RwLockWriteGuard},
 };
 
-use super::{Subscribers, Subtopics};
+use super::{Message, Subscribers, Subtopics};
 
 #[derive(Debug)]
 pub struct TopicHandlerError {
@@ -54,5 +54,11 @@ impl From<PoisonError<RwLockWriteGuard<'_, Subscribers>>> for TopicHandlerError 
 impl From<PoisonError<RwLockWriteGuard<'_, Subtopics>>> for TopicHandlerError {
     fn from(err: PoisonError<RwLockWriteGuard<Subtopics>>) -> TopicHandlerError {
         TopicHandlerError::new(&format!("{} ({})", DEFAULT_MSG, err))
+    }
+}
+
+impl From<SendError<Message>> for TopicHandlerError {
+    fn from(err: SendError<Message>) -> TopicHandlerError {
+        TopicHandlerError::new(&format!("No se pudo enviar paquete al servidor ({})", err))
     }
 }
