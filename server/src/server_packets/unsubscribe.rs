@@ -53,7 +53,7 @@ impl Unsubscribe {
         if reserved_bits != FIXED_RESERVED_BITS {
             return Err(PacketError::new_kind(
                 MSG_INVALID_RESERVED_BITS,
-                ErrorKind::InvalidProtocol,
+                ErrorKind::InvalidReservedBits,
             ));
         }
         Ok(())
@@ -83,12 +83,23 @@ impl Unsubscribe {
         }
         Ok(())
     }
+    #[doc(hidden)]
+    /// Gets packet id from current Unsubscribe packet
+    pub fn packet_id(&self) -> u16 {
+        self.packet_id
+    }
+    #[doc(hidden)]
+    /// Gets topic filters from current Unsubscribe packet
+    pub fn topic_filters(&self) -> &Vec<String> {
+        &self.topic_filters
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use crate::server_packets::unsubscribe::{
-        Unsubscribe, MSG_AT_LEAST_ONE_TOPIC_FILTER, MSG_PACKET_TYPE_UNSUBSCRIBE,
+        Unsubscribe, MSG_AT_LEAST_ONE_TOPIC_FILTER, MSG_INVALID_RESERVED_BITS,
+        MSG_PACKET_TYPE_UNSUBSCRIBE,
     };
     use packets::packet_reader::{ErrorKind, PacketError};
     use packets::utf8::Field;
@@ -106,12 +117,13 @@ mod tests {
     }
 
     #[test]
-    fn test_unsubscribe_packet_must_have_control_type_10() {
-        let control_byte = 0b10000010u8; // control byte 8
+    fn test_unsubscribe_packet_with_control_byte_other_than_10_should_raise_invalid_control_packet_type_error(
+    ) {
+        let control_byte = 0b10000010u8; // control byte 8 + 0010 reserved bits
         let mut topic = Field::new_from_string("temperatura/uruguay")
             .unwrap()
             .encode();
-        let mut v: Vec<u8> = vec![21, 0, 1]; // remaining length + packet id
+        let mut v: Vec<u8> = vec![23, 0, 1]; // remaining length + packet id
         v.append(&mut topic); // + payload
         let mut stream = Cursor::new(v);
         let result = Unsubscribe::read_from(&mut stream, control_byte).unwrap_err();
@@ -120,5 +132,60 @@ mod tests {
             ErrorKind::InvalidControlPacketType,
         );
         assert_eq!(result, expected_error);
+    }
+
+    #[test]
+    fn test_unsubscribe_packet_with_reserved_bits_other_than_2_should_raise_error() {
+        let control_byte = 0b10100000u8; // control byte 10 + reserved bits 0000
+        let mut topic = Field::new_from_string("temperatura/uruguay")
+            .unwrap()
+            .encode();
+        let mut v: Vec<u8> = vec![23, 0, 1]; // remaining length + packet id
+        v.append(&mut topic); // + payload
+        let mut stream = Cursor::new(v);
+        let result = Unsubscribe::read_from(&mut stream, control_byte).unwrap_err();
+        let expected_error =
+            PacketError::new_kind(MSG_INVALID_RESERVED_BITS, ErrorKind::InvalidReservedBits);
+        assert_eq!(result, expected_error);
+    }
+
+    #[test]
+    fn test_valid_unsubscribe_packet_with_one_topic() {
+        let control_byte = 0b10100010u8; // control byte 10 + reserved bits 0010
+        let mut topic = Field::new_from_string("temperatura/uruguay")
+            .unwrap()
+            .encode();
+        let mut v: Vec<u8> = vec![23, 0, 1]; // remaining length + packet id
+        v.append(&mut topic); // + payload
+        let mut stream = Cursor::new(v);
+        let result = Unsubscribe::read_from(&mut stream, control_byte).unwrap();
+        assert_eq!(result.packet_id(), 1u16);
+        assert_eq!(
+            *result.topic_filters(),
+            vec!["temperatura/uruguay".to_string()]
+        );
+    }
+
+    #[test]
+    fn test_valid_unsubscribe_packet_with_two_topics() {
+        let control_byte = 0b10100010u8; // control byte 10 + reserved bits 0010
+        let mut topic_uruguay = Field::new_from_string("temperatura/uruguay")
+            .unwrap()
+            .encode();
+        let mut topic_argentina = Field::new_from_string("temperatura/argentina")
+            .unwrap()
+            .encode();
+        let mut v: Vec<u8> = vec![46, 0, 1]; // remaining length + packet id
+        v.append(&mut topic_uruguay); // + payload
+        v.append(&mut topic_argentina); // + payload
+        let mut stream = Cursor::new(v);
+        let result = Unsubscribe::read_from(&mut stream, control_byte).unwrap();
+        let expected_id = 1u16;
+        let expected_topic_filters = vec![
+            "temperatura/uruguay".to_string(),
+            "temperatura/argentina".to_string(),
+        ];
+        assert_eq!(result.packet_id(), expected_id);
+        assert_eq!(*result.topic_filters(), expected_topic_filters);
     }
 }
