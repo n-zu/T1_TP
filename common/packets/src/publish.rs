@@ -53,12 +53,12 @@ const PUBLISH_CONTROL_PACKET_TYPE: u8 = 3;
 #[derive(Debug, PartialEq, Clone)]
 /// Publish packet structure for server/client side
 pub struct Publish {
-    pub packet_id: Option<u16>,
-    pub topic_name: String,
-    pub qos: QoSLevel,
-    pub retain_flag: RetainFlag,
-    pub dup_flag: DupFlag,
-    pub payload: Option<String>,
+    packet_id: Option<u16>,
+    topic_name: String,
+    qos: QoSLevel,
+    retain_flag: RetainFlag,
+    dup_flag: DupFlag,
+    payload: Option<String>,
 }
 
 impl Clone for Publish {
@@ -87,6 +87,7 @@ impl Publish {
     /// If the stream of bytes doesn't follow MQTT 3.1.1 protocol this function returns
     /// a PacketError corresponding to the type of the error encountered
     ///
+<<<<<<< HEAD
     /// # Examples
     ///
     /// ```
@@ -118,6 +119,8 @@ impl Publish {
     ///  let result = Publish::read_from(&mut stream, control_byte).unwrap();
     ///  assert_eq!(expected, result);
     /// ```
+=======
+>>>>>>> 5cf7757ddac8d0e08aea518ba4f776eabe4c74c8
     pub fn read_from(stream: &mut impl Read, control_byte: u8) -> Result<Publish, PacketError> {
         let retain_flag = Self::verify_retain_flag(&control_byte);
         let qos_level = Self::verify_qos_level_flag(&control_byte)?;
@@ -343,8 +346,7 @@ mod tests {
         let mut payload = Vec::from("mensaje".as_bytes());
         remaining_data.append(&mut topic);
         remaining_data.append(&mut payload);
-        let mut bytes = vec![];
-        bytes.push(remaining_data.len() as u8);
+        let mut bytes = vec![remaining_data.len() as u8];
         bytes.append(&mut remaining_data);
         let mut stream = Cursor::new(bytes);
         let expected = Publish {
@@ -370,12 +372,11 @@ mod tests {
         remaining_data.append(&mut packet_id_buf);
         remaining_data.append(&mut payload);
 
-        let mut bytes = vec![];
-        bytes.push(remaining_data.len() as u8);
+        let mut bytes = vec![remaining_data.len() as u8];
         bytes.append(&mut remaining_data);
         let mut stream = Cursor::new(bytes);
         let expected = Publish {
-            packet_id: Option::from(10 as u16),
+            packet_id: Option::from(10_u16),
             topic_name: "a/b".to_string(),
             qos: QoSLevel::QoSLevel1,
             retain_flag: RetainFlag::RetainFlag0,
@@ -395,8 +396,7 @@ mod tests {
         remaining_data.append(&mut topic);
         remaining_data.append(&mut payload);
 
-        let mut bytes = vec![];
-        bytes.push(remaining_data.len() as u8);
+        let mut bytes = vec![remaining_data.len() as u8];
         bytes.append(&mut remaining_data);
         let mut stream = Cursor::new(bytes);
         let expected = Publish {
@@ -421,8 +421,7 @@ mod tests {
         remaining_data.append(&mut topic);
         remaining_data.append(&mut payload);
 
-        let mut bytes = vec![];
-        bytes.push(remaining_data.len() as u8);
+        let mut bytes = vec![remaining_data.len() as u8];
         bytes.append(&mut remaining_data);
         let mut stream = Cursor::new(bytes);
         let expected = Publish {
@@ -446,8 +445,7 @@ mod tests {
         remaining_data.append(&mut topic);
         remaining_data.append(&mut payload);
 
-        let mut bytes = vec![];
-        bytes.push(remaining_data.len() as u8);
+        let mut bytes = vec![remaining_data.len() as u8];
         bytes.append(&mut remaining_data);
         let mut stream = Cursor::new(bytes);
         let expected_error = PacketError::new_kind(
@@ -466,8 +464,7 @@ mod tests {
         remaining_data.append(&mut topic);
         remaining_data.append(&mut payload);
 
-        let mut bytes = vec![];
-        bytes.push(remaining_data.len() as u8);
+        let mut bytes = vec![remaining_data.len() as u8];
         bytes.append(&mut remaining_data);
         let mut stream = Cursor::new(bytes);
         let expected_error = PacketError::new_kind(
@@ -489,8 +486,7 @@ mod tests {
         remaining_data.append(&mut packet_id_buf);
         remaining_data.append(&mut payload);
 
-        let mut bytes = vec![];
-        bytes.push(remaining_data.len() as u8);
+        let mut bytes = vec![remaining_data.len() as u8];
         bytes.append(&mut remaining_data);
         let mut stream = Cursor::new(bytes);
         let expected_error = PacketError::new_msg(MSG_INVALID_PACKET_ID);
@@ -507,8 +503,7 @@ mod tests {
         remaining_data.append(&mut topic);
         remaining_data.append(&mut payload);
 
-        let mut bytes = vec![];
-        bytes.push(remaining_data.len() as u8);
+        let mut bytes = vec![remaining_data.len() as u8];
         bytes.append(&mut remaining_data);
         let mut stream = Cursor::new(bytes);
         let mut result = Publish::read_from(&mut stream, control_byte).unwrap();

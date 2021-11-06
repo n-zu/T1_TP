@@ -2,6 +2,7 @@
 
 use std::{convert::TryFrom, io::Read};
 
+use packets::suback::Suback;
 use packets::{
     packet_reader::{self, ErrorKind, PacketError, QoSLevel},
     utf8::Field,
@@ -79,10 +80,18 @@ impl Subscribe {
         })
     }
 
-    /* Pendiente para cuando este el Suback
-    pub fn response(&self) -> &Suback {
-        &self.response
-    }*/
+    /// Creates a response packet (Suback in this case) for this Subscribe packet
+    ///
+    /// # Errors
+    ///
+    /// Allowed return codes are 0x00, 0x01, 0x80. If a return code doesn't match any of those, this function returns a [ErrorKind::InvalidReturnCode]
+    pub fn response(&self) -> Result<Suback, PacketError> {
+        let mut return_codes = Vec::new();
+        for topic in &self.topic_filters {
+            return_codes.push(topic.qos as u8);
+        }
+        Suback::new_from_vec(return_codes, self.identifier)
+    }
 
     /// Get the subscribe's identifier.
     pub fn identifier(&self) -> u16 {
@@ -95,6 +104,8 @@ impl Subscribe {
     }
 
     #[doc(hidden)]
+    /// Sets max QoS for each Topic Filter in a Subscribe packet
+    /// This is intended to be used by the server in case some QoS is not yet implemented by it
     fn set_max_qos(&mut self, max_qos: QoSLevel) {
         for topic_filter in self.topic_filters.iter_mut() {
             if (topic_filter.qos as u8) > (max_qos as u8) {
