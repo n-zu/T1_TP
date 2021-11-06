@@ -8,12 +8,11 @@ use packets::packet_reader::PacketError;
 use crate::client_error::ClientError;
 use crate::connack::Connack;
 use crate::connect::Connect;
-use crate::publish::Publish;
 use crate::subscribe::Subscribe;
+use packets::publish::Publish;
 use threadpool::ThreadPool;
-use packets::publish::Publish as PublishRecv;
 
-const READ_TIMEOUT : Duration = Duration::from_millis(5000);
+const READ_TIMEOUT: Duration = Duration::from_millis(5000);
 
 enum SentPacket {
     Subscribe(Subscribe),
@@ -22,7 +21,7 @@ enum SentPacket {
 }
 
 pub trait PublishObserver {
-    fn got_publish(&self, publish: PublishRecv);
+    fn got_publish(&self, publish: Publish);
 }
 
 pub struct Client<T: PublishObserver> {
@@ -34,12 +33,12 @@ pub struct Client<T: PublishObserver> {
 
 impl<T: PublishObserver> Client<T> {
     #![allow(dead_code)]
-    pub fn new(address: &str, observer : T) -> Result<Client<T>, ClientError> {
+    pub fn new(address: &str, observer: T) -> Result<Client<T>, ClientError> {
         Ok(Client {
             stream: TcpStream::connect(address)?,
             thread_pool: ThreadPool::new(4),
             pending_acks: Mutex::new(Vec::new()),
-            observer
+            observer,
         })
     }
 
@@ -64,8 +63,8 @@ impl<T: PublishObserver> Client<T> {
         Ok(())
     }
 
-    pub fn handle_publish(&self, stream: &mut TcpStream, header : u8) {
-        let publish = PublishRecv::read_from(stream, header).unwrap();
+    pub fn handle_publish(&self, stream: &mut TcpStream, header: u8) {
+        let publish = Publish::read_from(stream, header).unwrap();
         self.observer.got_publish(publish);
     }
 
@@ -78,7 +77,7 @@ impl<T: PublishObserver> Client<T> {
             match packet_type {
                 3 => {
                     // let mut publish = Publish::read_from(&mut stream)?;
-                    
+
                     println!("Llego un paquete de tipo 3");
                 }
                 _ => {
@@ -90,13 +89,19 @@ impl<T: PublishObserver> Client<T> {
 
     pub fn subscribe(&mut self, subscribe: Subscribe) -> Result<(), PacketError> {
         self.stream.write_all(&subscribe.encode()?)?;
-        self.pending_acks.lock().unwrap().push(SentPacket::Subscribe(subscribe));
+        self.pending_acks
+            .lock()
+            .unwrap()
+            .push(SentPacket::Subscribe(subscribe));
         Ok(())
     }
 
     pub fn publish(&mut self, publish: Publish) -> Result<(), PacketError> {
         self.stream.write_all(&publish.encode()?)?;
-        self.pending_acks.lock().unwrap().push(SentPacket::Publish(publish));
+        self.pending_acks
+            .lock()
+            .unwrap()
+            .push(SentPacket::Publish(publish));
         Ok(())
     }
 

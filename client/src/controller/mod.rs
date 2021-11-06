@@ -9,10 +9,11 @@ use gtk::{
 
 use crate::{
     client::Client,
-    connect::{ConnectBuilder, QoSLevel},
-    publish::Publish,
+    connect::ConnectBuilder,
     subscribe::{Subscribe, Topic},
 };
+
+use packets::{packet_reader::QoSLevel, publish::Publish};
 
 pub struct Controller {
     builder: Builder,
@@ -51,7 +52,7 @@ impl Controller {
         let full_addr = format!("{}:{}", &addr.text().to_string(), &port.text().to_string());
 
         // FIXME: Crashes if no server is connected
-        let pub_list : ListBox= self.builder.object("sub_msgs").unwrap();
+        let pub_list: ListBox = self.builder.object("sub_msgs").unwrap();
         let mut new_client = Client::new(&full_addr, PublishController::new(pub_list)).unwrap();
         let connect = ConnectBuilder::new(&id.text().to_string(), 0, true)
             .unwrap()
