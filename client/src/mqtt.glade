@@ -1,38 +1,56 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<!-- Generated with glade 3.22.2 -->
+<!-- Generated with glade 3.38.2 -->
 <interface>
   <requires lib="gtk+" version="3.24"/>
+  <object class="GtkTextBuffer" id="pub_mg_txtbuffer">
+    <property name="text" translatable="yes">Mensage: No le puse borde a la caja</property>
+  </object>
+  <object class="GtkListStore" id="qos_list">
+    <columns>
+      <!-- column-name 0 -->
+      <column type="gint"/>
+      <!-- column-name 1 -->
+      <column type="gchararray"/>
+    </columns>
+    <data>
+      <row>
+        <col id="0">0</col>
+        <col id="1" translatable="yes">qos0</col>
+      </row>
+      <row>
+        <col id="0">1</col>
+        <col id="1" translatable="yes">qos1</col>
+      </row>
+    </data>
+  </object>
   <object class="GtkWindow" id="main_window">
-    <property name="can_focus">False</property>
-    <child type="titlebar">
-      <placeholder/>
-    </child>
+    <property name="can-focus">False</property>
     <child>
       <object class="GtkNotebook">
         <property name="visible">True</property>
-        <property name="can_focus">True</property>
+        <property name="can-focus">True</property>
         <child>
           <object class="GtkBox" id="box_connection">
             <property name="visible">True</property>
-            <property name="can_focus">False</property>
+            <property name="can-focus">False</property>
             <property name="orientation">vertical</property>
             <child>
               <object class="GtkBox">
                 <property name="visible">True</property>
-                <property name="can_focus">False</property>
+                <property name="can-focus">False</property>
                 <child>
                   <object class="GtkBox">
                     <property name="visible">True</property>
-                    <property name="can_focus">False</property>
-                    <property name="margin_start">10</property>
-                    <property name="margin_end">5</property>
-                    <property name="margin_top">11</property>
+                    <property name="can-focus">False</property>
+                    <property name="margin-start">10</property>
+                    <property name="margin-end">5</property>
+                    <property name="margin-top">11</property>
                     <property name="hexpand">True</property>
                     <property name="orientation">vertical</property>
                     <child>
                       <object class="GtkLabel">
                         <property name="visible">True</property>
-                        <property name="can_focus">False</property>
+                        <property name="can-focus">False</property>
                         <property name="label" translatable="yes">Host</property>
                       </object>
                       <packing>
@@ -42,9 +60,9 @@
                       </packing>
                     </child>
                     <child>
-                      <object class="GtkEntry" id="server_address">
+                      <object class="GtkEntry" id="con_host">
                         <property name="visible">True</property>
-                        <property name="can_focus">True</property>
+                        <property name="can-focus">True</property>
                         <property name="text" translatable="yes">localhost</property>
                       </object>
                       <packing>
@@ -63,16 +81,16 @@
                 <child>
                   <object class="GtkBox">
                     <property name="visible">True</property>
-                    <property name="can_focus">False</property>
-                    <property name="margin_start">5</property>
-                    <property name="margin_end">5</property>
-                    <property name="margin_top">11</property>
+                    <property name="can-focus">False</property>
+                    <property name="margin-start">5</property>
+                    <property name="margin-end">5</property>
+                    <property name="margin-top">11</property>
                     <property name="hexpand">True</property>
                     <property name="orientation">vertical</property>
                     <child>
                       <object class="GtkLabel">
                         <property name="visible">True</property>
-                        <property name="can_focus">False</property>
+                        <property name="can-focus">False</property>
                         <property name="label" translatable="yes">Puerto</property>
                       </object>
                       <packing>
@@ -82,10 +100,9 @@
                       </packing>
                     </child>
                     <child>
-                      <object class="GtkEntry" id="server_port">
+                      <object class="GtkEntry" id="con_port">
                         <property name="visible">True</property>
-                        <property name="can_focus">True</property>
-                        <property name="text" translatable="yes">1883</property>
+                        <property name="can-focus">True</property>
                       </object>
                       <packing>
                         <property name="expand">False</property>
@@ -103,16 +120,16 @@
                 <child>
                   <object class="GtkBox">
                     <property name="visible">True</property>
-                    <property name="can_focus">False</property>
-                    <property name="margin_start">5</property>
-                    <property name="margin_end">5</property>
-                    <property name="margin_top">11</property>
+                    <property name="can-focus">False</property>
+                    <property name="margin-start">5</property>
+                    <property name="margin-end">5</property>
+                    <property name="margin-top">11</property>
                     <property name="hexpand">True</property>
                     <property name="orientation">vertical</property>
                     <child>
                       <object class="GtkLabel">
                         <property name="visible">True</property>
-                        <property name="can_focus">False</property>
+                        <property name="can-focus">False</property>
                         <property name="label" translatable="yes">ID Cliente</property>
                       </object>
                       <packing>
@@ -122,10 +139,9 @@
                       </packing>
                     </child>
                     <child>
-                      <object class="GtkEntry" id="client_id">
+                      <object class="GtkEntry" id="con_cli">
                         <property name="visible">True</property>
-                        <property name="can_focus">True</property>
-                        <property name="text" translatable="yes">client</property>
+                        <property name="can-focus">True</property>
                       </object>
                       <packing>
                         <property name="expand">False</property>
@@ -143,16 +159,16 @@
                 <child>
                   <object class="GtkBox">
                     <property name="visible">True</property>
-                    <property name="can_focus">False</property>
-                    <property name="margin_start">5</property>
-                    <property name="margin_end">10</property>
-                    <property name="margin_top">11</property>
+                    <property name="can-focus">False</property>
+                    <property name="margin-start">5</property>
+                    <property name="margin-end">10</property>
+                    <property name="margin-top">11</property>
                     <property name="hexpand">True</property>
                     <property name="orientation">vertical</property>
                     <child>
                       <object class="GtkLabel">
                         <property name="visible">True</property>
-                        <property name="can_focus">False</property>
+                        <property name="can-focus">False</property>
                       </object>
                       <packing>
                         <property name="expand">False</property>
@@ -161,11 +177,11 @@
                       </packing>
                     </child>
                     <child>
-                      <object class="GtkButton" id="connect_button">
+                      <object class="GtkButton" id="con_btn">
                         <property name="label" translatable="yes">CONECTARSE</property>
                         <property name="visible">True</property>
-                        <property name="can_focus">True</property>
-                        <property name="receives_default">True</property>
+                        <property name="can-focus">True</property>
+                        <property name="receives-default">True</property>
                       </object>
                       <packing>
                         <property name="expand">False</property>
@@ -190,20 +206,20 @@
             <child>
               <object class="GtkBox">
                 <property name="visible">True</property>
-                <property name="can_focus">False</property>
+                <property name="can-focus">False</property>
                 <child>
                   <object class="GtkBox">
                     <property name="visible">True</property>
-                    <property name="can_focus">False</property>
-                    <property name="margin_start">10</property>
-                    <property name="margin_end">5</property>
-                    <property name="margin_top">11</property>
+                    <property name="can-focus">False</property>
+                    <property name="margin-start">10</property>
+                    <property name="margin-end">5</property>
+                    <property name="margin-top">11</property>
                     <property name="hexpand">True</property>
                     <property name="orientation">vertical</property>
                     <child>
                       <object class="GtkLabel">
                         <property name="visible">True</property>
-                        <property name="can_focus">False</property>
+                        <property name="can-focus">False</property>
                         <property name="label" translatable="yes">Usuario</property>
                       </object>
                       <packing>
@@ -213,9 +229,9 @@
                       </packing>
                     </child>
                     <child>
-                      <object class="GtkEntry">
+                      <object class="GtkEntry" id="con_usr">
                         <property name="visible">True</property>
-                        <property name="can_focus">True</property>
+                        <property name="can-focus">True</property>
                       </object>
                       <packing>
                         <property name="expand">False</property>
@@ -233,16 +249,16 @@
                 <child>
                   <object class="GtkBox">
                     <property name="visible">True</property>
-                    <property name="can_focus">False</property>
-                    <property name="margin_start">5</property>
-                    <property name="margin_end">5</property>
-                    <property name="margin_top">11</property>
+                    <property name="can-focus">False</property>
+                    <property name="margin-start">5</property>
+                    <property name="margin-end">5</property>
+                    <property name="margin-top">11</property>
                     <property name="hexpand">True</property>
                     <property name="orientation">vertical</property>
                     <child>
                       <object class="GtkLabel">
                         <property name="visible">True</property>
-                        <property name="can_focus">False</property>
+                        <property name="can-focus">False</property>
                         <property name="label" translatable="yes">Contraseña</property>
                       </object>
                       <packing>
@@ -252,9 +268,9 @@
                       </packing>
                     </child>
                     <child>
-                      <object class="GtkEntry">
+                      <object class="GtkEntry" id="con_psw">
                         <property name="visible">True</property>
-                        <property name="can_focus">True</property>
+                        <property name="can-focus">True</property>
                       </object>
                       <packing>
                         <property name="expand">False</property>
@@ -272,16 +288,16 @@
                 <child>
                   <object class="GtkBox">
                     <property name="visible">True</property>
-                    <property name="can_focus">False</property>
-                    <property name="margin_start">5</property>
-                    <property name="margin_end">5</property>
-                    <property name="margin_top">11</property>
+                    <property name="can-focus">False</property>
+                    <property name="margin-start">5</property>
+                    <property name="margin-end">5</property>
+                    <property name="margin-top">11</property>
                     <property name="hexpand">True</property>
                     <property name="orientation">vertical</property>
                     <child>
                       <object class="GtkLabel">
                         <property name="visible">True</property>
-                        <property name="can_focus">False</property>
+                        <property name="can-focus">False</property>
                         <property name="label" translatable="yes">Keep Alive</property>
                       </object>
                       <packing>
@@ -291,9 +307,9 @@
                       </packing>
                     </child>
                     <child>
-                      <object class="GtkEntry">
+                      <object class="GtkEntry" id="con_ka">
                         <property name="visible">True</property>
-                        <property name="can_focus">True</property>
+                        <property name="can-focus">True</property>
                       </object>
                       <packing>
                         <property name="expand">False</property>
@@ -311,16 +327,16 @@
                 <child>
                   <object class="GtkBox">
                     <property name="visible">True</property>
-                    <property name="can_focus">False</property>
-                    <property name="margin_start">5</property>
-                    <property name="margin_end">5</property>
-                    <property name="margin_top">11</property>
+                    <property name="can-focus">False</property>
+                    <property name="margin-start">5</property>
+                    <property name="margin-end">5</property>
+                    <property name="margin-top">11</property>
                     <property name="hexpand">True</property>
                     <property name="orientation">vertical</property>
                     <child>
                       <object class="GtkLabel">
                         <property name="visible">True</property>
-                        <property name="can_focus">False</property>
+                        <property name="can-focus">False</property>
                         <property name="label" translatable="yes">Sesion Limpia</property>
                       </object>
                       <packing>
@@ -330,12 +346,12 @@
                       </packing>
                     </child>
                     <child>
-                      <object class="GtkSwitch">
+                      <object class="GtkSwitch" id="con_cs">
                         <property name="visible">True</property>
-                        <property name="can_focus">True</property>
+                        <property name="can-focus">True</property>
                         <property name="halign">center</property>
                         <property name="valign">center</property>
-                        <property name="margin_top">7</property>
+                        <property name="margin-top">7</property>
                         <property name="hexpand">False</property>
                         <property name="vexpand">False</property>
                       </object>
@@ -362,20 +378,20 @@
             <child>
               <object class="GtkBox">
                 <property name="visible">True</property>
-                <property name="can_focus">False</property>
+                <property name="can-focus">False</property>
                 <child>
                   <object class="GtkBox">
                     <property name="visible">True</property>
-                    <property name="can_focus">False</property>
-                    <property name="margin_start">10</property>
-                    <property name="margin_end">5</property>
-                    <property name="margin_top">11</property>
+                    <property name="can-focus">False</property>
+                    <property name="margin-start">10</property>
+                    <property name="margin-end">5</property>
+                    <property name="margin-top">11</property>
                     <property name="hexpand">True</property>
                     <property name="orientation">vertical</property>
                     <child>
                       <object class="GtkLabel">
                         <property name="visible">True</property>
-                        <property name="can_focus">False</property>
+                        <property name="can-focus">False</property>
                         <property name="label" translatable="yes">Topico Testamento</property>
                       </object>
                       <packing>
@@ -385,9 +401,9 @@
                       </packing>
                     </child>
                     <child>
-                      <object class="GtkEntry">
+                      <object class="GtkEntry" id="con_lw_top">
                         <property name="visible">True</property>
-                        <property name="can_focus">True</property>
+                        <property name="can-focus">True</property>
                       </object>
                       <packing>
                         <property name="expand">False</property>
@@ -405,16 +421,16 @@
                 <child>
                   <object class="GtkBox">
                     <property name="visible">True</property>
-                    <property name="can_focus">False</property>
-                    <property name="margin_start">5</property>
-                    <property name="margin_end">5</property>
-                    <property name="margin_top">11</property>
+                    <property name="can-focus">False</property>
+                    <property name="margin-start">5</property>
+                    <property name="margin-end">5</property>
+                    <property name="margin-top">11</property>
                     <property name="hexpand">True</property>
                     <property name="orientation">vertical</property>
                     <child>
                       <object class="GtkLabel">
                         <property name="visible">True</property>
-                        <property name="can_focus">False</property>
+                        <property name="can-focus">False</property>
                         <property name="label" translatable="yes">QoS Testamento</property>
                       </object>
                       <packing>
@@ -424,9 +440,16 @@
                       </packing>
                     </child>
                     <child>
-                      <object class="GtkComboBox">
+                      <object class="GtkComboBox" id="con_lw_qos">
                         <property name="visible">True</property>
-                        <property name="can_focus">False</property>
+                        <property name="can-focus">False</property>
+                        <property name="model">qos_list</property>
+                        <child>
+                          <object class="GtkCellRendererText"/>
+                          <attributes>
+                            <attribute name="text">0</attribute>
+                          </attributes>
+                        </child>
                       </object>
                       <packing>
                         <property name="expand">False</property>
@@ -444,16 +467,16 @@
                 <child>
                   <object class="GtkBox">
                     <property name="visible">True</property>
-                    <property name="can_focus">False</property>
-                    <property name="margin_start">5</property>
-                    <property name="margin_end">5</property>
-                    <property name="margin_top">11</property>
+                    <property name="can-focus">False</property>
+                    <property name="margin-start">5</property>
+                    <property name="margin-end">5</property>
+                    <property name="margin-top">11</property>
                     <property name="hexpand">True</property>
                     <property name="orientation">vertical</property>
                     <child>
                       <object class="GtkLabel">
                         <property name="visible">True</property>
-                        <property name="can_focus">False</property>
+                        <property name="can-focus">False</property>
                         <property name="label" translatable="yes">Retener Testamento</property>
                       </object>
                       <packing>
@@ -463,12 +486,12 @@
                       </packing>
                     </child>
                     <child>
-                      <object class="GtkSwitch">
+                      <object class="GtkSwitch" id="con_lw_ret">
                         <property name="visible">True</property>
-                        <property name="can_focus">True</property>
+                        <property name="can-focus">True</property>
                         <property name="halign">center</property>
                         <property name="valign">center</property>
-                        <property name="margin_top">7</property>
+                        <property name="margin-top">7</property>
                         <property name="hexpand">False</property>
                         <property name="vexpand">False</property>
                       </object>
@@ -495,18 +518,18 @@
             <child>
               <object class="GtkBox">
                 <property name="visible">True</property>
-                <property name="can_focus">False</property>
-                <property name="margin_start">10</property>
-                <property name="margin_end">10</property>
-                <property name="margin_top">11</property>
-                <property name="margin_bottom">11</property>
+                <property name="can-focus">False</property>
+                <property name="margin-start">10</property>
+                <property name="margin-end">10</property>
+                <property name="margin-top">11</property>
+                <property name="margin-bottom">11</property>
                 <property name="hexpand">True</property>
                 <property name="vexpand">True</property>
                 <property name="orientation">vertical</property>
                 <child>
                   <object class="GtkLabel">
                     <property name="visible">True</property>
-                    <property name="can_focus">False</property>
+                    <property name="can-focus">False</property>
                     <property name="label" translatable="yes">Mensaje Testamento</property>
                   </object>
                   <packing>
@@ -516,10 +539,10 @@
                   </packing>
                 </child>
                 <child>
-                  <object class="GtkEntry">
-                    <property name="height_request">100</property>
+                  <object class="GtkEntry" id="con_lw_msg">
+                    <property name="height-request">100</property>
                     <property name="visible">True</property>
-                    <property name="can_focus">True</property>
+                    <property name="can-focus">True</property>
                     <property name="hexpand">False</property>
                     <property name="vexpand">True</property>
                   </object>
@@ -541,35 +564,35 @@
         <child type="tab">
           <object class="GtkLabel" id="label_connect">
             <property name="visible">True</property>
-            <property name="can_focus">False</property>
+            <property name="can-focus">False</property>
             <property name="label" translatable="yes">CONEXION</property>
           </object>
           <packing>
-            <property name="tab_fill">False</property>
+            <property name="tab-fill">False</property>
           </packing>
         </child>
         <child>
           <object class="GtkBox" id="box_publish">
             <property name="visible">True</property>
-            <property name="can_focus">False</property>
+            <property name="can-focus">False</property>
             <property name="orientation">vertical</property>
             <child>
               <object class="GtkBox">
                 <property name="visible">True</property>
-                <property name="can_focus">False</property>
+                <property name="can-focus">False</property>
                 <child>
                   <object class="GtkBox">
                     <property name="visible">True</property>
-                    <property name="can_focus">False</property>
-                    <property name="margin_start">10</property>
-                    <property name="margin_end">5</property>
-                    <property name="margin_top">11</property>
+                    <property name="can-focus">False</property>
+                    <property name="margin-start">10</property>
+                    <property name="margin-end">5</property>
+                    <property name="margin-top">11</property>
                     <property name="hexpand">True</property>
                     <property name="orientation">vertical</property>
                     <child>
                       <object class="GtkLabel">
                         <property name="visible">True</property>
-                        <property name="can_focus">False</property>
+                        <property name="can-focus">False</property>
                         <property name="label" translatable="yes">Topico</property>
                       </object>
                       <packing>
@@ -579,10 +602,9 @@
                       </packing>
                     </child>
                     <child>
-                      <object class="GtkEntry" id="pub_topic">
+                      <object class="GtkEntry" id="pub_top">
                         <property name="visible">True</property>
-                        <property name="can_focus">True</property>
-                        <property name="text" translatable="yes">top/sub</property>
+                        <property name="can-focus">True</property>
                       </object>
                       <packing>
                         <property name="expand">False</property>
@@ -600,16 +622,16 @@
                 <child>
                   <object class="GtkBox">
                     <property name="visible">True</property>
-                    <property name="can_focus">False</property>
-                    <property name="margin_start">5</property>
-                    <property name="margin_end">5</property>
-                    <property name="margin_top">11</property>
+                    <property name="can-focus">False</property>
+                    <property name="margin-start">5</property>
+                    <property name="margin-end">5</property>
+                    <property name="margin-top">11</property>
                     <property name="hexpand">True</property>
                     <property name="orientation">vertical</property>
                     <child>
                       <object class="GtkLabel">
                         <property name="visible">True</property>
-                        <property name="can_focus">False</property>
+                        <property name="can-focus">False</property>
                         <property name="label" translatable="yes">QoS</property>
                       </object>
                       <packing>
@@ -619,9 +641,16 @@
                       </packing>
                     </child>
                     <child>
-                      <object class="GtkComboBox">
+                      <object class="GtkComboBox" id="pub_qos">
                         <property name="visible">True</property>
-                        <property name="can_focus">False</property>
+                        <property name="can-focus">False</property>
+                        <property name="model">qos_list</property>
+                        <child>
+                          <object class="GtkCellRendererText"/>
+                          <attributes>
+                            <attribute name="text">0</attribute>
+                          </attributes>
+                        </child>
                       </object>
                       <packing>
                         <property name="expand">False</property>
@@ -639,16 +668,16 @@
                 <child>
                   <object class="GtkBox">
                     <property name="visible">True</property>
-                    <property name="can_focus">False</property>
-                    <property name="margin_start">5</property>
-                    <property name="margin_end">5</property>
-                    <property name="margin_top">11</property>
+                    <property name="can-focus">False</property>
+                    <property name="margin-start">5</property>
+                    <property name="margin-end">5</property>
+                    <property name="margin-top">11</property>
                     <property name="hexpand">True</property>
                     <property name="orientation">vertical</property>
                     <child>
                       <object class="GtkLabel">
                         <property name="visible">True</property>
-                        <property name="can_focus">False</property>
+                        <property name="can-focus">False</property>
                         <property name="label" translatable="yes">Retener</property>
                       </object>
                       <packing>
@@ -658,12 +687,12 @@
                       </packing>
                     </child>
                     <child>
-                      <object class="GtkSwitch">
+                      <object class="GtkSwitch" id="pub_ret">
                         <property name="visible">True</property>
-                        <property name="can_focus">True</property>
+                        <property name="can-focus">True</property>
                         <property name="halign">center</property>
                         <property name="valign">center</property>
-                        <property name="margin_top">7</property>
+                        <property name="margin-top">7</property>
                         <property name="hexpand">False</property>
                         <property name="vexpand">False</property>
                       </object>
@@ -683,16 +712,16 @@
                 <child>
                   <object class="GtkBox">
                     <property name="visible">True</property>
-                    <property name="can_focus">False</property>
-                    <property name="margin_start">5</property>
-                    <property name="margin_end">10</property>
-                    <property name="margin_top">11</property>
+                    <property name="can-focus">False</property>
+                    <property name="margin-start">5</property>
+                    <property name="margin-end">10</property>
+                    <property name="margin-top">11</property>
                     <property name="hexpand">True</property>
                     <property name="orientation">vertical</property>
                     <child>
                       <object class="GtkLabel">
                         <property name="visible">True</property>
-                        <property name="can_focus">False</property>
+                        <property name="can-focus">False</property>
                       </object>
                       <packing>
                         <property name="expand">False</property>
@@ -701,11 +730,11 @@
                       </packing>
                     </child>
                     <child>
-                      <object class="GtkButton" id="publish_button">
+                      <object class="GtkButton" id="pub_btn">
                         <property name="label" translatable="yes">PUBLICAR</property>
                         <property name="visible">True</property>
-                        <property name="can_focus">True</property>
-                        <property name="receives_default">True</property>
+                        <property name="can-focus">True</property>
+                        <property name="receives-default">True</property>
                       </object>
                       <packing>
                         <property name="expand">False</property>
@@ -730,21 +759,21 @@
             <child>
               <object class="GtkBox">
                 <property name="visible">True</property>
-                <property name="can_focus">False</property>
-                <property name="margin_start">10</property>
-                <property name="margin_end">10</property>
-                <property name="margin_top">11</property>
-                <property name="margin_bottom">11</property>
+                <property name="can-focus">False</property>
+                <property name="margin-start">10</property>
+                <property name="margin-end">10</property>
+                <property name="margin-top">11</property>
+                <property name="margin-bottom">11</property>
                 <property name="hexpand">True</property>
                 <property name="vexpand">True</property>
                 <property name="orientation">vertical</property>
                 <child>
                   <object class="GtkLabel">
                     <property name="visible">True</property>
-                    <property name="can_focus">False</property>
+                    <property name="can-focus">False</property>
                     <property name="label" translatable="yes">Mensaje</property>
                     <property name="wrap">True</property>
-                    <property name="width_chars">1</property>
+                    <property name="width-chars">1</property>
                     <attributes>
                       <attribute name="weight" value="semibold"/>
                       <attribute name="size" value="14336"/>
@@ -757,13 +786,29 @@
                   </packing>
                 </child>
                 <child>
-                  <object class="GtkEntry" id="pub_msg">
-                    <property name="height_request">100</property>
+                  <object class="GtkBox">
                     <property name="visible">True</property>
-                    <property name="can_focus">True</property>
-                    <property name="hexpand">False</property>
+                    <property name="can-focus">False</property>
+                    <property name="margin-start">10</property>
+                    <property name="margin-end">10</property>
+                    <property name="hexpand">True</property>
                     <property name="vexpand">True</property>
-                    <property name="text" translatable="yes">Topic test message: Lorem, ipsum dolor sit amet consectetur adipisicing elit. Autem, dolore!</property>
+                    <property name="orientation">vertical</property>
+                    <child>
+                      <object class="GtkTextView">
+                        <property name="visible">True</property>
+                        <property name="app-paintable">True</property>
+                        <property name="can-focus">True</property>
+                        <property name="vexpand">True</property>
+                        <property name="wrap-mode">word</property>
+                        <property name="buffer">pub_mg_txtbuffer</property>
+                      </object>
+                      <packing>
+                        <property name="expand">False</property>
+                        <property name="fill">True</property>
+                        <property name="position">0</property>
+                      </packing>
+                    </child>
                   </object>
                   <packing>
                     <property name="expand">False</property>
@@ -786,36 +831,36 @@
         <child type="tab">
           <object class="GtkLabel" id="label_publish">
             <property name="visible">True</property>
-            <property name="can_focus">False</property>
+            <property name="can-focus">False</property>
             <property name="label" translatable="yes">PUBLICAR</property>
           </object>
           <packing>
             <property name="position">1</property>
-            <property name="tab_fill">False</property>
+            <property name="tab-fill">False</property>
           </packing>
         </child>
         <child>
           <object class="GtkBox" id="box_subscription">
             <property name="visible">True</property>
-            <property name="can_focus">False</property>
+            <property name="can-focus">False</property>
             <property name="orientation">vertical</property>
             <child>
               <object class="GtkBox">
                 <property name="visible">True</property>
-                <property name="can_focus">False</property>
+                <property name="can-focus">False</property>
                 <child>
                   <object class="GtkBox">
                     <property name="visible">True</property>
-                    <property name="can_focus">False</property>
-                    <property name="margin_start">10</property>
-                    <property name="margin_end">5</property>
-                    <property name="margin_top">11</property>
+                    <property name="can-focus">False</property>
+                    <property name="margin-start">10</property>
+                    <property name="margin-end">5</property>
+                    <property name="margin-top">11</property>
                     <property name="hexpand">True</property>
                     <property name="orientation">vertical</property>
                     <child>
                       <object class="GtkLabel">
                         <property name="visible">True</property>
-                        <property name="can_focus">False</property>
+                        <property name="can-focus">False</property>
                         <property name="label" translatable="yes">Topico</property>
                       </object>
                       <packing>
@@ -825,10 +870,9 @@
                       </packing>
                     </child>
                     <child>
-                      <object class="GtkEntry" id="sub_topic">
+                      <object class="GtkEntry" id="sub_top">
                         <property name="visible">True</property>
-                        <property name="can_focus">True</property>
-                        <property name="text" translatable="yes">top/sub</property>
+                        <property name="can-focus">True</property>
                       </object>
                       <packing>
                         <property name="expand">False</property>
@@ -846,16 +890,16 @@
                 <child>
                   <object class="GtkBox">
                     <property name="visible">True</property>
-                    <property name="can_focus">False</property>
-                    <property name="margin_start">5</property>
-                    <property name="margin_end">5</property>
-                    <property name="margin_top">11</property>
+                    <property name="can-focus">False</property>
+                    <property name="margin-start">5</property>
+                    <property name="margin-end">5</property>
+                    <property name="margin-top">11</property>
                     <property name="hexpand">True</property>
                     <property name="orientation">vertical</property>
                     <child>
                       <object class="GtkLabel">
                         <property name="visible">True</property>
-                        <property name="can_focus">False</property>
+                        <property name="can-focus">False</property>
                         <property name="label" translatable="yes">QoS</property>
                       </object>
                       <packing>
@@ -865,9 +909,16 @@
                       </packing>
                     </child>
                     <child>
-                      <object class="GtkComboBox">
+                      <object class="GtkComboBox" id="sub_qos">
                         <property name="visible">True</property>
-                        <property name="can_focus">False</property>
+                        <property name="can-focus">False</property>
+                        <property name="model">qos_list</property>
+                        <child>
+                          <object class="GtkCellRendererText"/>
+                          <attributes>
+                            <attribute name="text">0</attribute>
+                          </attributes>
+                        </child>
                       </object>
                       <packing>
                         <property name="expand">False</property>
@@ -885,16 +936,16 @@
                 <child>
                   <object class="GtkBox">
                     <property name="visible">True</property>
-                    <property name="can_focus">False</property>
-                    <property name="margin_start">5</property>
-                    <property name="margin_end">10</property>
-                    <property name="margin_top">11</property>
+                    <property name="can-focus">False</property>
+                    <property name="margin-start">5</property>
+                    <property name="margin-end">10</property>
+                    <property name="margin-top">11</property>
                     <property name="hexpand">True</property>
                     <property name="orientation">vertical</property>
                     <child>
                       <object class="GtkLabel">
                         <property name="visible">True</property>
-                        <property name="can_focus">False</property>
+                        <property name="can-focus">False</property>
                       </object>
                       <packing>
                         <property name="expand">False</property>
@@ -903,11 +954,11 @@
                       </packing>
                     </child>
                     <child>
-                      <object class="GtkButton" id="subscribe_button">
+                      <object class="GtkButton" id="sub_btn">
                         <property name="label" translatable="yes">Suscribirse</property>
                         <property name="visible">True</property>
-                        <property name="can_focus">True</property>
-                        <property name="receives_default">True</property>
+                        <property name="can-focus">True</property>
+                        <property name="receives-default">True</property>
                       </object>
                       <packing>
                         <property name="expand">False</property>
@@ -932,8 +983,8 @@
             <child>
               <object class="GtkLabel">
                 <property name="visible">True</property>
-                <property name="can_focus">False</property>
-                <property name="margin_top">10</property>
+                <property name="can-focus">False</property>
+                <property name="margin-top">10</property>
                 <property name="label" translatable="yes">Mensajes</property>
                 <attributes>
                   <attribute name="absolute-size" value="20000"/>
@@ -946,31 +997,31 @@
               </packing>
             </child>
             <child>
-              <object class="GtkListBox">
+              <object class="GtkListBox" id="sub_msgs">
                 <property name="visible">True</property>
-                <property name="can_focus">False</property>
-                <property name="resize_mode">queue</property>
+                <property name="can-focus">False</property>
+                <property name="resize-mode">queue</property>
                 <child>
                   <object class="GtkListBoxRow">
                     <property name="visible">True</property>
-                    <property name="can_focus">True</property>
+                    <property name="can-focus">True</property>
                     <child>
                       <object class="GtkBox">
                         <property name="visible">True</property>
-                        <property name="can_focus">False</property>
-                        <property name="margin_start">10</property>
-                        <property name="margin_end">10</property>
+                        <property name="can-focus">False</property>
+                        <property name="margin-start">10</property>
+                        <property name="margin-end">10</property>
                         <property name="orientation">vertical</property>
                         <child>
                           <object class="GtkBox">
                             <property name="visible">True</property>
-                            <property name="can_focus">False</property>
+                            <property name="can-focus">False</property>
                             <child>
                               <object class="GtkLabel">
                                 <property name="visible">True</property>
-                                <property name="can_focus">False</property>
-                                <property name="margin_start">10</property>
-                                <property name="margin_end">5</property>
+                                <property name="can-focus">False</property>
+                                <property name="margin-start">10</property>
+                                <property name="margin-end">5</property>
                                 <property name="label" translatable="yes">2021-10-10</property>
                               </object>
                               <packing>
@@ -982,9 +1033,9 @@
                             <child>
                               <object class="GtkLabel">
                                 <property name="visible">True</property>
-                                <property name="can_focus">False</property>
-                                <property name="margin_start">5</property>
-                                <property name="margin_end">5</property>
+                                <property name="can-focus">False</property>
+                                <property name="margin-start">5</property>
+                                <property name="margin-end">5</property>
                                 <property name="hexpand">True</property>
                                 <property name="label" translatable="yes">topic / subtopic / thing</property>
                               </object>
@@ -997,9 +1048,9 @@
                             <child>
                               <object class="GtkLabel">
                                 <property name="visible">True</property>
-                                <property name="can_focus">False</property>
-                                <property name="margin_start">5</property>
-                                <property name="margin_end">10</property>
+                                <property name="can-focus">False</property>
+                                <property name="margin-start">5</property>
+                                <property name="margin-end">10</property>
                                 <property name="label" translatable="yes">QoS 1</property>
                               </object>
                               <packing>
@@ -1017,10 +1068,20 @@
                         </child>
                         <child>
                           <object class="GtkLabel">
-                            <property name="height_request">50</property>
+                            <property name="height-request">50</property>
                             <property name="visible">True</property>
-                            <property name="can_focus">False</property>
-                            <property name="label" translatable="yes">Mensaje de Prueba</property>
+                            <property name="can-focus">False</property>
+                            <property name="halign">start</property>
+                            <property name="valign">start</property>
+                            <property name="hexpand">True</property>
+                            <property name="vexpand">True</property>
+                            <property name="xpad">10</property>
+                            <property name="ypad">10</property>
+                            <property name="label" translatable="yes">Mensaje de Prueba: Lorem ipsum dolorem ep nin subitus noc exper yil term set ola upasn inna eind aindeie ooande edanoden depnae froul ifse</property>
+                            <property name="wrap">True</property>
+                            <property name="track-visited-links">False</property>
+                            <property name="xalign">0</property>
+                            <property name="yalign">0</property>
                           </object>
                           <packing>
                             <property name="expand">False</property>
@@ -1047,12 +1108,12 @@
         <child type="tab">
           <object class="GtkLabel" id="label_subscriptions">
             <property name="visible">True</property>
-            <property name="can_focus">False</property>
+            <property name="can-focus">False</property>
             <property name="label" translatable="yes">SUSCRIPCIONES</property>
           </object>
           <packing>
             <property name="position">2</property>
-            <property name="tab_fill">False</property>
+            <property name="tab-fill">False</property>
           </packing>
         </child>
       </object>

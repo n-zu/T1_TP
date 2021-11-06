@@ -52,6 +52,16 @@ impl Client {
         let mut buf = [0u8; 1];
         while stream.read_exact(&mut buf).is_ok() {
             println!("Llego un paquete: {:?}", buf);
+            let packet_type = buf[0] >> 4;
+            match packet_type {
+                3 => {
+                    // let mut publish = Publish::read_from(&mut stream)?;
+                    println!("Llego un paquete de tipo 3");
+                }
+                _ => {
+                    println!("Llego un paquete de tipo {}", packet_type);
+                }
+            }
         }
     }
 
