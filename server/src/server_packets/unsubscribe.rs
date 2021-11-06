@@ -16,6 +16,10 @@ const MSG_INVALID_RESERVED_BITS: &str = "Reserved bits are not equal to 2";
 const MSG_AT_LEAST_ONE_TOPIC_FILTER: &str =
     "Unsubscribe packet must contain at least one topic filter";
 
+#[doc(hidden)]
+const MSG_AT_LEAST_ONE_CHAR_LONG_TOPIC_FILTER: &str =
+    "Topic filter must be at least one character long";
+
 #[derive(Debug)]
 /// Server-side Unsubscribe packet struct
 pub struct Unsubscribe {
@@ -94,8 +98,9 @@ impl Unsubscribe {
         bytes: &mut impl Read,
         topic_filters_buffer: &mut Vec<String>,
     ) -> Result<(), PacketError> {
-        while let Some(field) = Field::new_from_stream(bytes) {
-            topic_filters_buffer.push(field.value);
+        while let Some(topic_filter) = Field::new_from_stream(bytes) {
+            Self::verify_at_least_one_character_long_topic_filter(&topic_filter)?;
+            topic_filters_buffer.push(topic_filter.value);
         }
 
         if topic_filters_buffer.is_empty() {
@@ -106,13 +111,26 @@ impl Unsubscribe {
         }
         Ok(())
     }
+
+    #[doc(hidden)]
+    fn verify_at_least_one_character_long_topic_filter(
+        topic_filter: &Field,
+    ) -> Result<(), PacketError> {
+        if topic_filter.is_empty() {
+            return Err(PacketError::new_kind(
+                MSG_AT_LEAST_ONE_CHAR_LONG_TOPIC_FILTER,
+                ErrorKind::InvalidProtocol,
+            ));
+        }
+        Ok(())
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use crate::server_packets::unsubscribe::{
-        Unsubscribe, MSG_AT_LEAST_ONE_TOPIC_FILTER, MSG_INVALID_RESERVED_BITS,
-        MSG_PACKET_TYPE_UNSUBSCRIBE,
+        Unsubscribe, MSG_AT_LEAST_ONE_CHAR_LONG_TOPIC_FILTER, MSG_AT_LEAST_ONE_TOPIC_FILTER,
+        MSG_INVALID_RESERVED_BITS, MSG_PACKET_TYPE_UNSUBSCRIBE,
     };
     use packets::packet_reader::{ErrorKind, PacketError};
     use packets::utf8::Field;
@@ -121,11 +139,25 @@ mod tests {
     #[test]
     fn test_unsubscribe_packet_with_empty_topic_filter_should_raise_invalid_protocol_error() {
         let control_byte = 0b10100010u8;
-        let v: Vec<u8> = vec![2, 0, 1]; // remaining length + packet id
+        let v: Vec<u8> = vec![2, 0, 1]; // remaining length + packet id + no payload
         let mut stream = Cursor::new(v);
         let result = Unsubscribe::read_from(&mut stream, control_byte).unwrap_err();
         let expected_error =
             PacketError::new_kind(MSG_AT_LEAST_ONE_TOPIC_FILTER, ErrorKind::InvalidProtocol);
+        assert_eq!(result, expected_error);
+    }
+
+    #[test]
+    fn test_unsubscribe_packet_with_empty_string_as_topic_filter_should_raise_invalid_protocol_error(
+    ) {
+        let control_byte = 0b10100010u8;
+        let v: Vec<u8> = vec![4, 0, 1, 0, 0]; // remaining length + packet id + two bytes as 0 indicating empty string as topic filter
+        let mut stream = Cursor::new(v);
+        let result = Unsubscribe::read_from(&mut stream, control_byte).unwrap_err();
+        let expected_error = PacketError::new_kind(
+            MSG_AT_LEAST_ONE_CHAR_LONG_TOPIC_FILTER,
+            ErrorKind::InvalidProtocol,
+        );
         assert_eq!(result, expected_error);
     }
 

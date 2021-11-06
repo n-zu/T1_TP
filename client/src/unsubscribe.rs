@@ -91,7 +91,7 @@ mod tests {
     }
 
     #[test]
-    fn valid_subscribe_packet_with_id_1_and_one_topic() {
+    fn valid_unsubscribe_packet_with_id_1_and_one_topic() {
         let topics = vec!["temperatura/Argentina".to_string()];
         let result = Unsubscribe::new(1, topics).unwrap().encode().unwrap();
         let mut topic_encoded = Field::new_from_string("temperatura/Argentina")
@@ -108,7 +108,7 @@ mod tests {
     }
 
     #[test]
-    fn valid_subscribe_packet_with_id_5_and_two_topic() {
+    fn valid_unsubscribe_packet_with_id_5_and_two_topic() {
         let topics = vec![
             "temperatura/Argentina".to_string(),
             "temperatura/Uruguay".to_string(),
@@ -128,6 +128,34 @@ mod tests {
         ];
         expected.append(&mut topic_encoded_arg);
         expected.append(&mut topic_encoded_uru);
+        assert_eq!(result, expected);
+    }
+
+    #[test]
+    fn unsubscribe_packet_can_have_empty_string_as_topic_filter() {
+        let topics = vec!["".to_string()];
+        let result = Unsubscribe::new(1, topics).unwrap().encode().unwrap();
+        let mut topic_encoded = Field::new_from_string("").unwrap().encode();
+        let mut expected: Vec<u8> = vec![
+            CONTROL_TYPE_UNSUBSCRIBE,
+            4, // remaining length
+            0,
+            1, // packet id
+        ];
+        expected.append(&mut topic_encoded);
+        assert_eq!(result, expected);
+    }
+
+    #[test]
+    fn client_unsubscribe_packet_can_have_empty_topic_filter() {
+        let topics = vec![];
+        let result = Unsubscribe::new(1, topics).unwrap().encode().unwrap();
+        let expected: Vec<u8> = vec![
+            CONTROL_TYPE_UNSUBSCRIBE,
+            2, // remaining length
+            0,
+            1, // packet id
+        ];
         assert_eq!(result, expected);
     }
 }
