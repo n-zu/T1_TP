@@ -3,8 +3,8 @@ mod publish_controller;
 use publish_controller::PublishController;
 
 use gtk::{
-    prelude::{BuilderExtManual, ButtonExt, EntryExt, ListBoxExt, TextBufferExt},
-    Builder, Button, Entry, Label, ListBox, TextBuffer,
+    prelude::{BuilderExtManual, ButtonExt, EntryExt, TextBufferExt},
+    Builder, Button, Entry, ListBox, TextBuffer,
 };
 
 use crate::{
@@ -59,7 +59,7 @@ impl Controller {
             .build()
             .unwrap();
         new_client.connect(connect).unwrap();
-        new_client.start_listening();
+
         self.client.lock().unwrap().replace(new_client);
     }
 
@@ -83,10 +83,6 @@ impl Controller {
         if let Some(client) = self.client.lock().unwrap().as_mut() {
             client.subscribe(packet).unwrap();
         }
-
-        // Test
-        let mesages: ListBox = self.builder.object("sub_msgs").unwrap();
-        mesages.insert(&Label::new(Some("MENSAGE")), 0);
     }
 
     fn setup_publish(self: &Rc<Self>) {

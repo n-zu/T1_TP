@@ -128,7 +128,7 @@ impl Publish {
     pub fn read_from(stream: &mut impl Read, control_byte: u8) -> Result<Publish, PacketError> {
         let retain_flag = Self::verify_retain_flag(&control_byte);
         let qos_level = Self::verify_qos_level_flag(&control_byte)?;
-        let dup_flag = Self::verify_dup_flag(&control_byte, &qos_level)?;
+        let dup_flag = Self::verify_dup_flag(&control_byte, qos_level)?;
         Self::verify_control_packet_type(&control_byte)?;
         let mut remaining_bytes = packet_reader::read_packet_bytes(stream)?;
         let topic_name = Self::verify_topic_name(&mut remaining_bytes)?;
@@ -173,8 +173,8 @@ impl Publish {
         &self.topic_name
     }
     /// Gets QoS from a Publish packet
-    pub fn qos(&self) -> &QoSLevel {
-        &self.qos
+    pub fn qos(&self) -> QoSLevel {
+        self.qos
     }
     /// Gets retain_flag from a Publish packet
     pub fn retain_flag(&self) -> &RetainFlag {
@@ -213,9 +213,9 @@ impl Publish {
     }
 
     #[doc(hidden)]
-    fn verify_dup_flag(control_byte: &u8, qos_level: &QoSLevel) -> Result<DupFlag, PacketError> {
+    fn verify_dup_flag(control_byte: &u8, qos_level: QoSLevel) -> Result<DupFlag, PacketError> {
         let dup_flag = (control_byte & 0b1000) >> 3;
-        if *qos_level == QoSLevel::QoSLevel0 && dup_flag == 1 {
+        if qos_level == QoSLevel::QoSLevel0 && dup_flag == 1 {
             return Err(PacketError::new_kind(
                 MSG_DUP_FLAG_1_WITH_QOS_LEVEL_0,
                 ErrorKind::InvalidDupFlag,
@@ -537,11 +537,11 @@ mod tests {
         let mut stream = Cursor::new(bytes);
         let mut result = Publish::read_from(&mut stream, control_byte).unwrap();
 
-        assert_eq!(*result.qos(), QoSLevel::QoSLevel2);
+        assert_eq!(result.qos(), QoSLevel::QoSLevel2);
         result.set_max_qos(QoSLevel::QoSLevel1);
-        assert_eq!(*result.qos(), QoSLevel::QoSLevel1);
+        assert_eq!(result.qos(), QoSLevel::QoSLevel1);
         result.set_max_qos(QoSLevel::QoSLevel0);
-        assert_eq!(*result.qos(), QoSLevel::QoSLevel0);
+        assert_eq!(result.qos(), QoSLevel::QoSLevel0);
     }
 
     #[test]
