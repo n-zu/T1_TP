@@ -16,11 +16,10 @@ use self::topic_handler_error::TopicHandlerError;
 pub struct Unsubscribe;
 /************************************************************/
 
-type ClientId = String;
-type Subtopics = HashMap<ClientId, Topic>;
-type Subscribers = HashMap<ClientId, SubscriptionData>;
+type Subtopics = HashMap<String, Topic>;
+type Subscribers = HashMap<String, SubscriptionData>;
 pub struct Message {
-    pub client_id: ClientId,
+    pub client_id: String,
     pub packet: Publish,
 }
 

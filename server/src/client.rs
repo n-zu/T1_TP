@@ -13,7 +13,7 @@ use packets::{packet_reader::QoSLevel, puback::Puback, publish::Publish};
 use tracing::{debug, error, info};
 
 use crate::{
-    server::{ClientId, ServerError, ServerResult},
+    server::{ServerError, ServerResult},
     server_packets::{Connack, Connect},
 };
 
@@ -27,7 +27,7 @@ pub enum ClientStatus {
 /// Represents the state of a client on the server
 pub struct Client {
     /// Id of the client
-    id: ClientId,
+    id: String,
     /// TCP connection to send packets to the client
     stream: TcpStream,
     /// Indicates if the client is currently connected
@@ -41,14 +41,14 @@ impl Client {
     pub fn new(connect: Connect, stream: TcpStream) -> Self {
         Self {
             id: connect.client_id().to_owned(),
-            stream: stream,
+            stream,
             status: ClientStatus::Connected,
             connect,
             unacknowledged: HashMap::new(),
         }
     }
 
-    pub fn id(&self) -> &ClientId {
+    pub fn id(&self) -> &str {
         &self.id
     }
 
@@ -131,7 +131,7 @@ impl Client {
 
     pub fn send_publish(&mut self, publish: &Publish) {
         if self.connected() {
-            self.write_all(&mut publish.encode().unwrap()).unwrap();
+            self.write_all(&publish.encode().unwrap()).unwrap();
             if *publish.qos() == QoSLevel::QoSLevel1 {
                 // TODO: que pasa si el paquete ya existe en el HashMap?
                 debug!(
@@ -140,10 +140,8 @@ impl Client {
                 );
                 self.add_unacknowledged(publish);
             }
-        } else {
-            if *publish.qos() == QoSLevel::QoSLevel1 {
-                self.add_unacknowledged(publish);
-            }
+        } else if *publish.qos() == QoSLevel::QoSLevel1 {
+            self.add_unacknowledged(publish);
         }
     }
 }

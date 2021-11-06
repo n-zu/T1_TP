@@ -41,8 +41,6 @@ use crate::{
 
 pub type ServerResult<T> = Result<T, ServerError>;
 
-pub type ClientId = String;
-
 pub enum Packet {
     ConnectType(Connect),
     ConnackType(Connack),
@@ -120,7 +118,7 @@ impl Server {
         &self,
         control_byte: u8,
         stream: &mut TcpStream,
-        id: &ClientId,
+        id: &str,
     ) -> ServerResult<Packet> {
         let buf: [u8; 1] = [control_byte];
 
@@ -158,7 +156,7 @@ impl Server {
         }
     }
 
-    fn receive_packet(&self, stream: &mut TcpStream, id: &ClientId) -> Result<Packet, ServerError> {
+    fn receive_packet(&self, stream: &mut TcpStream, id: &str) -> Result<Packet, ServerError> {
         let mut buf = [0u8; 1];
         match stream.read_exact(&mut buf) {
             Ok(_) => Ok(self.read_packet(buf[0], stream, id)?),
@@ -172,7 +170,7 @@ impl Server {
         }
     }
 
-    fn handle_connect(&self, connect: Connect, id: &ClientId) -> Result<(), ServerError> {
+    fn handle_connect(&self, connect: Connect, id: &str) -> Result<(), ServerError> {
         error!("El cliente con id <{}> envio un segundo CONNECT.", id);
         self.session.disconnect(id, false)?;
         Ok(())
@@ -189,11 +187,7 @@ impl Server {
         }
     }
 
-    fn handle_publish(
-        self: &Arc<Self>,
-        mut publish: Publish,
-        id: &ClientId,
-    ) -> Result<(), ServerError> {
+    fn handle_publish(self: &Arc<Self>, mut publish: Publish, id: &str) -> Result<(), ServerError> {
         info!("Recibido PUBLISH de <{}>", id);
         publish.set_max_qos(QoSLevel::QoSLevel1);
         let (sender, receiver) = mpsc::channel();
@@ -216,19 +210,19 @@ impl Server {
         Ok(())
     }
 
-    fn handle_subscribe(&self, subscribe: Subscribe, id: &ClientId) -> Result<(), ServerError> {
+    fn handle_subscribe(&self, subscribe: Subscribe, id: &str) -> Result<(), ServerError> {
         debug!("Recibido SUBSCRIBE de <{}>", id);
         self.topic_handler.subscribe(&subscribe, id).unwrap();
         Ok(())
     }
 
-    fn handle_disconnect(&self, disconnect: Disconnect, id: &ClientId) -> ServerResult<()> {
+    fn handle_disconnect(&self, disconnect: Disconnect, id: &str) -> ServerResult<()> {
         debug!("Recibido DISCONNECT de <{}>", id);
         self.session.disconnect(id, true).unwrap();
         Ok(())
     }
 
-    fn handle_pingreq(&self, pingreq: PingReq, id: &ClientId) -> ServerResult<()> {
+    fn handle_pingreq(&self, pingreq: PingReq, id: &str) -> ServerResult<()> {
         debug!("Recibido PINGREQ de <{}>", id);
         self.session
             .client_do(id, |mut client| {
@@ -238,13 +232,13 @@ impl Server {
         Ok(())
     }
 
-    pub fn handle_packet(self: &Arc<Self>, packet: Packet, id: &ClientId) -> ServerResult<()> {
+    pub fn handle_packet(self: &Arc<Self>, packet: Packet, id: &str) -> ServerResult<()> {
         match packet {
-            Packet::ConnectType(packet) => self.handle_connect(packet, &id),
-            Packet::PublishTypee(packet) => self.handle_publish(packet, &id),
-            Packet::SubscribeType(packet) => self.handle_subscribe(packet, &id),
-            Packet::PingReqType(packet) => self.handle_pingreq(packet, &id),
-            Packet::DisconnectType(packet) => self.handle_disconnect(packet, &id),
+            Packet::ConnectType(packet) => self.handle_connect(packet, id),
+            Packet::PublishTypee(packet) => self.handle_publish(packet, id),
+            Packet::SubscribeType(packet) => self.handle_subscribe(packet, id),
+            Packet::PingReqType(packet) => self.handle_pingreq(packet, id),
+            Packet::DisconnectType(packet) => self.handle_disconnect(packet, id),
             _ => Err(ServerError::new_kind(
                 "Paquete invalido",
                 ServerErrorKind::ProtocolViolation,
@@ -277,7 +271,7 @@ impl Server {
                 let id = client.id().to_owned();
                 stream.set_read_timeout(Some(client.keep_alive()))?;
                 self.session.connect(client)?;
-                return Ok(id);
+                Ok(id)
             }
             Err(err) => {
                 error!(
@@ -293,7 +287,7 @@ impl Server {
         }
     }
 
-    fn to_threadpool(self: &Arc<Self>, id: &ClientId, packet: Packet) {
+    fn to_threadpool(self: &Arc<Self>, id: &str, packet: Packet) {
         let sv_copy = self.clone();
         let id_copy = id.to_owned();
         self.pool
@@ -303,7 +297,7 @@ impl Server {
             .unwrap()
     }
 
-    fn client_loop(self: Arc<Self>, id: ClientId, mut stream: TcpStream) {
+    fn client_loop(self: Arc<Self>, id: String, mut stream: TcpStream) {
         debug!("Entrando al loop de {}", id);
         loop {
             match self.receive_packet(&mut stream, &id) {

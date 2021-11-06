@@ -7,12 +7,12 @@ use std::{
 
 use crate::{
     client::Client,
-    server::{server_error::ServerErrorKind, ClientId, ServerError, ServerResult},
+    server::{server_error::ServerErrorKind, ServerError, ServerResult},
     server_packets::Connack,
 };
 
 pub struct Session {
-    clients: RwLock<HashMap<ClientId, Mutex<Client>>>,
+    clients: RwLock<HashMap<String, Mutex<Client>>>,
 }
 
 impl Session {
@@ -22,9 +22,9 @@ impl Session {
         }
     }
 
-    pub fn client_do<F>(&self, id: &ClientId, action: F) -> ServerResult<()>
+    pub fn client_do<F>(&self, id: &str, action: F) -> ServerResult<()>
     where
-        F: FnOnce(std::sync::MutexGuard<'_, Client>) -> (),
+        F: FnOnce(std::sync::MutexGuard<'_, Client>),
     {
         match self.clients.read().expect("Lock envenenado").get(id) {
             Some(client) => {
@@ -38,7 +38,7 @@ impl Session {
         }
     }
 
-    fn client_remove(&self, id: &ClientId) -> ServerResult<()> {
+    fn client_remove(&self, id: &str) -> ServerResult<()> {
         self.clients
             .write()
             .expect("Lock envenenado")
@@ -47,7 +47,7 @@ impl Session {
         Ok(())
     }
 
-    pub fn disconnect(&self, id: &ClientId, gracefully: bool) -> ServerResult<()> {
+    pub fn disconnect(&self, id: &str, gracefully: bool) -> ServerResult<()> {
         self.client_do(id, |mut client| client.disconnect(gracefully))
     }
 
@@ -58,21 +58,21 @@ impl Session {
             .insert(client.id().to_owned(), Mutex::new(client));
     }
 
-    fn exists(&self, id: &ClientId) -> bool {
+    fn exists(&self, id: &str) -> bool {
         self.clients
             .read()
             .expect("Lock envenenado")
             .contains_key(id)
     }
 
-    fn clean_session(&self, id: &ClientId) -> bool {
+    fn clean_session(&self, id: &str) -> bool {
         let mut clean_session = false;
         self.client_do(id, |client| clean_session = client.clean_session())
             .unwrap();
         clean_session
     }
 
-    fn send_connack(&self, id: &ClientId, session_present: u8, return_code: u8) {
+    fn send_connack(&self, id: &str, session_present: u8, return_code: u8) {
         self.client_do(id, |mut client| {
             client
                 .write_all(&Connack::new(session_present, return_code).encode())
@@ -84,10 +84,10 @@ impl Session {
     pub fn connect(&self, client: Client) -> ServerResult<()> {
         // Hay una sesion_presente en el servidor con la misma ID
         // (con clean_sesion = false)
+        let id = client.id().to_owned();
         if self.exists(client.id()) {
             // El nuevo cliente tiene clean_sesion = true, descarto
             // sesion vieja
-            let id = client.id().to_owned();
             if client.clean_session() {
                 self.client_remove(client.id())?;
                 self.client_add(client);
@@ -102,7 +102,6 @@ impl Session {
                 self.send_connack(&id, 1, 0);
             }
         } else {
-            let id = client.id().to_owned();
             self.client_add(client);
             self.send_connack(&id, 0, 0);
         }
@@ -110,7 +109,7 @@ impl Session {
         Ok(())
     }
 
-    pub fn connected(&self, id: &ClientId) -> bool {
+    pub fn connected(&self, id: &str) -> bool {
         let mut alive = false;
         match self.client_do(id, |client| alive = client.connected()) {
             Ok(_) => alive,
@@ -118,7 +117,7 @@ impl Session {
         }
     }
 
-    pub fn finish_session(&self, id: &ClientId) {
+    pub fn finish_session(&self, id: &str) {
         if self
             .clients
             .read()
