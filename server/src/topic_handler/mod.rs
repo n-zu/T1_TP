@@ -69,7 +69,7 @@ impl TopicHandler {
         packet: &Publish,
         sender: Sender<Message>,
     ) -> Result<(), TopicHandlerError> {
-        let full_topic = packet.topic_name().as_ref();
+        let full_topic = packet.topic_name();
 
         pub_rec(&self.root, full_topic, sender, packet)?;
 

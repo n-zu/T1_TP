@@ -53,14 +53,12 @@ const PROTOCOL_LEVEL: u8 = 4;
 impl Connect {
     fn verify_protocol(bytes: &mut impl Read) -> Result<(), PacketError> {
         match Field::new_from_stream(bytes) {
-            _ => Ok(()), /*
-                         Some(mensaje) if mensaje.value != "MQTT" => Err(PacketError::new_kind(
-                             "Invalid protocol",
-                             ErrorKind::InvalidProtocol,
-                         )),
-                         None => Err(PacketError::new()),
-                         Some(_mensaje) => Ok(()),
-                         */
+            Some(mensaje) if mensaje.value != "MQTT" => Err(PacketError::new_kind(
+                "Invalid protocol",
+                ErrorKind::InvalidProtocol,
+            )),
+            None => Err(PacketError::new()),
+            Some(_mensaje) => Ok(()),
         }
     }
 
@@ -68,12 +66,10 @@ impl Connect {
         let mut buf = [0; 1];
         bytes.read_exact(&mut buf)?;
         if buf[0] != PROTOCOL_LEVEL {
-            /*
             return Err(PacketError::new_kind(
                 "Invalid protocol level",
                 ErrorKind::InvalidProtocolLevel,
             ));
-            */
         }
         Ok(())
     }

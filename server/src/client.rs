@@ -145,11 +145,5 @@ impl Client {
                 self.add_unacknowledged(publish);
             }
         }
-
-        match publish.qos() {
-            QoSLevel::QoSLevel0 => self.write_all(&mut publish.encode().unwrap()).unwrap(),
-            QoSLevel::QoSLevel1 => {}
-            QoSLevel::QoSLevel2 => unreachable!(),
-        }
     }
 }

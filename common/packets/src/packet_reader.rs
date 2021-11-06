@@ -111,7 +111,15 @@ impl Error for PacketError {
 
 impl From<io::Error> for PacketError {
     fn from(error: io::Error) -> Self {
-        PacketError::new_msg(&error.to_string())
+        match error.kind() {
+            io::ErrorKind::UnexpectedEof => {
+                PacketError::new_kind(&error.to_string(), ErrorKind::UnexpectedEof)
+            }
+            io::ErrorKind::WouldBlock => {
+                PacketError::new_kind(&error.to_string(), ErrorKind::WouldBlock)
+            }
+            _ => PacketError::new_msg(&error.to_string()),
+        }
     }
 }
 
