@@ -22,8 +22,8 @@ const MSG_INVALID_PACKET_ID: &str = "Packet identifier must be greater than zero
 
 #[derive(Debug, PartialEq)]
 pub enum RetainFlag {
-    RetainFlag0,
-    RetainFlag1,
+    RetainFlag0 = 0,
+    RetainFlag1 = 1,
 }
 
 #[derive(Debug, PartialEq)]
@@ -53,6 +53,56 @@ const MSG_TOPIC_WILDCARDS: &str = "Topic name must not have wildcards";
 const MSG_DUP_FLAG_1_WITH_QOS_LEVEL_0: &str = "It can not be dup flag 1 with QoS level 0";
 
 impl Publish {
+
+    /// Creates a new Publish packet
+    ///
+    /// # Errors
+    ///
+    /// Returns error if:
+    /// * packet_identifier is None and QoS is 1
+    /// * packet_identifier is not None and QoS is 0
+    /// * topic_name or topic_message exceedes the maximum length
+    ///   established for uft8 fields in MQTT V3.1.1 standard
+    /// * topic_name contains wildcard characters
+    pub fn new(
+        duplicated: bool,
+        qos: QoSLevel,
+        retain: bool,
+        topic_name: &str,
+        topic_message: &str,
+        packet_identifier: Option<u16>,
+    ) -> Result<Self, PacketError> {
+        if packet_identifier.is_some() && qos == QoSLevel::QoSLevel0 {
+            return Err(PacketError::new_msg(
+                "Un paquete con QoS 0 no puede tener identificador",
+            ));
+        } else if packet_identifier.is_none() && qos == QoSLevel::QoSLevel1 {
+            return Err(PacketError::new_msg(
+                "Un paquete con QoS 1 debe tener un identificador",
+            ));
+        }
+
+        // FIXME: isnt this serverside?
+        // Publish::check_topic_name_cannot_contain_wildcard_characters(topic_name)?;
+
+        // Ok(Self {
+        //     duplicated,
+        //     qos,
+        //     retain,
+        //     topic_name: Field::new_from_string(topic_name)?,
+        //     topic_message: Option::from(topic_message.to_string()),
+        //     packet_identifier,
+        // })
+        Ok( Self{
+            packet_id:  packet_identifier,
+            topic_name: topic_name.to_string(),
+            qos: qos,
+            retain_flag: if retain {RetainFlag::RetainFlag1} else {RetainFlag::RetainFlag0},
+            dup_flag: if duplicated {DupFlag::DupFlag1} else {DupFlag::DupFlag0},
+            payload: Some(topic_message .to_string()),
+        })
+    }
+
     ///
     /// Returns a Publish packet with a valid state
     ///
@@ -510,5 +560,146 @@ mod tests {
         let expected_error = PacketError::new_msg(MSG_INVALID_PACKET_ID);
         let result = Publish::read_from(&mut stream, control_byte).unwrap_err();
         assert_eq!(expected_error, result);
+    }
+
+    #[test]
+    fn basic_test() {
+        let packet =
+            Publish::new(false, QoSLevel::QoSLevel0, false, "topic", "message", None).unwrap();
+        assert_eq!(
+            packet.encode().unwrap(),
+            [
+                0b00110000, // control_byte
+                14,         // remaining_length
+                0, 5, // largo topic_name
+                116, 111, 112, 105, 99, // topic
+                109, 101, 115, 115, 97, 103, 101 // message
+            ]
+        );
+    }
+
+    #[test]
+    fn test_retain_flag() {
+        let packet =
+            Publish::new(false, QoSLevel::QoSLevel0, true, "topic", "message", None).unwrap();
+        assert_eq!(
+            packet.encode().unwrap(),
+            [
+                0b00110001, // control_byte
+                14,         // remaining_length
+                0, 5, // largo topic_name
+                116, 111, 112, 105, 99, // topic
+                109, 101, 115, 115, 97, 103, 101 // message
+            ]
+        );
+    }
+
+    #[test]
+    fn test_qos_level_1() {
+        let packet = Publish::new(
+            false,
+            QoSLevel::QoSLevel1,
+            false,
+            "topic",
+            "message",
+            Some(153),
+        )
+        .unwrap();
+        assert_eq!(
+            packet.encode().unwrap(),
+            [
+                0b00110010, // control_byte
+                16,         // remaining_length
+                0, 5, // largo topic_name
+                116, 111, 112, 105, 99, // topic
+                0, 153, // packet_identifier
+                109, 101, 115, 115, 97, 103, 101 // message
+            ]
+        );
+    }
+
+    #[test]
+    fn test_packet_identifier() {
+        let packet = Publish::new(
+            false,
+            QoSLevel::QoSLevel1,
+            false,
+            "topic",
+            "message",
+            Some(350),
+        )
+        .unwrap();
+        assert_eq!(
+            packet.encode().unwrap(),
+            [
+                0b00110010, // control_byte
+                16,         // remaining_length
+                0, 5, // largo topic_name
+                116, 111, 112, 105, 99, // topic
+                1, 94, // packet_identifier
+                109, 101, 115, 115, 97, 103, 101 // message
+            ]
+        );
+    }
+
+    #[test]
+    fn test_publish_cannot_have_packet_identifier_with_qos_0() {
+        let packet = Publish::new(
+            false,
+            QoSLevel::QoSLevel0,
+            false,
+            "topic",
+            "message",
+            Some(350),
+        );
+        assert!(packet.is_err());
+    }
+
+    #[test]
+    fn test_publish_must_have_packet_identifier_with_qos_1() {
+        let packet = Publish::new(false, QoSLevel::QoSLevel1, false, "topic", "message", None);
+        assert!(packet.is_err());
+    }
+
+    #[test]
+    fn test_topic_name_cannot_contain_single_level_wildcard() {
+        let packet = Publish::new(
+            false,
+            QoSLevel::QoSLevel1,
+            false,
+            "topic+",
+            "message",
+            Some(350),
+        );
+        assert!(packet.is_err());
+    }
+
+    #[test]
+    fn test_topic_name_cannot_contain_multi_level_wildcard() {
+        let packet = Publish::new(
+            false,
+            QoSLevel::QoSLevel1,
+            false,
+            "topic#",
+            "message",
+            Some(350),
+        );
+        assert!(packet.is_err());
+    }
+
+    #[test]
+    fn test_zero_length_payload() {
+        let packet =
+            Publish::new(false, QoSLevel::QoSLevel1, false, "topic", "", Some(350)).unwrap();
+        assert_eq!(
+            packet.encode().unwrap(),
+            [
+                0b00110010, // control_byte
+                9,          // remaining_length
+                0, 5, // largo topic_name
+                116, 111, 112, 105, 99, // topic
+                1, 94, // packet_identifier + zero length payload
+            ]
+        );
     }
 }
