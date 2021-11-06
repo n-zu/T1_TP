@@ -1,3 +1,4 @@
+#![allow(unused)]
 use packets::packet_reader::{ErrorKind, PacketError, RemainingLength};
 use packets::utf8::Field;
 
@@ -14,6 +15,12 @@ pub struct Unsubscribe {
 }
 
 impl Unsubscribe {
+    /// Returns a new Unsubscribe packet given a packet id and topic filters
+    ///
+    /// # Errors
+    ///
+    /// This functions returns PacketError if:
+    /// - packet_id is zero
     pub fn new(packet_id: u16, topic_filters: Vec<String>) -> Result<Unsubscribe, PacketError> {
         Self::verify_packet_id(&packet_id)?;
         Ok(Self {
@@ -22,6 +29,12 @@ impl Unsubscribe {
         })
     }
 
+    /// Encodes Unsubscribe packet into its byte representation following MQTT v3.1.1 protocol
+    ///
+    /// # Errors
+    ///
+    /// This function returns PacketError if:
+    /// - Remaining length is greater than 256 MB
     pub fn encode(&self) -> Result<Vec<u8>, PacketError> {
         let mut bytes = Vec::new();
         bytes.append(&mut self.fixed_header()?);
