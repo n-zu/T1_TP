@@ -36,31 +36,3 @@ fn main() {
 
     app.run();
 }
-
-/*
-fn do_something(client :&mut Client) {
-    // create subscribe packet
-    let subscribe_packet = Subscribe::new(
-        vec![
-            Topic::new("topic", QoSLevel::QoSLevel0).unwrap(),
-            Topic::new("topic/sub", QoSLevel::QoSLevel1).unwrap(),
-        ],
-        1,
-    );
-
-    // create publish packet
-    let publish_packet = Publish::new(
-        false,
-        QoSLevel::QoSLevel1,
-        false,
-        "topic",
-        "message",
-        Some(2),
-    )
-    .unwrap();
-
-    client.subscribe(subscribe_packet).unwrap();
-
-    client.publish(publish_packet).unwrap();
-}
- */

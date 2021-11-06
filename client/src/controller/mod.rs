@@ -1,4 +1,6 @@
 use std::{rc::Rc, sync::Mutex};
+mod publish_controller;
+use publish_controller::PublishController;
 
 use gtk::{
     prelude::{BuilderExtManual, ButtonExt, EntryExt, ListBoxExt, TextBufferExt},
@@ -14,7 +16,7 @@ use crate::{
 
 pub struct Controller {
     builder: Builder,
-    client: Mutex<Option<Client>>,
+    client: Mutex<Option<Client<PublishController>>>,
 }
 
 impl Controller {
@@ -49,7 +51,8 @@ impl Controller {
         let full_addr = format!("{}:{}", &addr.text().to_string(), &port.text().to_string());
 
         // FIXME: Crashes if no server is connected
-        let mut new_client = Client::new(&full_addr).unwrap();
+        let pub_list : ListBox= self.builder.object("sub_msgs").unwrap();
+        let mut new_client = Client::new(&full_addr, PublishController::new(pub_list)).unwrap();
         let connect = ConnectBuilder::new(&id.text().to_string(), 0, true)
             .unwrap()
             .build()
