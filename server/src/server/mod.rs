@@ -25,19 +25,7 @@ const CONNECTION_WAIT_TIMEOUT: Duration = Duration::from_secs(180);
 
 use packets::publish::Publish;
 
-use crate::{
-    client::Client,
-    config::Config,
-    server::server_error::ServerErrorKind,
-<<<<<<< HEAD
-    server_packets::{Connack, Connect, Disconnect, Subscribe},
-    session::Session,
-    topic_handler::{Publisher, TopicHandler},
-=======
-    server_packets::{Connack, Connect, Subscribe},
-    topic_handler::TopicHandler,
->>>>>>> ff83bcaeabcf0ef0698ea45039c0c1d3fb497b17
-};
+use crate::{client::Client, config::Config, server::server_error::ServerErrorKind, server_packets::{Connack, Connect, Subscribe}, session::Session, topic_handler::TopicHandler};
 
 pub type ServerResult<T> = Result<T, ServerError>;
 
@@ -102,19 +90,6 @@ fn get_code_type(code: u8) -> Result<PacketType, PacketError> {
     }
 }
 
-<<<<<<< HEAD
-impl Publisher for Server {
-    fn send_publish(&self, id: &str, publish: &Publish) {
-        self.session
-            .client_do(&id.to_owned(), |client| {
-                client.send_publish(publish);
-            })
-            .unwrap();
-    }
-}
-
-=======
->>>>>>> ff83bcaeabcf0ef0698ea45039c0c1d3fb497b17
 impl Server {
     /// Creates a new Server
     pub fn new(config: Config, threadpool_size: usize) -> Arc<Self> {
@@ -192,16 +167,10 @@ impl Server {
         Ok(())
     }
 
-<<<<<<< HEAD
-    fn handle_publish(&self, publish: Publish, id: &ClientId) -> Result<(), ServerError> {
-        debug!("Recibido PUBLISH de <{}>", id);
-        self.topic_handler.publish(&publish, self).unwrap();
-=======
     #[doc(hidden)]
     fn handle_publish(&self, publish: Publish, client_id: &str) -> Result<(), ServerError> {
         info!("Recibido Publish de <{}>", client_id);
         //self.topic_handler.publish(&publish, self).unwrap();
->>>>>>> ff83bcaeabcf0ef0698ea45039c0c1d3fb497b17
         Ok(())
     }
 

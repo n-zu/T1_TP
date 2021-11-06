@@ -50,11 +50,9 @@ pub enum ErrorKind {
     ErrorAtReadingPacket,
     TopicNameMustBeAtLeastOneCharacterLong,
     TopicNameMustNotHaveWildcards,
-<<<<<<< HEAD
-    Idle,
-=======
     InvalidReturnCode,
->>>>>>> 5cf7757ddac8d0e08aea518ba4f776eabe4c74c8
+    WouldBlock,
+    UnexpectedEof,
     Other,
 }
 

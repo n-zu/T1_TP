@@ -1,10 +1,9 @@
 #![allow(dead_code)]
-<<<<<<< HEAD
-use std::io::{self, Read};
-=======
 
-use std::{convert::TryFrom, io::Read};
->>>>>>> ff83bcaeabcf0ef0698ea45039c0c1d3fb497b17
+use std::{
+    convert::TryFrom,
+    io::{self, Read},
+};
 
 use packets::{
     packet_reader::{self, ErrorKind, PacketError, QoSLevel},
@@ -211,9 +210,9 @@ impl Connect {
                 }
             }
             Err(err) if err.kind() == io::ErrorKind::WouldBlock => {
-                Err(PacketError::new_kind("Would block", ErrorKind::Idle))
+                Err(PacketError::new_kind("Would block", ErrorKind::WouldBlock))
             }
-            Err(_) => panic!("panico"),
+            Err(_) => todo!(),
         }
     }
 

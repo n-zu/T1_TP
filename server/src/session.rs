@@ -7,11 +7,9 @@ use std::{
 
 use crate::{
     client::Client,
-    server::{server_error::ServerErrorKind, ServerError, ServerResult},
+    server::{server_error::ServerErrorKind, ClientId, ServerError, ServerResult},
     server_packets::Connack,
 };
-
-type ClientId = String;
 
 pub struct Session {
     clients: RwLock<HashMap<ClientId, Mutex<Client>>>,
@@ -50,7 +48,7 @@ impl Session {
     }
 
     pub fn disconnect(&self, id: &ClientId, gracefully: bool) -> ServerResult<()> {
-        self.client_do(id, |client| client.disconnect(gracefully))
+        self.client_do(id, |mut client| client.disconnect(gracefully))
     }
 
     fn client_add(&self, client: Client) {
@@ -75,17 +73,10 @@ impl Session {
     }
 
     fn send_connack(&self, id: &ClientId, session_present: u8, return_code: u8) {
-        self.client_do(id, |client| {
+        self.client_do(id, |mut client| {
             client
                 .write_all(&Connack::new(session_present, return_code).encode())
                 .unwrap();
-        })
-        .unwrap();
-    }
-
-    fn restore_session(&self, id: &ClientId) {
-        self.client_do(id, |client| {
-            client.send_unacknowledged();
         })
         .unwrap();
     }
@@ -109,7 +100,6 @@ impl Session {
                 })
                 .unwrap();
                 self.send_connack(&id, 1, 0);
-                self.restore_session(&id);
             }
         } else {
             let id = client.id().to_owned();
@@ -128,16 +118,17 @@ impl Session {
         }
     }
 
-    pub fn refresh(&self, id: &ClientId) {
-        self.client_do(id, |mut client| client.refresh()).unwrap()
-    }
-
     pub fn finish_session(&self, id: &ClientId) {
-        let clients = self.clients.read().unwrap();
-        let client = clients.get(id).unwrap().lock().unwrap();
-        if client.clean_session() {
-            drop(client);
-            drop(clients);
+        if self
+            .clients
+            .read()
+            .unwrap()
+            .get(id)
+            .unwrap()
+            .lock()
+            .unwrap()
+            .clean_session()
+        {
             self.client_remove(id).unwrap();
         }
     }

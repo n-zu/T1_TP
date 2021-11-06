@@ -14,7 +14,7 @@ pub enum ServerErrorKind {
     RepeatedId,
     ClientDisconnected,
     ClientNotFound,
-    Idle,
+    Timeout,
     Other,
     _NonExhaustive,
 }
@@ -33,10 +33,15 @@ impl std::error::Error for ServerError {
 
 impl From<io::Error> for ServerError {
     fn from(error: io::Error) -> Self {
-        if error.kind() == io::ErrorKind::WouldBlock {
-            ServerError::new_kind("Would block", ServerErrorKind::Idle)
-        } else {
-            ServerError::new_msg(&error.to_string())
+        match error.kind() {
+            io::ErrorKind::UnexpectedEof => ServerError::new_kind(
+                "Se desconecto sin avisar",
+                ServerErrorKind::ClientDisconnected,
+            ),
+            io::ErrorKind::WouldBlock => {
+                ServerError::new_kind("Connection timeout", ServerErrorKind::Timeout)
+            }
+            _ => ServerError::new_msg(&error.to_string()),
         }
     }
 }
@@ -49,8 +54,8 @@ impl From<ServerError> for io::Error {
 
 impl From<PacketError> for ServerError {
     fn from(packet_error: PacketError) -> Self {
-        if packet_error.kind() == ErrorKind::Idle {
-            ServerError::new_kind(&packet_error.to_string(), ServerErrorKind::Idle)
+        if packet_error.kind() == ErrorKind::WouldBlock {
+            ServerError::new_kind(&packet_error.to_string(), ServerErrorKind::Timeout)
         } else {
             ServerError::new_msg(&packet_error.to_string())
         }
