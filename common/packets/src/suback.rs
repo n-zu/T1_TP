@@ -11,7 +11,7 @@ pub struct Suback {
 }
 
 #[doc(hidden)]
-const CONTROL_BYTE: u8 = 0b10010000;
+const CONTROL_BYTE_SUBACK: u8 = 0b10010000;
 #[doc(hidden)]
 const MSG_INVALID_RETURN_CODE: &str = "Allowed return codes are 0x00, 0x01, 0x80";
 #[doc(hidden)]
@@ -30,16 +30,6 @@ const SUBACK_CONTROL_PACKET_TYPE: u8 = 9;
 const MSG_PACKET_TYPE_SUBACK: &str = "Packet type must be 9 for a Suback packet";
 
 impl Suback {
-    /// Returns a new Suback packet struct from a given subscribe packet id
-    ///
-    /// The subscribe_packet_id should be the same from the subscribe packet this Suback is acknowledging
-    pub fn new(subscribe_packet_id: u16) -> Self {
-        Self {
-            return_codes: Vec::new(),
-            subscribe_packet_id,
-        }
-    }
-
     /// Returns a new Suback packet struct from a given subscribe packet id and given return codes
     /// The subscribe_packet_id should be the same from the subscribe packet this Suback is acknowledging
     /// The order of return codes in the Suback packet must match the order of Topic Filters in the Subscribe Packet
@@ -82,6 +72,7 @@ impl Suback {
     }
 
     /// Reads from a stream of bytes and returns a valid Suback packet
+    /// It is assumed that the first byte was read into control_byte parameter
     ///
     /// # Errors
     ///
@@ -114,17 +105,6 @@ impl Suback {
             return_codes,
             subscribe_packet_id,
         })
-    }
-
-    /// Adds a return code into the Suback packet
-    ///
-    /// # Errors
-    ///
-    /// Allowed return codes are 0x00, 0x01, 0x80. If a return code doesn't match any of those, this function returns a [ErrorKind::InvalidReturnCode]
-    pub fn add_return_code(&mut self, return_code: u8) -> Result<(), PacketError> {
-        Self::verify_return_code(&return_code)?;
-        self.return_codes.push(return_code);
-        Ok(())
     }
 
     #[doc(hidden)]
@@ -193,7 +173,7 @@ impl Suback {
 
     #[doc(hidden)]
     fn fixed_header(&self) -> Result<Vec<u8>, PacketError> {
-        let mut fixed_header: Vec<u8> = vec![CONTROL_BYTE];
+        let mut fixed_header: Vec<u8> = vec![CONTROL_BYTE_SUBACK];
         let remaining_length =
             RemainingLength::from_uncoded(self.return_codes.len() + self.variable_header().len())?;
         let mut remaining_length_buff = remaining_length.encode();
@@ -212,7 +192,9 @@ impl Suback {
 #[cfg(test)]
 mod tests {
     use crate::packet_reader::{ErrorKind, PacketError};
-    use crate::suback::{Suback, CONTROL_BYTE, MSG_INVALID_RETURN_CODE, MSG_PACKET_TYPE_SUBACK};
+    use crate::suback::{
+        Suback, CONTROL_BYTE_SUBACK, MSG_INVALID_RETURN_CODE, MSG_PACKET_TYPE_SUBACK,
+    };
     use std::io::Cursor;
 
     #[test]
@@ -220,7 +202,7 @@ mod tests {
         let return_codes: Vec<u8> = vec![0, 1, 1, 1];
         let mut suback = Suback::new_from_vec(return_codes, 1).unwrap();
         let encoded_suback = suback.encode().unwrap();
-        let expected: Vec<u8> = vec![CONTROL_BYTE, 6, 0, 1, 0, 1, 1, 1];
+        let expected: Vec<u8> = vec![CONTROL_BYTE_SUBACK, 6, 0, 1, 0, 1, 1, 1];
         assert_eq!(encoded_suback, expected)
     }
 
@@ -229,7 +211,7 @@ mod tests {
         let return_codes: Vec<u8> = vec![0, 0, 0, 0];
         let mut suback = Suback::new_from_vec(return_codes, 2).unwrap();
         let expected_suback = suback.encode().unwrap();
-        let expected: Vec<u8> = vec![CONTROL_BYTE, 6, 0, 2, 0, 0, 0, 0];
+        let expected: Vec<u8> = vec![CONTROL_BYTE_SUBACK, 6, 0, 2, 0, 0, 0, 0];
         assert_eq!(expected_suback, expected)
     }
     #[test]
@@ -255,20 +237,20 @@ mod tests {
     #[test]
     fn test_correct_suback_with_packet_id_1_and_return_codes_0_from_stream() {
         let stream_aux = vec![6, 0, 1, 0, 0, 0, 0];
-        let control_byte = CONTROL_BYTE;
+        let control_byte = CONTROL_BYTE_SUBACK;
         let mut stream = Cursor::new(stream_aux);
         let result = Suback::read_from(&mut stream, control_byte)
             .unwrap()
             .encode()
             .unwrap();
-        let expected = vec![CONTROL_BYTE, 6, 0, 1, 0, 0, 0, 0];
+        let expected = vec![CONTROL_BYTE_SUBACK, 6, 0, 1, 0, 0, 0, 0];
         assert_eq!(result, expected);
     }
 
     #[test]
     fn test_stream_with_return_code_3_should_raise_invalid_return_code() {
         let stream_aux = vec![6, 0, 1, 3, 0, 1, 0];
-        let control_byte = CONTROL_BYTE;
+        let control_byte = CONTROL_BYTE_SUBACK;
         let mut stream = Cursor::new(stream_aux);
         let result = Suback::read_from(&mut stream, control_byte).unwrap_err();
         let expected_error =

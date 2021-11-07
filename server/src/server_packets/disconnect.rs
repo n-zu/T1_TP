@@ -34,7 +34,7 @@ impl Disconnect {
             println!("FAIL {}", control_byte & RESERVED_MASK);
             Err(PacketError::new_kind(
                 "Los bytes reservados del byte de control no son 0",
-                ErrorKind::InvalidReservedBytes,
+                ErrorKind::InvalidReservedBits,
             ))
         } else {
             Ok(())
