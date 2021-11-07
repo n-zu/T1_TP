@@ -5,6 +5,7 @@ mod disconnect;
 mod publish;
 mod subscribe;
 mod unsubscribe;
+mod unsuback;
 
 use crate::{client::Client, connect::ConnectBuilder};
 
