@@ -184,7 +184,7 @@ impl Publish {
         bytes: &mut impl Read,
         qos_level: &QoSLevel,
     ) -> Result<Option<u16>, PacketError> {
-        if *qos_level != QoSLevel::QoSLevel1 {
+        if *qos_level == QoSLevel::QoSLevel0 {
             return Ok(None);
         }
         let mut packet_id_buffer = [0u8; 2];
