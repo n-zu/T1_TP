@@ -5,10 +5,9 @@ use std::{io::Write, net::TcpStream};
 
 use packets::packet_reader::PacketError;
 
+use crate::client_packets::{Connack, Connect, Subscribe};
+
 use crate::client_error::ClientError;
-use crate::connack::Connack;
-use crate::connect::Connect;
-use crate::subscribe::Subscribe;
 use packets::publish::Publish;
 use threadpool::ThreadPool;
 

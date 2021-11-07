@@ -1,10 +1,7 @@
 mod client;
 mod client_error;
-mod connack;
-mod connect;
+mod client_packets;
 mod controller;
-mod disconnect;
-mod subscribe;
 use crate::controller::Controller;
 use gtk::Builder;
 use gtk::{

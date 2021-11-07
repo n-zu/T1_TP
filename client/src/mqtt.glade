@@ -3,7 +3,7 @@
 <interface>
   <requires lib="gtk+" version="3.24"/>
   <object class="GtkTextBuffer" id="pub_mg_txtbuffer">
-    <property name="text" translatable="yes">Mensage: No le puse borde a la caja</property>
+    <property name="text" translatable="yes">Mensaje default : Lorem ipsum, dolor sit amet consectetur adipisicing elit. Quaerat, inventore.</property>
   </object>
   <object class="GtkListStore" id="qos_list">
     <columns>
@@ -106,6 +106,7 @@
                       <object class="GtkEntry" id="con_port">
                         <property name="visible">True</property>
                         <property name="can_focus">True</property>
+                        <property name="text" translatable="yes">1883</property>
                       </object>
                       <packing>
                         <property name="expand">False</property>
@@ -145,6 +146,7 @@
                       <object class="GtkEntry" id="con_cli">
                         <property name="visible">True</property>
                         <property name="can_focus">True</property>
+                        <property name="text" translatable="yes">default_client</property>
                       </object>
                       <packing>
                         <property name="expand">False</property>
@@ -447,12 +449,6 @@
                         <property name="visible">True</property>
                         <property name="can_focus">False</property>
                         <property name="model">qos_list</property>
-                        <child>
-                          <object class="GtkCellRendererText"/>
-                          <attributes>
-                            <attribute name="text">0</attribute>
-                          </attributes>
-                        </child>
                       </object>
                       <packing>
                         <property name="expand">False</property>
@@ -608,6 +604,7 @@
                       <object class="GtkEntry" id="pub_top">
                         <property name="visible">True</property>
                         <property name="can_focus">True</property>
+                        <property name="text" translatable="yes">top/sub</property>
                       </object>
                       <packing>
                         <property name="expand">False</property>
@@ -648,12 +645,6 @@
                         <property name="visible">True</property>
                         <property name="can_focus">False</property>
                         <property name="model">qos_list</property>
-                        <child>
-                          <object class="GtkCellRendererText"/>
-                          <attributes>
-                            <attribute name="text">0</attribute>
-                          </attributes>
-                        </child>
                       </object>
                       <packing>
                         <property name="expand">False</property>
@@ -876,6 +867,7 @@
                       <object class="GtkEntry" id="sub_top">
                         <property name="visible">True</property>
                         <property name="can_focus">True</property>
+                        <property name="text" translatable="yes">top/sub</property>
                       </object>
                       <packing>
                         <property name="expand">False</property>
@@ -916,12 +908,6 @@
                         <property name="visible">True</property>
                         <property name="can_focus">False</property>
                         <property name="model">qos_list</property>
-                        <child>
-                          <object class="GtkCellRendererText"/>
-                          <attributes>
-                            <attribute name="text">0</attribute>
-                          </attributes>
-                        </child>
                       </object>
                       <packing>
                         <property name="expand">False</property>

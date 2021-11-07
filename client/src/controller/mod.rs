@@ -1,5 +1,6 @@
 use std::{rc::Rc, sync::Mutex};
 mod publish_controller;
+use crate::client_packets::{ConnectBuilder, Subscribe, Topic};
 use publish_controller::PublishController;
 
 use gtk::{
@@ -7,11 +8,7 @@ use gtk::{
     Builder, Button, Entry, ListBox, TextBuffer,
 };
 
-use crate::{
-    client::Client,
-    connect::ConnectBuilder,
-    subscribe::{Subscribe, Topic},
-};
+use crate::client::Client;
 
 use packets::{packet_reader::QoSLevel, publish::Publish};
 
