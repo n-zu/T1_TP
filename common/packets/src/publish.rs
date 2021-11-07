@@ -104,7 +104,6 @@ impl Publish {
         let topic_name = Self::verify_topic_name(&mut remaining_bytes)?;
         let packet_id = Self::verify_packet_id(&mut remaining_bytes, &qos_level)?;
         let payload = Self::read_payload(&mut remaining_bytes);
-
         Ok(Self {
             packet_id,
             topic_name: topic_name.value,
@@ -215,7 +214,7 @@ impl Publish {
         bytes: &mut impl Read,
         qos_level: &QoSLevel,
     ) -> Result<Option<u16>, PacketError> {
-        if *qos_level != QoSLevel::QoSLevel1 {
+        if *qos_level == QoSLevel::QoSLevel0 {
             return Ok(None);
         }
         let mut packet_id_buffer = [0u8; 2];

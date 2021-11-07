@@ -42,7 +42,7 @@ pub enum ErrorKind {
     InvalidProtocol,
     InvalidProtocolLevel,
     InvalidFlags,
-    InvalidReservedBytes,
+    InvalidReservedBits,
     ClientDisconnected,
     InvalidQoSLevel,
     InvalidDupFlag,

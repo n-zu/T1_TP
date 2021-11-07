@@ -94,6 +94,16 @@ impl Field {
     pub fn decode(&self) -> &str {
         &self.value
     }
+
+    /// Returns a Field len
+    pub fn len(&self) -> usize {
+        self.value.len()
+    }
+
+    /// Verify if this Field is empty
+    pub fn is_empty(&self) -> bool {
+        self.len() == 0
+    }
 }
 
 #[cfg(test)]
