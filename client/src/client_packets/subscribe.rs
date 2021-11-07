@@ -36,7 +36,7 @@ impl Topic {
     // Returns the topic length
     pub fn len(&self) -> usize {
         self.name.encode().len()
-        - 2 // remove 2 bytes from ecoded length 
+        - 2 // remove 2 bytes from encoded length 
         + 1 // add 1 byte for qos
     }
 }
