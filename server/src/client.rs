@@ -4,7 +4,6 @@ use std::{
     collections::HashMap,
     io::{self, Write},
     net::TcpStream,
-    time::Duration,
 };
 
 type PacketId = u16;
@@ -102,8 +101,8 @@ impl Client {
         }
     }
 
-    pub fn keep_alive(&self) -> Duration {
-        Duration::from_secs(*self.connect.keep_alive() as u64)
+    pub fn keep_alive(&self) -> u16 {
+        *self.connect.keep_alive()
     }
 
     pub fn acknowledge(&mut self, puback: Puback) {
@@ -111,8 +110,6 @@ impl Client {
         self.unacknowledged.remove(&puback.packet_id()).unwrap();
     }
 
-    // Esta en publico porque el server quiza quiera reenviar paquetes
-    // antes de una reconexion
     pub fn send_unacknowledged(&mut self) {
         for (id, publish) in self.unacknowledged.iter() {
             debug!(
@@ -124,12 +121,12 @@ impl Client {
         }
     }
 
-    fn add_unacknowledged(&mut self, publish: &Publish) {
+    fn add_unacknowledged(&mut self, publish: Publish) {
         self.unacknowledged
-            .insert(*publish.packet_id().unwrap(), publish.clone());
+            .insert(*publish.packet_id().unwrap(), publish);
     }
 
-    pub fn send_publish(&mut self, publish: &Publish) {
+    pub fn send_publish(&mut self, publish: Publish) {
         if self.connected() {
             self.write_all(&publish.encode().unwrap()).unwrap();
             if *publish.qos() == QoSLevel::QoSLevel1 {

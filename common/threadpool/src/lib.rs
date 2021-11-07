@@ -7,7 +7,7 @@ use std::{
     time::Duration,
 };
 
-use threadpool_error::ThreadPoolError;
+pub use threadpool_error::ThreadPoolError;
 mod threadpool_error;
 type Job = Box<dyn FnOnce() + Send + 'static>;
 type WorkerId = usize;
