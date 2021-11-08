@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+
 #[doc(hidden)]
 const PINGREQ_PACKET_TYPE: u8 = 0b11000000;
 #[doc(hidden)]
