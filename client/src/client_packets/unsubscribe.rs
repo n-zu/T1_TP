@@ -90,7 +90,9 @@ impl Unsubscribe {
 
 #[cfg(test)]
 mod tests {
-    use crate::unsubscribe::{Unsubscribe, CONTROL_TYPE_UNSUBSCRIBE, MSG_INVALID_PACKET_ID};
+    use crate::client_packets::unsubscribe::{
+        Unsubscribe, CONTROL_TYPE_UNSUBSCRIBE, MSG_INVALID_PACKET_ID,
+    };
     use packets::packet_reader::{ErrorKind, PacketError};
     use packets::utf8::Field;
 
