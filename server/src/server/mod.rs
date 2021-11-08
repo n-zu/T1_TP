@@ -176,7 +176,9 @@ impl Server {
         self.topic_handler.publish(&publish, sender)?;
         // QoSLevel1
         if let Some(packet_id) = publish.packet_id() {
-            self.session.read()?.send_puback(id, &Puback::new(*packet_id)?)?;
+            self.session
+                .read()?
+                .send_puback(id, &Puback::new(*packet_id)?)?;
         }
         if let Err(err) = handler.join() {
             Err(ServerError::new_msg(&format!(

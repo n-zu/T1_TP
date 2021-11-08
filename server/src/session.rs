@@ -63,14 +63,14 @@ impl Session {
     }
 
     pub fn send_puback(&self, id: &str, puback: &Puback) -> ServerResult<()> {
-        self.client_do(&id, |mut client| {
+        self.client_do(id, |mut client| {
             client.write_all(&puback.encode()).unwrap();
             Ok(())
         })
     }
 
     pub fn send_publish(&self, id: &str, publish: Publish) -> ServerResult<()> {
-        self.client_do(&id, |mut client| {
+        self.client_do(id, |mut client| {
             client.send_publish(publish);
             Ok(())
         })
