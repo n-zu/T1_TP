@@ -5,13 +5,18 @@ const REMAINING_LENGTH: u8 = 0b00000000;
 #[doc(hidden)]
 const RESERVED_BYTES_MASK: u8 = 0b00001111;
 
+/// The PingReq packet is sent from a Client to the Server,
+/// during the Keep Alive process
 struct PingReq;
 
 impl PingReq {
+    /// Creates a new PingReq packet
     pub fn new() -> PingReq {
         PingReq
     }
 
+    /// Encodes a PingReq packet according to
+    /// MQTT V3.1.1 protocol
     pub fn encode(&self) -> Vec<u8> {
         vec![PINGREQ_PACKET_TYPE, REMAINING_LENGTH]
     }
