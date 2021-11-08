@@ -1,6 +1,15 @@
-use std::{fmt, io};
+use std::{
+    collections::HashMap,
+    fmt, io,
+    sync::{Mutex, MutexGuard, PoisonError, RwLockReadGuard, RwLockWriteGuard},
+};
 
-use packets::packet_reader::PacketError;
+use packets::packet_reader::{ErrorKind, PacketError};
+use threadpool::{ThreadPool, ThreadPoolError};
+
+use crate::{
+    client::Client, session::Session, topic_handler::topic_handler_error::TopicHandlerError,
+};
 
 #[derive(Debug)]
 pub struct ServerError {
@@ -11,8 +20,11 @@ pub struct ServerError {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ServerErrorKind {
     ProtocolViolation,
-    RepeatedId,
     ClientDisconnected,
+    ClientNotFound,
+    Timeout,
+    PoinsonedLock,
+    Irrecoverable,
     Other,
     _NonExhaustive,
 }
@@ -31,19 +43,80 @@ impl std::error::Error for ServerError {
 
 impl From<io::Error> for ServerError {
     fn from(error: io::Error) -> Self {
-        ServerError::new_msg(&error.to_string())
-    }
-}
-
-impl From<ServerError> for io::Error {
-    fn from(server_error: ServerError) -> Self {
-        io::Error::new(io::ErrorKind::ConnectionAborted, "Cliente muerto")
+        match error.kind() {
+            io::ErrorKind::UnexpectedEof => ServerError::new_kind(
+                "Se desconecto sin avisar",
+                ServerErrorKind::ClientDisconnected,
+            ),
+            io::ErrorKind::WouldBlock => {
+                ServerError::new_kind("Connection timeout", ServerErrorKind::Timeout)
+            }
+            _ => ServerError::new_msg(&error.to_string()),
+        }
     }
 }
 
 impl From<PacketError> for ServerError {
     fn from(packet_error: PacketError) -> Self {
-        ServerError::new_msg(&packet_error.to_string())
+        if packet_error.kind() == ErrorKind::WouldBlock {
+            ServerError::new_kind(&packet_error.to_string(), ServerErrorKind::Timeout)
+        } else {
+            ServerError::new_msg(&packet_error.to_string())
+        }
+    }
+}
+
+impl From<PoisonError<RwLockReadGuard<'_, HashMap<String, Mutex<Client>>>>> for ServerError {
+    fn from(err: PoisonError<RwLockReadGuard<'_, HashMap<String, Mutex<Client>>>>) -> ServerError {
+        ServerError::new_kind(&err.to_string(), ServerErrorKind::PoinsonedLock)
+    }
+}
+
+impl From<PoisonError<RwLockWriteGuard<'_, HashMap<String, Mutex<Client>>>>> for ServerError {
+    fn from(err: PoisonError<RwLockWriteGuard<'_, HashMap<String, Mutex<Client>>>>) -> ServerError {
+        ServerError::new_kind(&err.to_string(), ServerErrorKind::PoinsonedLock)
+    }
+}
+
+impl From<PoisonError<RwLockReadGuard<'_, Session>>> for ServerError {
+    fn from(err: PoisonError<RwLockReadGuard<Session>>) -> ServerError {
+        ServerError::new_kind(&err.to_string(), ServerErrorKind::PoinsonedLock)
+    }
+}
+
+impl From<PoisonError<MutexGuard<'_, Client>>> for ServerError {
+    fn from(err: PoisonError<MutexGuard<'_, Client>>) -> Self {
+        ServerError::new_kind(&err.to_string(), ServerErrorKind::PoinsonedLock)
+    }
+}
+
+impl From<PoisonError<MutexGuard<'_, ThreadPool>>> for ServerError {
+    fn from(err: PoisonError<MutexGuard<'_, ThreadPool>>) -> Self {
+        ServerError::new_kind(&err.to_string(), ServerErrorKind::PoinsonedLock)
+    }
+}
+
+impl From<PoisonError<RwLockWriteGuard<'_, Session>>> for ServerError {
+    fn from(err: PoisonError<RwLockWriteGuard<'_, Session>>) -> Self {
+        ServerError::new_kind(&err.to_string(), ServerErrorKind::PoinsonedLock)
+    }
+}
+
+impl From<TopicHandlerError> for ServerError {
+    fn from(err: TopicHandlerError) -> Self {
+        ServerError::new_kind(
+            &format!("TopicHandlerError: {}", err.to_string()),
+            ServerErrorKind::Irrecoverable,
+        )
+    }
+}
+
+impl From<ThreadPoolError> for ServerError {
+    fn from(err: ThreadPoolError) -> Self {
+        ServerError::new_kind(
+            &format!("ThreadPoolError: {}", err.to_string()),
+            ServerErrorKind::Irrecoverable,
+        )
     }
 }
 

@@ -4,9 +4,9 @@ use tracing_subscriber::{fmt, prelude::__tracing_subscriber_SubscriberExt, Regis
 
 mod client;
 mod config;
-mod packet_scheduler;
 mod server;
 mod server_packets;
+mod session;
 mod topic_handler;
 
 fn main() {
@@ -21,6 +21,7 @@ fn main() {
 
     tracing::subscriber::set_global_default(subscriber).unwrap();
 
-    let server = Server::new(config);
+    let threadpool_size = 5;
+    let server = Server::new(config, threadpool_size);
     server.run().unwrap()
 }

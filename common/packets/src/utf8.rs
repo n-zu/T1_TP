@@ -1,8 +1,8 @@
 use std::io::Read;
 
-const MAX_FIELD_LEN: usize = 65535;
-
 use crate::packet_reader::PacketError;
+
+const MAX_FIELD_LEN: usize = 65535;
 
 #[derive(Debug)]
 pub struct Field {

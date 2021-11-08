@@ -19,13 +19,13 @@ const MULTI_LEVEL_WILDCARD: char = '#';
 #[doc(hidden)]
 const MSG_INVALID_PACKET_ID: &str = "Packet identifier must be greater than zero";
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub enum RetainFlag {
     RetainFlag0 = 0,
     RetainFlag1 = 1,
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub enum DupFlag {
     DupFlag0,
     DupFlag1,
@@ -34,15 +34,15 @@ pub enum DupFlag {
 #[doc(hidden)]
 const PUBLISH_CONTROL_PACKET_TYPE: u8 = 3;
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 /// Publish packet structure for server/client side
 pub struct Publish {
-    packet_id: Option<u16>,
-    topic_name: String,
-    qos: QoSLevel,
-    retain_flag: RetainFlag,
-    dup_flag: DupFlag,
-    payload: Option<String>,
+    pub packet_id: Option<u16>,
+    pub topic_name: String,
+    pub qos: QoSLevel,
+    pub retain_flag: RetainFlag,
+    pub dup_flag: DupFlag,
+    pub payload: Option<String>,
 }
 
 const MSG_TOPIC_NAME_ONE_CHAR: &str =
@@ -125,6 +125,37 @@ impl Publish {
     /// If the stream of bytes doesn't follow MQTT 3.1.1 protocol this function returns
     /// a PacketError corresponding to the type of the error encountered
     ///
+    /// # Examples
+    ///
+    /// ```
+    /// use std::io::Cursor;
+    /// use packets::packet_reader::QoSLevel;
+    /// use packets::publish::{DupFlag, RetainFlag, Publish};
+    /// use packets::utf8::Field;
+    ///
+    ///  let control_byte = 0b110010; // primer byte con los flags con QoS level 1;
+    ///  let mut remaining_data: Vec<u8> = vec![];
+    ///  let mut topic = Field::new_from_string("a/b").unwrap().encode();    ///
+    ///  let mut payload = "mensaje".as_bytes().to_vec();
+    ///  let mut packet_id_buf: Vec<u8> = vec![0b0, 0b1010]; // Seria 01010 = packet identifier 10;
+    ///  remaining_data.append(&mut topic);
+    ///  remaining_data.append(&mut packet_id_buf);
+    ///  remaining_data.append(&mut payload);
+    ///  let mut bytes = vec![];
+    ///  bytes.push(remaining_data.len() as u8);
+    ///  bytes.append(&mut remaining_data);
+    ///  let mut stream = Cursor::new(bytes);
+    ///  let expected = Publish {
+    ///             packet_id: Option::from(10 as u16),
+    ///             topic_name: "a/b".to_string(),
+    ///             qos: QoSLevel::QoSLevel1,
+    ///             retain_flag: RetainFlag::RetainFlag0,
+    ///             dup_flag: DupFlag::DupFlag0,
+    ///             payload: Option::from("mensaje".to_string()),
+    ///         };
+    ///  let result = Publish::read_from(&mut stream, control_byte).unwrap();
+    ///  assert_eq!(expected, result);
+    /// ```
     pub fn read_from(stream: &mut impl Read, control_byte: u8) -> Result<Publish, PacketError> {
         let retain_flag = Self::verify_retain_flag(&control_byte);
         let qos_level = Self::verify_qos_level_flag(&control_byte)?;
@@ -317,7 +348,7 @@ impl Publish {
     }
 
     #[doc(hidden)]
-    fn set_max_qos(&mut self, max_qos: QoSLevel) {
+    pub fn set_max_qos(&mut self, max_qos: QoSLevel) {
         if (max_qos as u8) < (self.qos as u8) {
             self.qos = max_qos;
         }

@@ -82,6 +82,11 @@ impl Puback {
         bytes
     }
 
+    /// Returns the Packet Id
+    pub fn packet_id(&self) -> u16 {
+        self.packet_id
+    }
+
     #[doc(hidden)]
     fn fixed_header(&self) -> Vec<u8> {
         let fixed_header_buffer: Vec<u8> = vec![0b01000000, 0b10];

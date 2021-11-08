@@ -1,6 +1,9 @@
 #![allow(dead_code)]
 
-use std::{convert::TryFrom, io::Read};
+use std::{
+    convert::TryFrom,
+    io::{self, Read},
+};
 
 use packets::{
     packet_reader::{self, ErrorKind, PacketError, QoSLevel},
@@ -187,6 +190,26 @@ impl Connect {
         }
 
         Ok(ret)
+    }
+
+    /***************
+    WIP
+    ****************/
+    pub fn new_from_zero(stream: &mut impl Read) -> Result<Connect, PacketError> {
+        let mut control_byte_buff: [u8; 1] = [0];
+        match stream.read_exact(&mut control_byte_buff) {
+            Ok(_) => {
+                if control_byte_buff[0] >> 4 == 1 {
+                    Connect::new(stream)
+                } else {
+                    Err(PacketError::new_msg("El paquete recibido no es CONNECT"))
+                }
+            }
+            Err(err) if err.kind() == io::ErrorKind::WouldBlock => {
+                Err(PacketError::new_kind("Would block", ErrorKind::WouldBlock))
+            }
+            Err(_) => todo!(),
+        }
     }
 
     pub fn response(&self) -> &Connack {
