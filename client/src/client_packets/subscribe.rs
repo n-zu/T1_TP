@@ -1,8 +1,7 @@
 #![allow(dead_code)]
 
-use crate::connect::QoSLevel;
 use packets::{
-    packet_reader::{PacketError, RemainingLength},
+    packet_reader::{PacketError, QoSLevel, RemainingLength},
     utf8::Field,
 };
 

@@ -1,6 +1,6 @@
 #![allow(dead_code)]
 
-use packets::packet_reader::PacketError;
+use packets::packet_reader::{PacketError, QoSLevel};
 use packets::utf8::Field;
 
 #[doc(hidden)]
@@ -16,9 +16,7 @@ const LAST_WILL_PRESENT: u8 = 0x04;
 #[doc(hidden)]
 const WILL_RETAIN: u8 = 0x20;
 #[doc(hidden)]
-const QOS_LEVEL_0: u8 = 0x00;
-#[doc(hidden)]
-const QOS_LEVEL_1: u8 = 0x08;
+const QOS_SHIFT: u8 = 3;
 #[doc(hidden)]
 const CLEAN_SESSION: u8 = 0x02;
 #[doc(hidden)]
@@ -53,14 +51,6 @@ fn encode_len(len: u32) -> Vec<u8> {
         i += 1
     }
     bytes_vec
-}
-
-#[derive(Debug, PartialEq, Copy, Clone)]
-#[repr(u8)]
-
-pub enum QoSLevel {
-    QoSLevel0 = 0,
-    QoSLevel1 = 1,
 }
 
 pub struct LastWill {
@@ -110,10 +100,9 @@ impl Connect {
             if last_will.retain {
                 flags |= WILL_RETAIN;
             }
-            match self.last_will.as_ref().unwrap().qos {
-                QoSLevel::QoSLevel0 => flags |= QOS_LEVEL_0,
-                QoSLevel::QoSLevel1 => flags |= QOS_LEVEL_1,
-            }
+
+            flags |= (last_will.qos as u8) << QOS_SHIFT;
+
             flags |= LAST_WILL_PRESENT;
         }
         if self.clean_session {
