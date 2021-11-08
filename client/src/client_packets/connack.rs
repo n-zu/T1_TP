@@ -124,7 +124,7 @@ impl Connack {
 
 #[cfg(test)]
 mod tests {
-    use crate::connack::{Connack, ConnackError};
+    use super::*;
     use std::io::Cursor;
 
     #[test]

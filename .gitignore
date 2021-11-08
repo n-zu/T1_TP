@@ -14,3 +14,5 @@ desktop.ini
 .idea
 
 server/logs/*
+*.glade~
+*#*.glade#

@@ -1,19 +1,34 @@
 mod client;
-mod connack;
-mod connect;
-mod disconnect;
-mod publish;
-mod subscribe;
-mod unsuback;
-mod unsubscribe;
+mod client_error;
+mod client_packets;
+mod controller;
+use crate::controller::Controller;
+use gtk::Builder;
+use gtk::{
+    prelude::{ApplicationExt, ApplicationExtManual, BuilderExtManual, GtkWindowExt, WidgetExt},
+    Application, Window,
+};
 
-use crate::{client::Client, connect::ConnectBuilder};
+fn main() {
+    let app = Application::builder()
+        .application_id("ar.uba.fi.rostovfc.mqtt")
+        .build();
 
-fn main() -> Result<(), String> {
-    let mut client = Client::new("127.0.0.1:1883").map_err(|err| -> String { err.to_string() })?;
+    let glade_src = include_str!("mqtt.glade");
+    app.connect_activate(move |app| {
+        // We create the main window.
+        let builder = Builder::from_string(glade_src);
+        let win: Window = builder.object("main_window").unwrap();
+        win.set_application(Some(app));
+        win.set_default_width(320);
+        win.set_default_height(200);
+        win.set_title("MQTT Client");
 
-    client.connect(ConnectBuilder::new("rust", 15, false)?.build()?)?;
+        // Don't forget to make all widgets visible.
+        win.show_all();
 
-    println!("Conexion exitosa");
-    Ok(())
+        Controller::new(builder);
+    });
+
+    app.run();
 }
