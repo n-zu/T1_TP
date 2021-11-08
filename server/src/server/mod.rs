@@ -308,7 +308,7 @@ impl Server {
         match self.connect_client(&mut stream, addr) {
             Err(err) => match err.kind() {
                 ServerErrorKind::ProtocolViolation => Err(err),
-                _ => panic!("Error inesperado"),
+                _ => panic!("Error inesperado: {}", err.to_string()),
             },
             Ok(id) => self.client_loop(id, stream),
         }
