@@ -339,6 +339,6 @@ mod tests {
         handler.publish(&publish, sender).unwrap();
 
         let message = receiver.recv().unwrap();
-        assert_eq!(*message.packet.qos(), QoSLevel::QoSLevel0);
+        assert_eq!(message.packet.qos(), QoSLevel::QoSLevel0);
     }
 }

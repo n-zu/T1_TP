@@ -129,7 +129,7 @@ impl Client {
     pub fn send_publish(&mut self, publish: Publish) {
         if self.connected() {
             self.write_all(&publish.encode().unwrap()).unwrap();
-            if *publish.qos() == QoSLevel::QoSLevel1 {
+            if publish.qos() == QoSLevel::QoSLevel1 {
                 // TODO: que pasa si el paquete ya existe en el HashMap?
                 debug!(
                     "{}: Agregando PUBLISH a lista de paquetes no confirmados",
@@ -137,7 +137,7 @@ impl Client {
                 );
                 self.add_unacknowledged(publish);
             }
-        } else if *publish.qos() == QoSLevel::QoSLevel1 {
+        } else if publish.qos() == QoSLevel::QoSLevel1 {
             self.add_unacknowledged(publish);
         }
     }
