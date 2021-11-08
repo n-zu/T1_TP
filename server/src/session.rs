@@ -3,6 +3,8 @@
 use std::{collections::HashMap, sync::Mutex};
 
 use packets::{puback::Puback, publish::Publish};
+use tracing::debug;
+use tracing_subscriber::field::debug;
 
 use crate::{
     client::Client,
@@ -63,6 +65,8 @@ impl Session {
     }
 
     pub fn send_puback(&self, id: &str, puback: &Puback) -> ServerResult<()> {
+        debug!("Puback bytes: {:?}", puback.encode());
+        debug!("Puback ID {}", puback.packet_id());
         self.client_do(id, |mut client| {
             client.write_all(&puback.encode()).unwrap();
             Ok(())

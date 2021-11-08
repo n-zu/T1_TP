@@ -23,7 +23,6 @@ pub mod server_error;
 pub use server_error::ServerError;
 
 const CONNECTION_WAIT_TIMEOUT: Duration = Duration::from_secs(180);
-const CLIENT_READ_TIMEOUT: Duration = Duration::from_secs(1);
 
 use packets::publish::Publish;
 
@@ -243,7 +242,12 @@ impl Server {
         match self.wait_for_connect(stream) {
             Ok(client) => {
                 let id = client.id().to_owned();
-                stream.set_read_timeout(Some(CLIENT_READ_TIMEOUT))?;
+                let keep_alive = client.keep_alive();
+                if keep_alive == 0 {
+                    stream.set_read_timeout(None)?;
+                } else {
+                    stream.set_read_timeout(Some(Duration::from_secs(keep_alive as u64))).unwrap();
+                }
                 self.session.write()?.connect(client)?;
                 Ok(id)
             }

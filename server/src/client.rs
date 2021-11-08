@@ -128,6 +128,8 @@ impl Client {
 
     pub fn send_publish(&mut self, publish: Publish) {
         if self.connected() {
+            debug!("Publish bytes: {:?}", publish.encode().unwrap());
+            debug!("Packet identifier: {}", publish.packet_id.unwrap());
             self.write_all(&publish.encode().unwrap()).unwrap();
             if publish.qos() == QoSLevel::QoSLevel1 {
                 // TODO: que pasa si el paquete ya existe en el HashMap?
