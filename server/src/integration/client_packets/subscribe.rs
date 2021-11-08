@@ -8,7 +8,7 @@ use packets::{
 const SUBSCRIBE_PACKET_TYPE: u8 = 0x80;
 const FIXED_FLAGS: u8 = 2;
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Topic {
     /// Topic for a subsribe packet
     name: Field,

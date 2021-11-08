@@ -10,7 +10,7 @@ use std::{
 
 use packets::{puback::Puback, publish::Publish};
 
-use super::client_packets as cl_packets;
+use super::client_packets::{self as cl_packets, Topic};
 use crate::server_packets as sv_packets;
 
 pub struct ClientMock {
@@ -23,9 +23,9 @@ pub struct ClientSetMock {
 }
 
 impl ClientMock {
-    pub fn new_connect_tcp(id: String) -> ClientMock {
-        let stream = TcpStream::connect("localhost").expect("Fallo al crear cliente");
-        ClientMock { stream, id }
+    pub fn new_connect_tcp(id: &str) -> ClientMock {
+        let stream = TcpStream::connect("localhost:1884").expect("Fallo al crear cliente");
+        ClientMock { stream, id: id.to_owned() }
     }
 
     pub fn send_connect(&mut self, connect: cl_packets::Connect) {
@@ -33,8 +33,6 @@ impl ClientMock {
     }
 
     pub fn receive_connack(&mut self) -> cl_packets::Connack {
-        let mut buf = [0u8; 1];
-        self.stream.read_exact(&mut buf).unwrap();
         cl_packets::Connack::read_from(&mut self.stream).unwrap()
     }
 
@@ -56,6 +54,10 @@ impl ClientMock {
         let mut buf = [0u8; 1];
         self.stream.read_exact(&mut buf).unwrap();
         Puback::read_from(&mut self.stream, buf[0]).unwrap()
+    }
+
+    pub fn send_subscribe(&mut self, subscribe: cl_packets::Subscribe) {
+        self.stream.write_all(&subscribe.encode().unwrap()).unwrap()
     }
 
     pub fn disconnect(&mut self) {
@@ -97,8 +99,8 @@ impl ClientSetMock {
         self.clients.insert(client.id.clone(), client).unwrap();
     }
 
-    pub fn add_full_connected(&mut self, id: String) {
-        let mut client = ClientMock::new_connect_tcp(id.clone());
+    pub fn add_full_connected(&mut self, id: &str) {
+        let mut client = ClientMock::new_connect_tcp(id);
         client.send_connect(
             cl_packets::ConnectBuilder::new(&id, KEEP_ALIVE_DEFAULT, true)
                 .unwrap()
@@ -109,10 +111,27 @@ impl ClientSetMock {
         self.add_client(client);
     }
 
-    pub fn add_bulk(&mut self, size: u32, id_prefix: String) {
+    pub fn add_bulk(&mut self, size: u32, id_prefix: &str) {
         for i in 0..size {
-            let id = add_suffix(&id_prefix, i);
-            self.add_full_connected(id);
+            let id = add_suffix(id_prefix, i);
+            self.add_full_connected(&id);
+        }
+    }
+
+    pub fn subscribe_all(&mut self, topic: Topic) {
+        for (_id, client) in self.clients.iter_mut() {
+            client.send_subscribe(cl_packets::Subscribe::new(vec![topic.clone()], 12345))
+        }
+    }
+
+    pub fn get_client(&mut self, id: &str) -> ClientMock {
+        self.clients.remove(id).unwrap()
+    }
+
+    pub fn assert_all_received_publish(&mut self, publish: Publish) {
+        for (_id, client) in self.clients.iter_mut() {
+            let received = client.receive_publish();
+            assert_eq!(received, publish);
         }
     }
 }

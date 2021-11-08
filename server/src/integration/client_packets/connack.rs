@@ -15,8 +15,8 @@ pub enum ConnackError {
 #[derive(Debug, PartialEq)]
 /// Client-side Connack packet structure
 pub struct Connack {
-    session_present: u8,
-    return_code: u8,
+    pub session_present: u8,
+    pub return_code: u8,
 }
 
 const CONNACK_FIXED_FIRST_BYTE: u8 = 32; // 0010 0000
