@@ -10,9 +10,10 @@ type PacketId = u16;
 
 use packets::{packet_reader::QoSLevel, puback::Puback, publish::Publish};
 use tracing::{debug, error, info};
+use tracing_subscriber::field::debug;
 
 use crate::{
-    server::{ServerError, ServerResult},
+    server::{ClientId, ServerError, ServerResult},
     server_packets::{Connack, Connect},
 };
 

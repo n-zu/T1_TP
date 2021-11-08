@@ -14,10 +14,7 @@ use std::{
 use threadpool::ThreadPool;
 use tracing::{debug, error, info};
 
-use packets::{
-    packet_reader::{ErrorKind, PacketError, QoSLevel},
-    puback::Puback,
-};
+use packets::{packet_reader::{ErrorKind, PacketError, QoSLevel}, puback::Puback, suback::Suback};
 
 pub mod server_error;
 pub use server_error::ServerError;
@@ -27,21 +24,17 @@ const CLIENT_READ_TIMEOUT: Duration = Duration::from_secs(1);
 
 use packets::publish::Publish;
 
-use crate::{
-    client::Client,
-    config::Config,
-    server::server_error::ServerErrorKind,
-    server_packets::{Connect, Disconnect, PingReq, PingResp, Subscribe},
-    session::Session,
-    topic_handler::{Message, TopicHandler},
-};
+use crate::{client::Client, config::Config, server::server_error::ServerErrorKind, server_packets::{Connack, Connect, Disconnect, PingReq, PingResp, Subscribe}, session::Session, topic_handler::{Message, TopicHandler}};
 
 pub type ServerResult<T> = Result<T, ServerError>;
+
+pub type ClientId = String;
 
 pub enum Packet {
     PublishTypee(Publish),
     PubackType(Puback),
     SubscribeType(Subscribe),
+    SubackType(Suback),
     PingReqType(PingReq),
     DisconnectType(Disconnect),
 }

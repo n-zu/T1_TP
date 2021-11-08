@@ -4,6 +4,7 @@ use tracing_subscriber::{fmt, prelude::__tracing_subscriber_SubscriberExt, Regis
 
 mod client;
 mod config;
+mod integration;
 mod server;
 mod server_packets;
 mod session;
