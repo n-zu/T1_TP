@@ -96,6 +96,12 @@ impl From<PoisonError<MutexGuard<'_, ThreadPool>>> for ServerError {
     }
 }
 
+impl From<PoisonError<RwLockWriteGuard<'_, Session>>> for ServerError {
+    fn from(err: PoisonError<RwLockWriteGuard<'_, Session>>) -> Self {
+        ServerError::new_kind(&err.to_string(), ServerErrorKind::PoinsonedLock)
+    }
+}
+
 impl From<TopicHandlerError> for ServerError {
     fn from(err: TopicHandlerError) -> Self {
         ServerError::new_kind(

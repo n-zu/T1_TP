@@ -1,9 +1,8 @@
 #![allow(dead_code)]
 
-use std::{
-    collections::HashMap,
-    sync::{Mutex, RwLock},
-};
+use std::{collections::HashMap, sync::Mutex};
+
+use packets::{puback::Puback, publish::Publish};
 
 use crate::{
     client::Client,
@@ -12,13 +11,13 @@ use crate::{
 };
 
 pub struct Session {
-    clients: RwLock<HashMap<String, Mutex<Client>>>,
+    clients: HashMap<String, Mutex<Client>>,
 }
 
 impl Session {
     pub fn new() -> Self {
         Self {
-            clients: RwLock::new(HashMap::new()),
+            clients: HashMap::new(),
         }
     }
 
@@ -26,7 +25,7 @@ impl Session {
     where
         F: FnOnce(std::sync::MutexGuard<'_, Client>) -> ServerResult<()>,
     {
-        match self.clients.read()?.get(id) {
+        match self.clients.get(id) {
             Some(client) => {
                 action(client.lock()?)?;
                 Ok(())
@@ -38,8 +37,8 @@ impl Session {
         }
     }
 
-    fn client_remove(&self, id: &str) -> ServerResult<()> {
-        self.clients.write()?.remove(id);
+    fn client_remove(&mut self, id: &str) -> ServerResult<()> {
+        self.clients.remove(id);
         Ok(())
     }
 
@@ -50,15 +49,35 @@ impl Session {
         })
     }
 
-    fn client_add(&self, client: Client) -> ServerResult<()> {
+    fn client_add(&mut self, client: Client) -> ServerResult<()> {
         self.clients
-            .write()?
             .insert(client.id().to_owned(), Mutex::new(client));
         Ok(())
     }
 
+    pub fn send_unacknowledged(&self, id: &str) -> ServerResult<()> {
+        self.client_do(id, |mut client| {
+            client.send_unacknowledged();
+            Ok(())
+        })
+    }
+
+    pub fn send_puback(&self, id: &str, puback: &Puback) -> ServerResult<()> {
+        self.client_do(&id, |mut client| {
+            client.write_all(&puback.encode()).unwrap();
+            Ok(())
+        })
+    }
+
+    pub fn send_publish(&self, id: &str, publish: Publish) -> ServerResult<()> {
+        self.client_do(&id, |mut client| {
+            client.send_publish(publish);
+            Ok(())
+        })
+    }
+
     fn exists(&self, id: &str) -> ServerResult<bool> {
-        Ok(self.clients.read()?.contains_key(id))
+        Ok(self.clients.contains_key(id))
     }
 
     fn clean_session(&self, id: &str) -> ServerResult<bool> {
@@ -77,7 +96,7 @@ impl Session {
         })
     }
 
-    pub fn connect(&self, client: Client) -> ServerResult<()> {
+    pub fn connect(&mut self, client: Client) -> ServerResult<()> {
         // Hay una sesion_presente en el servidor con la misma ID
         // (con clean_sesion = false)
         let id = client.id().to_owned();
@@ -126,15 +145,8 @@ impl Session {
         Ok(keep_alive)
     }
 
-    pub fn finish_session(&self, id: &str) -> ServerResult<()> {
-        if self
-            .clients
-            .read()?
-            .get(id)
-            .unwrap()
-            .lock()?
-            .clean_session()
-        {
+    pub fn finish_session(&mut self, id: &str) -> ServerResult<()> {
+        if self.clients.get(id).unwrap().lock()?.clean_session() {
             self.client_remove(id)?;
         }
         Ok(())
