@@ -1,7 +1,9 @@
 mod client;
 mod client_error;
+mod client_listener;
 mod client_packets;
 mod controller;
+mod observer;
 use crate::controller::Controller;
 use gtk::Builder;
 use gtk::{

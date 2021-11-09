@@ -5,27 +5,35 @@ use gtk::{
 };
 use packets::{packet_reader::QoSLevel, publish::Publish};
 
-use super::super::client::PublishObserver;
+use crate::observer::{Message, Observer};
 
 #[derive(Clone)]
-pub struct PublishController {
-    sender: glib::Sender<Publish>,
+pub struct ClientObserver {
+    sender: glib::Sender<Message>,
 }
 
-impl PublishController {
-    pub fn new(list: ListBox) -> PublishController {
-        let function = move |publish: Publish| {
-            println!("Me llegó el publish {:?}", publish);
-            add_publish(publish, &list);
-        };
-
+impl ClientObserver {
+    pub fn new(list: ListBox) -> ClientObserver {
         let (sender, receiver) = glib::MainContext::channel(glib::PRIORITY_DEFAULT);
-        receiver.attach(None, move |publish: Publish| {
-            function(publish);
+        receiver.attach(None, move |message: Message| {
+            message_receiver(message, &list);
             glib::Continue(true)
         });
 
-        PublishController { sender }
+        ClientObserver { sender }
+    }
+}
+
+fn message_receiver(message: Message, list: &ListBox) {
+    match message {
+        Message::Publish(publish) => {
+            println!("Me llegó el publish {:?}", publish);
+            add_publish(publish, list);
+        }
+        Message::Connected(_) => {
+            println!("Conectado");
+        }
+        _ => (),
     }
 }
 
@@ -50,8 +58,9 @@ fn add_publish(publish: Publish, list: &ListBox) {
     list.show_all();
 }
 
-impl PublishObserver for PublishController {
-    fn got_publish(&self, publish: Publish) {
-        self.sender.send(publish).unwrap();
+impl Observer for ClientObserver {
+    fn update(&self, message: Message) {
+        // Si falla, se rompe la interfaz pero no podemos hacer mucho
+        let _ = self.sender.send(message);
     }
 }

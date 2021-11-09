@@ -91,15 +91,9 @@ impl Subscribe {
         Ok(packet)
     }
 
-    // TODO: test
-    pub fn max_qos(&self) -> QoSLevel {
-        let mut max = QoSLevel::QoSLevel0;
-        for topic in self.topics.iter() {
-            if topic.qos as u8 > max as u8 {
-                max = topic.qos;
-            }
-        }
-        max
+    /// Get a the subscribe's packet identifier.
+    pub fn packet_identifier(&self) -> u16 {
+        self.packet_identifier
     }
 }
 

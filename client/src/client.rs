@@ -1,19 +1,18 @@
-use std::io::{ErrorKind, Read};
-use std::sync::Mutex;
+use std::sync::atomic::AtomicBool;
+use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::Duration;
 use std::{io::Write, net::TcpStream};
 
-use packets::packet_reader::{PacketError, QoSLevel};
+use packets::packet_reader::QoSLevel;
 
-use crate::client_packets::{Connack, Connect, PingReq, Subscribe};
+use crate::client_listener::Listener;
+use crate::client_packets::{Connect, PingReq, Subscribe};
 
 use crate::client_error::ClientError;
-use packets::publish::Publish;
+use crate::observer::Observer;
+use packets::publish::{DupFlag, Publish};
 use threadpool::ThreadPool;
-
-// Cuanto esperar recibir un paquete antes de checkear si hay que parar
-const READ_TIMEOUT: Duration = Duration::from_millis(200);
 
 // Cuanto esperar antes de checkear que
 // haya que reenviar un paquete con QoS 1
@@ -27,88 +26,96 @@ pub enum PendingAck {
     Subscribe(Subscribe),
     PingReq(PingReq),
     Publish(Publish),
+    Connect(Connect),
 }
 
-pub trait PublishObserver: Clone + Send {
-    fn got_publish(&self, publish: Publish);
-}
-
-pub struct Client<T: PublishObserver> {
+pub struct Client<T: Observer> {
     stream: TcpStream,
     thread_pool: ThreadPool,
-    pending_ack: Mutex<Option<PendingAck>>,
+    pending_ack: Arc<Mutex<Option<PendingAck>>>,
     observer: T,
+    stop: Arc<AtomicBool>,
 }
 
-impl<T: 'static + PublishObserver> Client<T> {
+impl<T: 'static + Observer> Client<T> {
     #![allow(dead_code)]
     pub fn new(address: &str, observer: T) -> Result<Client<T>, ClientError> {
         Ok(Client {
             stream: TcpStream::connect(address)?,
-            thread_pool: ThreadPool::new(4),
-            pending_ack: Mutex::new(None),
+            thread_pool: ThreadPool::new(1),
+            pending_ack: Arc::new(Mutex::new(None)),
             observer,
+            stop: Arc::new(AtomicBool::new(false)),
         })
     }
 
     pub fn connect(&mut self, connect: Connect) -> Result<(), ClientError> {
-        let stream_listener = self.stream.try_clone()?;
-        stream_listener.set_read_timeout(Some(READ_TIMEOUT))?;
+        let mut listener = Listener::new(
+            &mut self.stream,
+            self.pending_ack.clone(),
+            self.observer.clone(),
+            self.stop.clone(),
+        )?;
 
-        self.stream.write_all(&connect.encode())?;
+        let bytes = connect.encode();
+        self.pending_ack
+            .lock()?
+            .replace(PendingAck::Connect(connect));
+
+        self.stream.write_all(&bytes)?;
         println!("Enviando connect...");
 
-        match Connack::read_from(&mut self.stream) {
-            Ok(connack_packet) => {
-                println!("Llego bien el Connack: {:?}", connack_packet);
-            }
-            Err(err) => {
-                ClientError::new(&format!(
-                    "Error: se recibió paquete de conexión inválido ({:?})",
-                    err
-                ));
-            }
-        }
-        let observer_clone = self.observer.clone();
         self.thread_pool.spawn(move || {
-            wait_for_packets(stream_listener, observer_clone);
+            listener.wait_for_packets();
         })?;
+
+        if !self.wait_for_ack()? {
+            ClientError::new("No se pudo establecer la conexión");
+        }
 
         Ok(())
     }
 
     pub fn subscribe(&mut self, subscribe: Subscribe) -> Result<(), ClientError> {
         self.stream.write_all(&subscribe.encode()?)?;
-        if subscribe.max_qos() != QoSLevel::QoSLevel0 {
-            *self.pending_ack.lock()? = Some(PendingAck::Subscribe(subscribe));
-            self.wait_for_ack()?;
+        *self.pending_ack.lock()? = Some(PendingAck::Subscribe(subscribe));
+        if !self.wait_for_ack()? {
+            ClientError::new("No se recibió paquete suback");
         }
-        // TODO: mandar por canal suscripcióñ exitosa
+
         Ok(())
     }
 
-    pub fn publish(&mut self, publish: Publish) -> Result<(), PacketError> {
+    pub fn publish(&mut self, publish: Publish) -> Result<(), ClientError> {
         self.stream.write_all(&publish.encode()?)?;
-        /*
-        self.pending_acks
-            .lock()
-            .unwrap()
-            .push(SentPacket::Publish(publish));
-        */
+        if publish.qos() == QoSLevel::QoSLevel1 {
+            *self.pending_ack.lock()? = Some(PendingAck::Publish(publish));
+            if !self.wait_for_ack()? {
+                return Err(ClientError::new("No se recibió paquete puback (QoS 1)"));
+            }
+        }
+
         Ok(())
     }
 
-    fn resend_pending(stream: &mut TcpStream, pending_ack: &PendingAck) -> Result<(), ClientError> {
+    fn resend_pending(
+        stream: &mut TcpStream,
+        pending_ack: &mut PendingAck,
+    ) -> Result<(), ClientError> {
         // TODO: realmente deberiamos hacer de una vez el trait de encode asi evitamos esto
         match pending_ack {
-            PendingAck::Subscribe(ref subscribe) => {
+            PendingAck::Subscribe(subscribe) => {
                 stream.write_all(&subscribe.encode()?)?;
             }
-            PendingAck::PingReq(ref ping_req) => {
+            PendingAck::PingReq(ping_req) => {
                 stream.write_all(&ping_req.encode())?;
             }
-            PendingAck::Publish(ref publish) => {
+            PendingAck::Publish(publish) => {
+                publish.set_dup_flag(DupFlag::DupFlag1);
                 stream.write_all(&publish.encode()?)?;
+            }
+            PendingAck::Connect(connect) => {
+                stream.write_all(&connect.encode())?;
             }
         }
         Ok(())
@@ -119,8 +126,8 @@ impl<T: 'static + PublishObserver> Client<T> {
         let mut retries = 0;
         while retries < MAX_RETRIES {
             thread::sleep(RESEND_TIMEOUT);
-            let pending = self.pending_ack.lock()?;
-            match pending.as_ref() {
+            let mut pending = self.pending_ack.lock()?;
+            match pending.as_mut() {
                 None => {
                     return Ok(true);
                 }
@@ -136,37 +143,8 @@ impl<T: 'static + PublishObserver> Client<T> {
     }
 }
 
-fn handle_publish(stream: &mut TcpStream, header: u8, observer: &impl PublishObserver) {
-    let publish = Publish::read_from(stream, header).unwrap();
-    observer.got_publish(publish);
-}
-
-fn wait_for_packets(mut stream: TcpStream, observer: impl PublishObserver) {
-    let mut buf = [0u8; 1];
-    println!("Esperando paquetes...");
-    loop {
-        match stream.read_exact(&mut buf) {
-            Ok(_) => {
-                println!("Llego un paquete: {:?}", buf);
-                let packet_type = buf[0] >> 4;
-                match packet_type {
-                    3 => {
-                        handle_publish(&mut stream, buf[0], &observer);
-                    }
-                    _ => {
-                        println!("Llego un paquete de tipo {}", packet_type);
-                    } // TODO: verificar los ACK
-                }
-            }
-            Err(err)
-                if (err.kind() == ErrorKind::TimedOut || err.kind() == ErrorKind::WouldBlock) =>
-            {
-                continue;
-            }
-            Err(err) => {
-                println!("Error: {}", err);
-                break;
-            }
-        }
+impl<T: Observer> Drop for Client<T> {
+    fn drop(&mut self) {
+        self.stop.store(true, std::sync::atomic::Ordering::Relaxed);
     }
 }

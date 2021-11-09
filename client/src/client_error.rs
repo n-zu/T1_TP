@@ -4,7 +4,11 @@ use std::{
     sync::{MutexGuard, PoisonError},
 };
 
-use crate::client::PendingAck;
+use crate::{
+    client::{Client, PendingAck},
+    client_packets::ConnackError,
+    observer::Observer,
+};
 use packets::packet_reader::PacketError;
 use threadpool::ThreadPoolError;
 
@@ -54,5 +58,17 @@ impl From<ThreadPoolError> for ClientError {
 impl From<PoisonError<MutexGuard<'_, Option<PendingAck>>>> for ClientError {
     fn from(err: PoisonError<MutexGuard<'_, Option<PendingAck>>>) -> ClientError {
         ClientError::new(&format!("Error usando lock: {}", err))
+    }
+}
+
+impl<T: Observer> From<PoisonError<MutexGuard<'_, Option<Client<T>>>>> for ClientError {
+    fn from(err: PoisonError<MutexGuard<'_, Option<Client<T>>>>) -> ClientError {
+        ClientError::new(&format!("Error usando lock: {}", err))
+    }
+}
+
+impl From<ConnackError> for ClientError {
+    fn from(err: ConnackError) -> ClientError {
+        ClientError::new(&format!("Error parseando paquete del servidor: {:?}", err))
     }
 }
