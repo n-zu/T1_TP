@@ -49,17 +49,18 @@ impl Controller {
         let full_addr = format!("{}:{}", &addr.text().to_string(), &port.text().to_string());
 
         let pub_list: ListBox = self.builder.object("sub_msgs").unwrap();
-        let mut new_client = if let Ok( client) = Client::new(&full_addr, PublishController::new(pub_list)){
-            client
-        } else {
-            println!("Could not connect to server");
-            return;
-        };
+        let mut new_client =
+            if let Ok(client) = Client::new(&full_addr, PublishController::new(pub_list)) {
+                client
+            } else {
+                println!("Could not connect to server");
+                return;
+            };
         let connect = ConnectBuilder::new(&id.text().to_string(), 0, true)
             .unwrap()
             .build()
             .unwrap();
-        
+
         match new_client.connect(connect) {
             Result::Ok(()) => {
                 println!("Connected to server");
@@ -70,8 +71,6 @@ impl Controller {
                 self.client.lock().unwrap().take();
             }
         }
-
-        
     }
 
     fn setup_subscribe(self: &Rc<Self>) {
