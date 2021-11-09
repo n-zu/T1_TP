@@ -1,5 +1,10 @@
-use std::{error::Error, fmt::Display};
+use std::{
+    error::Error,
+    fmt::Display,
+    sync::{MutexGuard, PoisonError},
+};
 
+use crate::client::PendingAck;
 use packets::packet_reader::PacketError;
 use threadpool::ThreadPoolError;
 
@@ -43,5 +48,11 @@ impl From<std::io::Error> for ClientError {
 impl From<ThreadPoolError> for ClientError {
     fn from(err: ThreadPoolError) -> ClientError {
         ClientError::new(&format!("Error inesperado: {}", err))
+    }
+}
+
+impl From<PoisonError<MutexGuard<'_, Option<PendingAck>>>> for ClientError {
+    fn from(err: PoisonError<MutexGuard<'_, Option<PendingAck>>>) -> ClientError {
+        ClientError::new(&format!("Error usando lock: {}", err))
     }
 }

@@ -9,7 +9,7 @@ const RESERVED_BYTES_MASK: u8 = 0b00001111;
 
 /// The PingReq packet is sent from a Client to the Server,
 /// during the Keep Alive process
-struct PingReq;
+pub struct PingReq;
 
 impl PingReq {
     /// Creates a new PingReq packet

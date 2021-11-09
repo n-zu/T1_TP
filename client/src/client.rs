@@ -1,22 +1,32 @@
 use std::io::{ErrorKind, Read};
 use std::sync::Mutex;
+use std::thread;
 use std::time::Duration;
 use std::{io::Write, net::TcpStream};
 
-use packets::packet_reader::PacketError;
+use packets::packet_reader::{PacketError, QoSLevel};
 
-use crate::client_packets::{Connack, Connect, Subscribe};
+use crate::client_packets::{Connack, Connect, PingReq, Subscribe};
 
 use crate::client_error::ClientError;
 use packets::publish::Publish;
 use threadpool::ThreadPool;
 
-const READ_TIMEOUT: Duration = Duration::from_millis(5000);
+// Cuanto esperar recibir un paquete antes de checkear si hay que parar
+const READ_TIMEOUT: Duration = Duration::from_millis(200);
 
-enum SentPacket {
+// Cuanto esperar antes de checkear que
+// haya que reenviar un paquete con QoS 1
+const RESEND_TIMEOUT: Duration = Duration::from_millis(500);
+
+// Cuantas veces reintentar reenviar un paquete
+const MAX_RETRIES: u16 = 3;
+
+#[allow(dead_code)]
+pub enum PendingAck {
     Subscribe(Subscribe),
+    PingReq(PingReq),
     Publish(Publish),
-    //Pingreq(Pingreq),
 }
 
 pub trait PublishObserver: Clone + Send {
@@ -26,7 +36,7 @@ pub trait PublishObserver: Clone + Send {
 pub struct Client<T: PublishObserver> {
     stream: TcpStream,
     thread_pool: ThreadPool,
-    pending_acks: Mutex<Vec<SentPacket>>,
+    pending_ack: Mutex<Option<PendingAck>>,
     observer: T,
 }
 
@@ -36,7 +46,7 @@ impl<T: 'static + PublishObserver> Client<T> {
         Ok(Client {
             stream: TcpStream::connect(address)?,
             thread_pool: ThreadPool::new(4),
-            pending_acks: Mutex::new(Vec::new()),
+            pending_ack: Mutex::new(None),
             observer,
         })
     }
@@ -67,22 +77,62 @@ impl<T: 'static + PublishObserver> Client<T> {
         Ok(())
     }
 
-    pub fn subscribe(&mut self, subscribe: Subscribe) -> Result<(), PacketError> {
+    pub fn subscribe(&mut self, subscribe: Subscribe) -> Result<(), ClientError> {
         self.stream.write_all(&subscribe.encode()?)?;
-        self.pending_acks
-            .lock()
-            .unwrap()
-            .push(SentPacket::Subscribe(subscribe));
+        if subscribe.max_qos() != QoSLevel::QoSLevel0 {
+            *self.pending_ack.lock()? = Some(PendingAck::Subscribe(subscribe));
+            self.wait_for_ack()?;
+        }
+        // TODO: mandar por canal suscripcióñ exitosa
         Ok(())
     }
 
     pub fn publish(&mut self, publish: Publish) -> Result<(), PacketError> {
         self.stream.write_all(&publish.encode()?)?;
+        /*
         self.pending_acks
             .lock()
             .unwrap()
             .push(SentPacket::Publish(publish));
+        */
         Ok(())
+    }
+
+    fn resend_pending(stream: &mut TcpStream, pending_ack: &PendingAck) -> Result<(), ClientError> {
+        // TODO: realmente deberiamos hacer de una vez el trait de encode asi evitamos esto
+        match pending_ack {
+            PendingAck::Subscribe(ref subscribe) => {
+                stream.write_all(&subscribe.encode()?)?;
+            }
+            PendingAck::PingReq(ref ping_req) => {
+                stream.write_all(&ping_req.encode())?;
+            }
+            PendingAck::Publish(ref publish) => {
+                stream.write_all(&publish.encode()?)?;
+            }
+        }
+        Ok(())
+    }
+
+    // Devuelve verdadero si se pudo mandar, falso si no se recibió el ack
+    fn wait_for_ack(&mut self) -> Result<bool, ClientError> {
+        let mut retries = 0;
+        while retries < MAX_RETRIES {
+            thread::sleep(RESEND_TIMEOUT);
+            let pending = self.pending_ack.lock()?;
+            match pending.as_ref() {
+                None => {
+                    return Ok(true);
+                }
+                Some(pending_ack) => {
+                    Self::resend_pending(&mut self.stream, pending_ack)?;
+                    retries += 1;
+                }
+            }
+            drop(pending);
+        }
+
+        Ok(false)
     }
 }
 
@@ -105,7 +155,7 @@ fn wait_for_packets(mut stream: TcpStream, observer: impl PublishObserver) {
                     }
                     _ => {
                         println!("Llego un paquete de tipo {}", packet_type);
-                    }
+                    } // TODO: verificar los ACK
                 }
             }
             Err(err)
