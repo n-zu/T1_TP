@@ -296,8 +296,8 @@ impl Server {
                 }
             }
             if timeout_counter > client_keep_alive {
-                error!("<{}>: Keep Alive timeout", id);
-                break;
+                // error!("<{}>: Keep Alive timeout", id);
+                // break;
             }
         }
         debug!("Conexion finalizada con <{}>", id);
