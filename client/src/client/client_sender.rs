@@ -93,7 +93,8 @@ impl<T: 'static + Observer> ClientSender<T> {
 
     pub fn _publish(&self, publish: Publish) -> Result<(), ClientError> {
         let bytes = publish.encode()?;
-        if publish.qos() == QoSLevel::QoSLevel1 {
+        let qos = publish.qos();
+        if qos == QoSLevel::QoSLevel1 {
             *self.pending_ack.lock()? = Some(PendingAck::Publish(publish));
             if !self.wait_for_ack()? {
                 return Err(ClientError::new("No se recibió paquete puback (QoS 1)"));
@@ -101,6 +102,9 @@ impl<T: 'static + Observer> ClientSender<T> {
         }
         self.stream.lock()?.write_all(&bytes)?;
 
+        if qos == QoSLevel::QoSLevel0 {
+            self.observer.update(Message::Published(Ok(None)));    
+        }
         Ok(())
     }
 

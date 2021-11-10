@@ -173,7 +173,7 @@ impl<T: Observer> Listener<T> {
             // Este unwrap no falla ya que lo checkeo al ponerlo en el lock
             if *publish.packet_id().unwrap() == puback.packet_id() {
                 lock.take();
-                self.observer.update(Message::Published(Ok(puback)));
+                self.observer.update(Message::Published(Ok(Some(puback))));
             }
         }
 

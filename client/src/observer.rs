@@ -5,7 +5,7 @@ use crate::{client::ClientError, client_packets::Connack};
 pub enum Message {
     Connected(Result<Connack, ClientError>),
     Subscribed(Result<Suback, ClientError>),
-    Published(Result<Puback, ClientError>),
+    Published(Result<Option<Puback>, ClientError>),
     Publish(Publish),
     InternalError(ClientError),
 }
