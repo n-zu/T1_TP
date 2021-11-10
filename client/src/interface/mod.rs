@@ -7,9 +7,12 @@ use crate::{
 };
 
 use gtk::{
-    prelude::{BuilderExtManual, ButtonExt, DialogExt, EntryExt, TextBufferExt},
-    Builder, Button, ButtonsType, DialogFlags, Entry, MessageDialog, MessageType, TextBuffer,
-    Window,
+    prelude::{
+        BuilderExtManual, ButtonExt, DialogExt, EntryExt, LabelExt, StackExt, TextBufferExt,
+        WidgetExt,
+    },
+    Box, Builder, Button, ButtonsType, DialogFlags, Entry, Label, MessageDialog, MessageType,
+    Stack, TextBuffer, Window,
 };
 
 use crate::client::Client;
@@ -28,6 +31,8 @@ impl Controller {
             client: Mutex::new(None),
         });
         cont.setup_handlers();
+        let stack: Stack = cont.builder.object("content").unwrap();
+        stack.set_visible_child_name("box_connection");
         cont
     }
 
@@ -70,22 +75,27 @@ impl Controller {
 
         let connect = ConnectBuilder::new(&id.text().to_string(), 0, true)?.build()?;
         let observer = ClientObserver::new(self.builder.clone());
-        match Client::new(&full_addr, observer, connect) {
-            Result::Ok(client) => {
-                println!("Connected to server");
-                self.client.lock()?.replace(client);
-            }
-            Err(e) => {
-                println!("Failed to connect to server: {}", e);
-            }
-        }
+        let client = Client::new(&full_addr, observer, connect)?;
+
+        let info: Label = self.builder.object("connection_info").unwrap();
+        info.set_text(&format!("Dirección del servidor: {}", full_addr));
+        self.client.lock()?.replace(client);
 
         Ok(())
     }
 
     fn handle_connect(&self, _: &Button) {
+        let window: Box = self.builder.object("box_connection").unwrap();
+        let status_icon: Stack = self.builder.object("status_icon").unwrap();
+        let status_text: Label = self.builder.object("status_label").unwrap();
+        status_icon.set_visible_child_name("loading");
+        status_text.set_text("Conectando... ");
+        window.set_sensitive(false);
         if let Err(e) = self._connect() {
             Self::alert(&format!("No se pudo conectar: {}", e));
+            window.set_sensitive(true);
+            status_icon.set_visible_child_name("error");
+            status_text.set_text("No se pudo conectar");
         }
     }
 

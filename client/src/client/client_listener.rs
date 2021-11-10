@@ -63,15 +63,12 @@ impl<T: Observer> Listener<T> {
     }
 
     pub fn wait_for_packets(&mut self) {
-        println!("Esperando paquetes...");
         while !self.stop.load(Ordering::Relaxed) {
             if let Err(err) = self.try_read_packet() {
-                println!("Falló lectura de paquetes: {:?}", err);
                 self.stop.store(true, Ordering::Relaxed);
                 self.observer.update(Message::InternalError(err));
             }
         }
-        println!("Se dejó de recibir paquetes");
     }
 
     fn try_read_packet(&mut self) -> Result<(), ClientError> {
@@ -79,7 +76,6 @@ impl<T: Observer> Listener<T> {
 
         match self.stream.read_exact(&mut buf) {
             Ok(()) => {
-                println!("Got header: {}", buf[0]);
                 self.handle_packet(buf[0])?;
                 Ok(())
             }
@@ -89,10 +85,7 @@ impl<T: Observer> Listener<T> {
             {
                 Ok(())
             }
-            Err(err) => {
-                println!("Kind: {:?}", err.kind());
-                Err(ClientError::from(err))
-            }
+            Err(err) => Err(ClientError::from(err)),
         }
     }
 
@@ -110,7 +103,8 @@ impl<T: Observer> Listener<T> {
                 }
             }
             Err(error) => {
-                println!("No se pudo leer el paquete: {}", error);
+                self.observer
+                    .update(Message::InternalError(ClientError::from(error)));
                 Ok(())
             }
         }
@@ -141,7 +135,6 @@ impl<T: Observer> Listener<T> {
         if let Some(PendingAck::Connect(_)) = lock.as_ref() {
             match connack {
                 Err(err) => {
-                    println!("Se recibió connack inválido: {:?}", err);
                     self.observer
                         .update(Message::Connected(Err(ClientError::from(err))));
                     self.stop.store(true, Ordering::Relaxed);
@@ -149,7 +142,6 @@ impl<T: Observer> Listener<T> {
                 Ok(packet) => {
                     lock.take();
                     self.observer.update(Message::Connected(Ok(packet)));
-                    println!("Batiseñal enviada");
                 }
             }
         }
@@ -203,7 +195,7 @@ fn get_code_type(code: u8) -> Result<PacketType, PacketError> {
         13 => Ok(PacketType::Pingresp),
         14 => Ok(PacketType::Disconnect),
         _ => Err(PacketError::new_kind(
-            &format!("Tipo de paquete invalido/no soportado: {}", code),
+            &format!("Received invalid packet type: {}", code),
             ErrorKind::InvalidControlPacketType,
         )),
     }

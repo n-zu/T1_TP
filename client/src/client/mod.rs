@@ -133,7 +133,6 @@ impl<T: 'static + Observer> Client<T> {
 
 impl<T: Observer> Drop for Client<T> {
     fn drop(&mut self) {
-        println!("Cliente dropeado");
         self.stop.store(true, std::sync::atomic::Ordering::Relaxed);
     }
 }

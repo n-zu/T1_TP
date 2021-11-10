@@ -1,15 +1,28 @@
 use gtk::{
     glib,
-    prelude::{BuilderExtManual, ContainerExt, WidgetExt},
-    Box, Builder, Label, ListBox, ListBoxRow, Orientation,
+    prelude::{BuilderExtManual, ContainerExt, LabelExt, StackExt, WidgetExt},
+    Box, Builder, Label, ListBox, ListBoxRow, Orientation, Stack,
 };
 use packets::{packet_reader::QoSLevel, publish::Publish};
 
-use crate::observer::{Message, Observer};
+use crate::{
+    client::ClientError,
+    client_packets::Connack,
+    interface::Controller,
+    observer::{Message, Observer},
+};
 
 #[derive(Clone)]
 pub struct ClientObserver {
     sender: glib::Sender<Message>,
+}
+
+impl Observer for ClientObserver {
+    fn update(&self, message: Message) {
+        if let Err(e) = self.sender.send(message) {
+            Controller::alert(&format!("Error interno: {}", e));
+        }
+    }
 }
 
 impl ClientObserver {
@@ -28,11 +41,16 @@ impl ClientObserver {
 fn message_receiver(message: Message, builder: &Builder) {
     match message {
         Message::Publish(publish) => {
-            println!("Me llegó el publish {:?}", publish);
             add_publish(publish, builder);
         }
         Message::Connected(result) => {
-            println!("Conectado: {:?}", result);
+            connected(result, builder);
+        }
+        Message::InternalError(error) => {
+            Controller::alert(&format!(
+                "Error interno: {}\n\nSe recomienda reiniciar el cliente",
+                error
+            ));
         }
         _ => (),
     }
@@ -62,9 +80,24 @@ fn add_publish(publish: Publish, builder: &Builder) {
     list.show_all();
 }
 
-impl Observer for ClientObserver {
-    fn update(&self, message: Message) {
-        // Si falla, se rompe la interfaz pero no podemos hacer mucho
-        let _ = self.sender.send(message);
+fn connected(result: Result<Connack, ClientError>, builder: &Builder) {
+    let status_icon: Stack = builder.object("status_icon").unwrap();
+    let status_text: Label = builder.object("status_label").unwrap();
+
+    if let Err(e) = result {
+        Controller::alert(&format!("No se pudo conectar: {}", e));
+        let connect_window: Box = builder.object("box_connection").unwrap();
+        let info: Label = builder.object("connection_info").unwrap();
+
+        connect_window.set_sensitive(true);
+        info.set_text("");
+
+        status_icon.set_visible_child_name("error");
+        status_text.set_text(&format!("No se pudo conectar: {}", e));
+    } else {
+        let stack: Stack = builder.object("content").unwrap();
+        stack.set_visible_child_name("box_connected");
+        status_icon.set_visible_child_name("ok");
+        status_text.set_text("Connected");
     }
 }

@@ -57,10 +57,9 @@ impl<T: 'static + Observer> ClientSender<T> {
             .replace(PendingAck::Connect(connect));
 
         self.stream.lock()?.write_all(&bytes)?;
-        println!("Enviando connect...");
 
         if !self.wait_for_ack()? {
-            ClientError::new("No se pudo establecer la conexión");
+            return Err(ClientError::new("No se pudo establecer la conexión"));
         }
 
         Ok(())
