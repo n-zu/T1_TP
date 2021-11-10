@@ -3,10 +3,10 @@ use server::Server;
 use tracing_subscriber::{fmt, prelude::__tracing_subscriber_SubscriberExt, Registry};
 
 mod client;
+mod clients_manager;
 mod config;
 mod server;
 mod server_packets;
-mod session;
 mod topic_handler;
 
 fn main() {

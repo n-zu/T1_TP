@@ -1,19 +1,15 @@
-#![allow(dead_code)]
-
 use std::{
-    collections::HashMap,
     io::{self, Write},
     net::TcpStream,
+    vec,
 };
-
-type PacketId = u16;
 
 use packets::{packet_reader::QoSLevel, puback::Puback, publish::Publish};
 use tracing::{debug, error, info};
 
 use crate::{
-    server::{ServerError, ServerResult},
-    server_packets::{Connack, Connect},
+    server::{Packet, ServerError, ServerResult},
+    server_packets::{Connack, Connect, PingResp},
 };
 
 #[derive(PartialEq)]
@@ -33,7 +29,7 @@ pub struct Client {
     status: ClientStatus,
     connect: Connect,
     /// Unacknowledge packets
-    unacknowledged: HashMap<PacketId, Publish>,
+    unacknowledged: Vec<Publish>,
 }
 
 impl Client {
@@ -43,7 +39,7 @@ impl Client {
             stream,
             status: ClientStatus::Connected,
             connect,
-            unacknowledged: HashMap::new(),
+            unacknowledged: vec![],
         }
     }
 
@@ -56,7 +52,7 @@ impl Client {
     }
 
     fn send_last_will(&self) {
-        todo!()
+        debug!("<{}>: Enviando last will (TODO)", self.id);
     }
 
     pub fn disconnect(&mut self, gracefully: bool) {
@@ -69,6 +65,24 @@ impl Client {
         }
     }
 
+    fn send_pingresp(&mut self) -> ServerResult<()> {
+        self.write_all(&PingResp::new().encode())?;
+        Ok(())
+    }
+
+    pub fn handle_packet(&mut self, packet: Packet) -> ServerResult<()> {
+        match packet {
+            Packet::PubackType(puback) => self.acknowledge(puback),
+            Packet::PingReqType(_) => self.send_pingresp(),
+            Packet::DisconnectType(_) => {
+                self.disconnect(true);
+                Ok(())
+            }
+            Packet::PublishTypee(_) => unreachable!(),
+            Packet::SubscribeType(_) => unreachable!(),
+        }
+    }
+
     // TODO: probablemente no sea buena idea que sea publico
     pub fn write_all(&mut self, buf: &[u8]) -> io::Result<()> {
         if self.connected() {
@@ -78,8 +92,9 @@ impl Client {
         }
     }
 
-    pub fn send_connack(&mut self, connack: Connack) -> io::Result<()> {
-        self.stream.write_all(&connack.encode())?;
+    pub fn send_connack(&mut self, session_present: u8, return_code: u8) -> io::Result<()> {
+        self.stream
+            .write_all(&Connack::new(session_present, return_code).encode())?;
         Ok(())
     }
 
@@ -88,7 +103,6 @@ impl Client {
     }
 
     pub fn reconnect(&mut self, new_client: Client) -> ServerResult<()> {
-        // TODO: chequeo de usuario y contraseña
         if self.connected() {
             error!("Se intento reconectar un usuario que ya esta conectado");
             Err(ServerError::new_msg("Usuario ya conectado"))
@@ -96,7 +110,6 @@ impl Client {
             info!("Reconectado <{}>", self.id);
             self.stream = new_client.stream;
             self.status = ClientStatus::Connected;
-            self.send_unacknowledged();
             Ok(())
         }
     }
@@ -105,16 +118,30 @@ impl Client {
         *self.connect.keep_alive()
     }
 
-    pub fn acknowledge(&mut self, puback: Puback) {
+    pub fn user_name(&self) -> Option<&String> {
+        self.connect.user_name()
+    }
+
+    pub fn password(&self) -> Option<&String> {
+        self.connect.password()
+    }
+
+    pub fn acknowledge(&mut self, puback: Puback) -> ServerResult<()> {
         debug!("<{}>: Acknowledge {}", self.id, puback.packet_id());
-        self.unacknowledged.remove(&puback.packet_id()).unwrap();
+        self.unacknowledged.retain(|publish| {
+            puback.packet_id()
+                != *publish
+                    .packet_id()
+                    .expect("Se esperaba un paquete con identificador (QoS > 0)")
+        });
+        Ok(())
     }
 
     pub fn send_unacknowledged(&mut self) {
-        for (id, publish) in self.unacknowledged.iter() {
+        for publish in self.unacknowledged.iter() {
             debug!(
-                "Reenviando paquete con id <{}> a cliente <{}>",
-                id,
+                "<{}>: Reenviando paquete con id <{}>",
+                self.id,
                 publish.packet_id().unwrap()
             );
             self.stream.write_all(&publish.encode().unwrap()).unwrap();
@@ -122,24 +149,24 @@ impl Client {
     }
 
     fn add_unacknowledged(&mut self, publish: Publish) {
-        self.unacknowledged
-            .insert(*publish.packet_id().unwrap(), publish);
+        self.unacknowledged.push(publish);
     }
 
     pub fn send_publish(&mut self, publish: Publish) {
         if self.connected() {
-            debug!("Publish bytes: {:?}", publish.encode().unwrap());
-            debug!("Packet identifier: {}", publish.packet_id.unwrap());
             self.write_all(&publish.encode().unwrap()).unwrap();
             if publish.qos() == QoSLevel::QoSLevel1 {
                 // TODO: que pasa si el paquete ya existe en el HashMap?
-                debug!(
-                    "{}: Agregando PUBLISH a lista de paquetes no confirmados",
-                    self.id
-                );
+                debug!("{}: Agregando PUBLISH a UNACKNOWLEDGED", self.id);
                 self.add_unacknowledged(publish);
+            } else {
+                debug!("<{}>: Conectado y con QoS == 0", self.id);
             }
         } else if publish.qos() == QoSLevel::QoSLevel1 {
+            debug!(
+                "<{}> Agregando Publish a UNACKNOWLEDGED desconectado",
+                self.id
+            );
             self.add_unacknowledged(publish);
         }
     }

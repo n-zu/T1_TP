@@ -15,6 +15,9 @@ pub struct Config {
     dump_time: u32,
     /// Path to log file
     log_path: String,
+    /// Path to file with accounts
+    /// Format: username,password
+    accounts_path: String,
 }
 
 impl Config {
@@ -41,6 +44,7 @@ impl Config {
         let dump_path = get_value_from_line(&mut buffered, "dump_path")?;
         let dump_time = get_value_from_line(&mut buffered, "dump_time")?;
         let log_path = get_value_from_line(&mut buffered, "log_path")?;
+        let accounts_path = get_value_from_line(&mut buffered, "accounts_path")?;
 
         let port = port.parse::<u16>().ok()?;
         let dump_time = dump_time.parse::<u32>().ok()?;
@@ -50,6 +54,7 @@ impl Config {
             dump_path,
             dump_time,
             log_path,
+            accounts_path,
         })
     }
 
@@ -71,6 +76,11 @@ impl Config {
     /// Returns log_path from Config struct
     pub fn log_path(&self) -> &str {
         &self.log_path
+    }
+
+    /// Returns the accounts_path from Config struct
+    pub fn accounts_path(&self) -> &str {
+        &self.accounts_path
     }
 }
 
@@ -105,7 +115,8 @@ mod tests {
             "port=8080
 dump_path=foo.txt
 dump_time=10
-log_path=bar.txt",
+log_path=bar.txt
+accounts_path=baz.csv",
         );
 
         let config = Config::new_from_file(cursor).unwrap();
@@ -113,6 +124,7 @@ log_path=bar.txt",
         assert_eq!(config.dump_path(), "foo.txt");
         assert_eq!(config.dump_time(), 10);
         assert_eq!(config.log_path(), "bar.txt");
+        assert_eq!(config.accounts_path(), "baz.csv");
     }
 
     #[test]
@@ -121,7 +133,8 @@ log_path=bar.txt",
             "invalid_key=8080
 dump_path=foo.txt
 dump_time=10
-log_path=bar.txt",
+log_path=bar.txt
+accounts_path=baz.csv",
         );
 
         assert!(Config::new_from_file(cursor).is_none());
@@ -133,7 +146,8 @@ log_path=bar.txt",
             "port=8080
 dump_time=10
 dump_path=foo.txt
-log_path=bar.txt",
+log_path=bar.txt
+accounts_path=baz.csv",
         );
 
         assert!(Config::new_from_file(cursor).is_none());
@@ -145,7 +159,8 @@ log_path=bar.txt",
             "port=WWWW
 dump_path=foo.txt
 dump_time=10
-log_path=bar.txt",
+log_path=bar.txt
+accounts_path=baz.csv",
         );
 
         assert!(Config::new_from_file(cursor).is_none());

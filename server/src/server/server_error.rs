@@ -8,7 +8,8 @@ use packets::packet_reader::{ErrorKind, PacketError};
 use threadpool::{ThreadPool, ThreadPoolError};
 
 use crate::{
-    client::Client, session::Session, topic_handler::topic_handler_error::TopicHandlerError,
+    client::Client, clients_manager::ClientsManager,
+    topic_handler::topic_handler_error::TopicHandlerError,
 };
 
 #[derive(Debug)]
@@ -22,6 +23,9 @@ pub enum ServerErrorKind {
     ProtocolViolation,
     ClientDisconnected,
     ClientNotFound,
+    ClientNotInWhitelist,
+    InvalidPassword,
+    TakenID,
     Timeout,
     PoinsonedLock,
     Irrecoverable,
@@ -78,8 +82,8 @@ impl From<PoisonError<RwLockWriteGuard<'_, HashMap<String, Mutex<Client>>>>> for
     }
 }
 
-impl From<PoisonError<RwLockReadGuard<'_, Session>>> for ServerError {
-    fn from(err: PoisonError<RwLockReadGuard<Session>>) -> ServerError {
+impl From<PoisonError<RwLockReadGuard<'_, ClientsManager>>> for ServerError {
+    fn from(err: PoisonError<RwLockReadGuard<ClientsManager>>) -> ServerError {
         ServerError::new_kind(&err.to_string(), ServerErrorKind::PoinsonedLock)
     }
 }
@@ -96,8 +100,8 @@ impl From<PoisonError<MutexGuard<'_, ThreadPool>>> for ServerError {
     }
 }
 
-impl From<PoisonError<RwLockWriteGuard<'_, Session>>> for ServerError {
-    fn from(err: PoisonError<RwLockWriteGuard<'_, Session>>) -> Self {
+impl From<PoisonError<RwLockWriteGuard<'_, ClientsManager>>> for ServerError {
+    fn from(err: PoisonError<RwLockWriteGuard<'_, ClientsManager>>) -> Self {
         ServerError::new_kind(&err.to_string(), ServerErrorKind::PoinsonedLock)
     }
 }

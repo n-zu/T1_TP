@@ -313,8 +313,10 @@ impl Publish {
         let mut variable_header = vec![];
         variable_header.append(&mut Field::new_from_string(&self.topic_name).unwrap().encode());
         if let Some(packet_identifier) = self.packet_id {
-            variable_header.push(packet_identifier.to_be_bytes()[0]);
-            variable_header.push(packet_identifier.to_be_bytes()[1]);
+            if self.qos != QoSLevel::QoSLevel0 {
+                variable_header.push(packet_identifier.to_be_bytes()[0]);
+                variable_header.push(packet_identifier.to_be_bytes()[1]);
+            }
         }
 
         variable_header
