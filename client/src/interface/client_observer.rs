@@ -1,7 +1,7 @@
 use gtk::{
     glib,
-    prelude::{ContainerExt, WidgetExt},
-    Box, Label, ListBox, ListBoxRow, Orientation,
+    prelude::{BuilderExtManual, ContainerExt, WidgetExt},
+    Box, Builder, Label, ListBox, ListBoxRow, Orientation,
 };
 use packets::{packet_reader::QoSLevel, publish::Publish};
 
@@ -13,10 +13,11 @@ pub struct ClientObserver {
 }
 
 impl ClientObserver {
-    pub fn new(list: ListBox) -> ClientObserver {
+    pub fn new(builder: Builder) -> ClientObserver {
         let (sender, receiver) = glib::MainContext::channel(glib::PRIORITY_DEFAULT);
+
         receiver.attach(None, move |message: Message| {
-            message_receiver(message, &list);
+            message_receiver(message, &builder);
             glib::Continue(true)
         });
 
@@ -24,11 +25,11 @@ impl ClientObserver {
     }
 }
 
-fn message_receiver(message: Message, list: &ListBox) {
+fn message_receiver(message: Message, builder: &Builder) {
     match message {
         Message::Publish(publish) => {
             println!("Me llegó el publish {:?}", publish);
-            add_publish(publish, list);
+            add_publish(publish, builder);
         }
         Message::Connected(result) => {
             println!("Conectado: {:?}", result);
@@ -47,13 +48,16 @@ fn get_box(topic: &str, payload: &str, qos: QoSLevel) -> Box {
     outer_box
 }
 
-fn add_publish(publish: Publish, list: &ListBox) {
+fn add_publish(publish: Publish, builder: &Builder) {
+    let list: ListBox = builder.object("sub_msgs").unwrap();
+
     let row = ListBoxRow::new();
     row.add(&get_box(
         publish.topic_name(),
         publish.payload().unwrap_or(&"".to_string()),
         publish.qos(),
     ));
+
     list.add(&row);
     list.show_all();
 }

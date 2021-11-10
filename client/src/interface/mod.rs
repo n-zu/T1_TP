@@ -1,15 +1,15 @@
 use std::{rc::Rc, sync::Mutex};
-mod observer;
+mod client_observer;
 use crate::{
     client::ClientError,
     client_packets::{ConnectBuilder, Subscribe, Topic},
-    interface::observer::ClientObserver,
+    interface::client_observer::ClientObserver,
 };
 
 use gtk::{
     prelude::{BuilderExtManual, ButtonExt, DialogExt, EntryExt, TextBufferExt},
-    Builder, Button, ButtonsType, DialogFlags, Entry, ListBox, MessageDialog, MessageType,
-    TextBuffer, Window,
+    Builder, Button, ButtonsType, DialogFlags, Entry, MessageDialog, MessageType, TextBuffer,
+    Window,
 };
 
 use crate::client::Client;
@@ -45,65 +45,11 @@ impl Controller {
         });
     }
 
-    fn try_do<F>(&self, function: F)
-    where
-        F: FnOnce() -> Result<(), ClientError>,
-    {
-        if let Err(err) = function() {
-            self.alert(&format!("No se pudo ejecutar tarea: {}", err));
-        }
-    }
-
-    fn handle_connect(&self, _: &Button) {
-        println!("Connect button clicked");
-        self.try_do(|| -> Result<(), ClientError> {
-            let addr: Entry = self.builder.object("con_host").unwrap();
-            let port: Entry = self.builder.object("con_port").unwrap();
-            let id: Entry = self.builder.object("con_cli").unwrap();
-            let pub_list: ListBox = self.builder.object("sub_msgs").unwrap();
-
-            let full_addr = format!("{}:{}", &addr.text().to_string(), &port.text().to_string());
-
-            let connect = ConnectBuilder::new(&id.text().to_string(), 0, true)?.build()?;
-            let observer = ClientObserver::new(pub_list);
-            match Client::new(&full_addr, observer, connect) {
-                Result::Ok(client) => {
-                    println!("Connected to server");
-                    self.client.lock()?.replace(client);
-                }
-                Err(e) => {
-                    println!("Failed to connect to server: {}", e);
-                }
-            }
-
-            Ok(())
-        });
-    }
-
     fn setup_subscribe(self: &Rc<Self>) {
         let cont_clone = self.clone();
         let subscribe: Button = self.builder.object("sub_btn").unwrap();
         subscribe.connect_clicked(move |button: &Button| {
             cont_clone.handle_subscribe(button);
-        });
-    }
-
-    fn handle_subscribe(&self, _: &Button) {
-        println!("Subscribe button clicked");
-
-        self.try_do(|| -> Result<(), ClientError> {
-            let topic: Entry = self.builder.object("sub_top").unwrap();
-            let qos = QoSLevel::QoSLevel0; // TODO
-
-            let topic = Topic::new(&topic.text().to_string(), qos)?;
-
-            let packet = Subscribe::new(vec![topic], 0);
-
-            if let Some(client) = self.client.lock()?.as_mut() {
-                client.subscribe(packet)?;
-            }
-
-            Ok(())
         });
     }
 
@@ -115,41 +61,97 @@ impl Controller {
         });
     }
 
-    fn handle_publish(self: &Rc<Self>, _: &Button) {
-        println!("Publish button clicked");
+    fn _connect(&self) -> Result<(), ClientError> {
+        let addr: Entry = self.builder.object("con_host").unwrap();
+        let port: Entry = self.builder.object("con_port").unwrap();
+        let id: Entry = self.builder.object("con_cli").unwrap();
 
-        self.try_do(|| -> Result<(), ClientError> {
-            let topic: Entry = self.builder.object("pub_top").unwrap();
-            let qos = QoSLevel::QoSLevel0; // TODO
-            let retain = false; // TODO
-            let msg: TextBuffer = self.builder.object("pub_mg_txtbuffer").unwrap();
+        let full_addr = format!("{}:{}", &addr.text().to_string(), &port.text().to_string());
 
-            let packet = Publish::new(
-                false, // TODO
-                qos,
-                retain,
-                &topic.text().to_string(),
-                &msg.text(&msg.start_iter(), &msg.end_iter(), false)
-                    .ok_or_else(|| ClientError::new("Se debe completar el campo de mensaje"))?,
-                None, // TODO
-            )?;
-
-            if let Some(client) = self.client.lock()?.as_mut() {
-                client.publish(packet)?;
+        let connect = ConnectBuilder::new(&id.text().to_string(), 0, true)?.build()?;
+        let observer = ClientObserver::new(self.builder.clone());
+        match Client::new(&full_addr, observer, connect) {
+            Result::Ok(client) => {
+                println!("Connected to server");
+                self.client.lock()?.replace(client);
             }
+            Err(e) => {
+                println!("Failed to connect to server: {}", e);
+            }
+        }
 
-            Ok(())
-        });
+        Ok(())
     }
 
-    fn alert(&self, message: &str) {
-        MessageDialog::new(
+    fn handle_connect(&self, _: &Button) {
+        if let Err(e) = self._connect() {
+            Self::alert(&format!("No se pudo conectar: {}", e));
+        }
+    }
+
+    fn _subscribe(&self) -> Result<(), ClientError> {
+        let topic: Entry = self.builder.object("sub_top").unwrap();
+        let qos = QoSLevel::QoSLevel0; // TODO
+
+        let topic = Topic::new(&topic.text().to_string(), qos)?;
+
+        let packet = Subscribe::new(vec![topic], 0);
+
+        if let Some(client) = self.client.lock()?.as_mut() {
+            client.subscribe(packet)?;
+        } else {
+            return Err(ClientError::new("No hay una conexión activa"));
+        }
+
+        Ok(())
+    }
+
+    fn handle_subscribe(&self, _: &Button) {
+        if let Err(e) = self._subscribe() {
+            Self::alert(&format!("No se pudo suscribir: {}", e));
+        }
+    }
+
+    fn _publish(&self) -> Result<(), ClientError> {
+        let topic: Entry = self.builder.object("pub_top").unwrap();
+        let qos = QoSLevel::QoSLevel0; // TODO
+        let retain = false; // TODO
+        let msg: TextBuffer = self.builder.object("pub_mg_txtbuffer").unwrap();
+
+        let packet = Publish::new(
+            false, // TODO
+            qos,
+            retain,
+            &topic.text().to_string(),
+            &msg.text(&msg.start_iter(), &msg.end_iter(), false)
+                .ok_or_else(|| ClientError::new("Se debe completar el campo de mensaje"))?,
+            None, // TODO
+        )?;
+
+        if let Some(client) = self.client.lock()?.as_mut() {
+            client.publish(packet)?;
+        } else {
+            return Err(ClientError::new("No hay una conexión activa"));
+        }
+
+        Ok(())
+    }
+
+    fn handle_publish(self: &Rc<Self>, _: &Button) {
+        if let Err(e) = self._publish() {
+            Self::alert(&format!("No se pudo publicar: {}", e));
+        }
+    }
+
+    pub fn alert(message: &str) {
+        let dialog = MessageDialog::new(
             None::<&Window>,
-            DialogFlags::empty(),
+            DialogFlags::MODAL,
             MessageType::Error,
-            ButtonsType::Ok,
+            ButtonsType::Close,
             message,
-        )
-        .run();
+        );
+        dialog.run();
+        dialog.emit_close();
     }
 }
