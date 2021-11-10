@@ -1,7 +1,4 @@
 on: 
-  push:
-    branches:
-      - 'client/**'
   pull_request:
     branches: 
       - main
