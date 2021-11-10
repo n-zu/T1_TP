@@ -77,7 +77,7 @@ impl Unsuback {
 
 #[cfg(test)]
 mod tests {
-    use crate::unsuback::{
+    use crate::client_packets::unsuback::{
         Unsuback, MSG_INVALID_PACKET_ID, MSG_INVALID_RESERVED_BITS, MSG_PACKET_TYPE_UNSUBACK,
     };
     use packets::packet_reader::{ErrorKind, PacketError};

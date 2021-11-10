@@ -48,16 +48,29 @@ impl Controller {
         let id: Entry = self.builder.object("con_cli").unwrap();
         let full_addr = format!("{}:{}", &addr.text().to_string(), &port.text().to_string());
 
-        // FIXME: Crashes if no server is connected
         let pub_list: ListBox = self.builder.object("sub_msgs").unwrap();
-        let mut new_client = Client::new(&full_addr, PublishController::new(pub_list)).unwrap();
+        let mut new_client =
+            if let Ok(client) = Client::new(&full_addr, PublishController::new(pub_list)) {
+                client
+            } else {
+                println!("Could not connect to server");
+                return;
+            };
         let connect = ConnectBuilder::new(&id.text().to_string(), 0, true)
             .unwrap()
             .build()
             .unwrap();
-        new_client.connect(connect).unwrap();
 
-        self.client.lock().unwrap().replace(new_client);
+        match new_client.connect(connect) {
+            Result::Ok(()) => {
+                println!("Connected to server");
+                self.client.lock().unwrap().replace(new_client);
+            }
+            Err(e) => {
+                println!("Failed to connect to server: {}", e);
+                self.client.lock().unwrap().take();
+            }
+        }
     }
 
     fn setup_subscribe(self: &Rc<Self>) {
