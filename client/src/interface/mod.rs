@@ -1,9 +1,9 @@
 use std::{rc::Rc, sync::Mutex};
-mod publish_controller;
+mod observer;
 use crate::{
-    client_error::ClientError,
+    client::ClientError,
     client_packets::{ConnectBuilder, Subscribe, Topic},
-    controller::publish_controller::ClientObserver,
+    interface::observer::ClientObserver,
 };
 
 use gtk::{
@@ -64,18 +64,15 @@ impl Controller {
 
             let full_addr = format!("{}:{}", &addr.text().to_string(), &port.text().to_string());
 
-            let mut new_client = Client::new(&full_addr, ClientObserver::new(pub_list))?;
-
             let connect = ConnectBuilder::new(&id.text().to_string(), 0, true)?.build()?;
-
-            match new_client.connect(connect) {
-                Result::Ok(()) => {
+            let observer = ClientObserver::new(pub_list);
+            match Client::new(&full_addr, observer, connect) {
+                Result::Ok(client) => {
                     println!("Connected to server");
-                    self.client.lock()?.replace(new_client);
+                    self.client.lock()?.replace(client);
                 }
                 Err(e) => {
                     println!("Failed to connect to server: {}", e);
-                    self.client.lock()?.take();
                 }
             }
 

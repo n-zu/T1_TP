@@ -30,8 +30,8 @@ fn message_receiver(message: Message, list: &ListBox) {
             println!("Me llegó el publish {:?}", publish);
             add_publish(publish, list);
         }
-        Message::Connected(_) => {
-            println!("Conectado");
+        Message::Connected(result) => {
+            println!("Conectado: {:?}", result);
         }
         _ => (),
     }

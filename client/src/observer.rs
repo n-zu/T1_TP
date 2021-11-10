@@ -1,19 +1,15 @@
 use packets::{puback::Puback, publish::Publish, suback::Suback};
 
-use crate::{
-    client_error::ClientError,
-    client_packets::{Connack, ConnackError},
-};
+use crate::{client::ClientError, client_packets::Connack};
 
 pub enum Message {
-    Connected(Connack),
-    ConnectionRefused(ConnackError),
-    Subscribed(Suback),
-    Published(Puback),
+    Connected(Result<Connack, ClientError>),
+    Subscribed(Result<Suback, ClientError>),
+    Published(Result<Puback, ClientError>),
     Publish(Publish),
     InternalError(ClientError),
 }
 
-pub trait Observer: Clone + Send {
+pub trait Observer: Clone + Send + Sync {
     fn update(&self, msg: Message);
 }

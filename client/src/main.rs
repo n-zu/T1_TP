@@ -1,10 +1,8 @@
 mod client;
-mod client_error;
-mod client_listener;
 mod client_packets;
-mod controller;
+mod interface;
 mod observer;
-use crate::controller::Controller;
+use crate::interface::Controller;
 use gtk::Builder;
 use gtk::{
     prelude::{ApplicationExt, ApplicationExtManual, BuilderExtManual, GtkWindowExt, WidgetExt},

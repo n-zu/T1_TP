@@ -159,6 +159,11 @@ impl Connect {
         encoded.append(&mut self.payload());
         encoded
     }
+
+    /// Returns the keep alive time of the packet
+    pub fn keep_alive(&self) -> u16 {
+        self.keep_alive
+    }
 }
 
 /// Connect packet constructor
