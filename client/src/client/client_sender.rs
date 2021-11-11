@@ -6,7 +6,7 @@ use std::{thread, time};
 
 use packets::packet_reader::QoSLevel;
 
-use crate::client_packets::{Connect, PingReq, Subscribe};
+use crate::client_packets::{Connect, Disconnect, PingReq, Subscribe};
 use crate::observer::{Message, Observer};
 use packets::publish::{DupFlag, Publish};
 
@@ -130,6 +130,18 @@ impl<T: 'static + Observer> ClientSender<T> {
     pub fn send_pingreq(&self) {
         let pingreq = PingReq::new();
         if let Err(err) = self._pingreq(pingreq) {
+            self.observer.update(Message::InternalError(err));
+        }
+    }
+
+    fn _disconnect(&self, disconnect: Disconnect) -> Result<(), ClientError> {
+        self.stream.lock()?.write_all(&disconnect.encode())?;
+        Ok(())
+    }
+
+    pub fn send_disconnect(&self) {
+        let disconnect = Disconnect::new();
+        if let Err(err) = self._disconnect(disconnect) {
             self.observer.update(Message::InternalError(err));
         }
     }

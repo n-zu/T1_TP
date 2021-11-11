@@ -11,7 +11,7 @@ use crate::client_packets::{Connect, PingReq, Subscribe};
 use client_listener::Listener;
 use client_sender::ClientSender;
 
-use crate::observer::Observer;
+use crate::observer::{Message, Observer};
 pub use client_error::ClientError;
 use packets::publish::Publish;
 use threadpool::ThreadPool;
@@ -36,7 +36,7 @@ const STOP_TIMEOUT: Duration = Duration::from_millis(200);
 // Cuanto restarle al Keep Alive como márgen de error
 const KEEP_ALIVE_SUBSTRACTION: Duration = Duration::from_secs(2);
 
-impl<T: 'static + Observer> Client<T> {
+impl<T: Observer> Client<T> {
     #![allow(dead_code)]
     pub fn new(address: &str, observer: T, connect: Connect) -> Result<Client<T>, ClientError> {
         let stream = TcpStream::connect(address)?;
@@ -131,8 +131,17 @@ impl<T: 'static + Observer> Client<T> {
     }
 }
 
+// Se desconecta al dropearse
 impl<T: Observer> Drop for Client<T> {
     fn drop(&mut self) {
         self.stop.store(true, std::sync::atomic::Ordering::Relaxed);
+        let sender = self.sender.clone();
+        if let Err(err) = self.thread_pool.spawn(move || {
+            sender.send_disconnect();
+        }) {
+            let msg = "Error enviándo paquete disconnect, se desconectará de manera forzosa";
+            let error = ClientError::new(&format!("{}\n{}", msg, err));
+            self.sender.observer().update(Message::InternalError(error));
+        }
     }
 }

@@ -10,6 +10,6 @@ pub enum Message {
     InternalError(ClientError),
 }
 
-pub trait Observer: Clone + Send + Sync {
+pub trait Observer: Clone + Send + Sync + 'static {
     fn update(&self, msg: Message);
 }
