@@ -79,7 +79,7 @@ impl<T: 'static + Observer> ClientSender<T> {
             .replace(PendingAck::Subscribe(subscribe));
         self.stream.lock()?.write_all(&bytes)?;
         if !self.wait_for_ack()? {
-            ClientError::new("No se recibió paquete suback");
+            return Err(ClientError::new("No se recibió paquete suback"));
         }
 
         Ok(())
@@ -87,6 +87,7 @@ impl<T: 'static + Observer> ClientSender<T> {
 
     pub fn send_subscribe(&self, subscribe: Subscribe) {
         if let Err(err) = self._subscribe(subscribe) {
+            println!("sending error");
             self.observer.update(Message::Subscribed(Err(err)));
         }
     }
@@ -121,7 +122,9 @@ impl<T: 'static + Observer> ClientSender<T> {
             .replace(PendingAck::PingReq(pingreq));
         self.stream.lock()?.write_all(&bytes)?;
         if !self.wait_for_ack()? {
-            ClientError::new("El servidor no respondió al pingreq");
+            return Err(ClientError::new(
+                "El servidor no respondió al pingreq, ¿esta en línea?",
+            ));
         }
 
         Ok(())
@@ -177,7 +180,6 @@ impl<T: 'static + Observer> ClientSender<T> {
 
         while retries < MAX_RETRIES {
             thread::sleep(ACK_CHECK);
-
             match self.pending_ack.lock()?.as_mut() {
                 None => {
                     return Ok(true);
@@ -187,10 +189,10 @@ impl<T: 'static + Observer> ClientSender<T> {
                     if last + RESEND_TIMEOUT < now {
                         Self::resend_pending(&mut stream, pending_ack)?;
                         last = time::Instant::now();
+                        retries += 1;
                     }
                 }
             }
-            retries += 1;
         }
 
         Ok(false)

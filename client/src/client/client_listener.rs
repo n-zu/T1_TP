@@ -79,6 +79,7 @@ impl<T: Observer> Listener<T> {
 
         match self.stream.read_exact(&mut buf) {
             Ok(()) => {
+                println!("Got header: {}", buf[0]);
                 self.handle_packet(buf[0])?;
                 Ok(())
             }

@@ -1,6 +1,7 @@
 use gtk::{
-    prelude::{BuilderExtManual, LabelExt, StackExt, WidgetExt},
-    Box, Builder, Label, Stack,
+    prelude::{BuilderExtManual, DialogExt, LabelExt, StackExt, WidgetExt},
+    Box, Builder, Button, ButtonsType, DialogFlags, Label, MessageDialog, MessageType, Stack,
+    Window,
 };
 
 pub enum Icon {
@@ -30,21 +31,20 @@ pub trait InterfaceUtils {
     fn show_connect_menu(&self) {
         let stack: Stack = self.builder().object("content").unwrap();
         stack.set_visible_child_name("box_connection");
+        self.sensitive(true);
     }
 
     fn show_content_menu(&self) {
         let stack: Stack = self.builder().object("content").unwrap();
         stack.set_visible_child_name("box_connected");
+        self.sensitive(true);
     }
 
-    fn sensitive_connect_menu(&self, sensitive: bool) {
-        let connect_window: Box = self.builder().object("box_connection").unwrap();
-        connect_window.set_sensitive(sensitive);
-    }
-
-    fn sensitive_content_menu(&self, sensitive: bool) {
-        let connect_window: Box = self.builder().object("box_connected").unwrap();
-        connect_window.set_sensitive(sensitive);
+    fn sensitive(&self, sensitive: bool) {
+        let content: Stack = self.builder().object("content").unwrap();
+        let disconnect_button: Button = self.builder().object("discon_btn").unwrap();
+        content.set_sensitive(sensitive);
+        disconnect_button.set_sensitive(sensitive);
     }
 
     fn status_message(&self, msg: &str) {
@@ -52,8 +52,26 @@ pub trait InterfaceUtils {
         status_text.set_text(msg);
     }
 
-    fn connection_info(&self, msg: &str) {
-        let info: Label = self.builder().object("connection_info").unwrap();
-        info.set_text(msg);
+    fn connection_info(&self, msg: Option<&str>) {
+        let info_box: Box = self.builder().object("info_box").unwrap();
+        if let Some(text) = msg {
+            let label: Label = self.builder().object("connection_info").unwrap();
+            info_box.set_visible(true);
+            label.set_text(text);
+        } else {
+            info_box.set_visible(false);
+        }
     }
+}
+
+pub fn alert(message: &str) {
+    let dialog = MessageDialog::new(
+        None::<&Window>,
+        DialogFlags::MODAL,
+        MessageType::Error,
+        ButtonsType::Close,
+        message,
+    );
+    dialog.run();
+    dialog.emit_close();
 }

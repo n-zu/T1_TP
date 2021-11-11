@@ -10,9 +10,8 @@ use crate::{
 use crate::client::Client;
 
 use gtk::{
-    prelude::{BuilderExtManual, ButtonExt, DialogExt, EntryExt, TextBufferExt},
-    Builder, Button, ButtonsType, DialogFlags, Entry, MessageDialog, MessageType, TextBuffer,
-    Window,
+    prelude::{BuilderExtManual, ButtonExt, EntryExt, TextBufferExt},
+    Builder, Button, Entry, TextBuffer,
 };
 
 use packets::{packet_reader::QoSLevel, publish::Publish};
@@ -45,6 +44,7 @@ impl Controller {
         self.setup_connect();
         self.setup_subscribe();
         self.setup_publish();
+        self.setup_disconnect();
     }
 
     fn setup_connect(self: &Rc<Self>) {
@@ -71,6 +71,14 @@ impl Controller {
         });
     }
 
+    fn setup_disconnect(self: &Rc<Self>) {
+        let cont_clone = self.clone();
+        let disconnect: Button = self.builder.object("discon_btn").unwrap();
+        disconnect.connect_clicked(move |button: &Button| {
+            cont_clone.handle_disconnect(button);
+        });
+    }
+
     fn _connect(&self) -> Result<(), ClientError> {
         let addr: Entry = self.builder.object("con_host").unwrap();
         let port: Entry = self.builder.object("con_port").unwrap();
@@ -82,7 +90,7 @@ impl Controller {
         let observer = ClientObserver::new(self.builder.clone());
         let client = Client::new(&full_addr, observer, connect)?;
 
-        self.connection_info(&format!("Dirección del servidor: {}", full_addr));
+        self.connection_info(Some(&format!("Conectado a {}", full_addr)));
         self.client.lock()?.replace(client);
 
         Ok(())
@@ -91,10 +99,9 @@ impl Controller {
     fn handle_connect(&self, _: &Button) {
         self.icon(Icon::Loading);
         self.status_message("Conectando...");
-        self.sensitive_connect_menu(false);
+        self.sensitive(false);
         if let Err(e) = self._connect() {
-            Self::alert(&format!("No se pudo conectar: {}", e));
-            self.sensitive_connect_menu(true);
+            self.sensitive(true);
             self.icon(Icon::Error);
             self.status_message(&format!("No se pudo conectar ({})", e));
         }
@@ -118,8 +125,13 @@ impl Controller {
     }
 
     fn handle_subscribe(&self, _: &Button) {
+        self.sensitive(false);
+        self.status_message("Suscribiendose...");
+        self.icon(Icon::Loading);
         if let Err(e) = self._subscribe() {
-            Self::alert(&format!("No se pudo suscribir: {}", e));
+            self.sensitive(true);
+            self.status_message(&format!("No se pudo suscribir: {}", e));
+            self.icon(Icon::Error);
         }
     }
 
@@ -149,20 +161,30 @@ impl Controller {
     }
 
     fn handle_publish(self: &Rc<Self>, _: &Button) {
-        if let Err(e) = self._publish() {
-            Self::alert(&format!("No se pudo publicar: {}", e));
+        self.sensitive(false);
+        self.status_message("Publicando...");
+        self.icon(Icon::Loading);
+        if let Err(err) = self._publish() {
+            self.sensitive(true);
+            self.status_message(&format!("No se pudo publicar: {}", err));
+            self.icon(Icon::Error);
         }
     }
 
-    pub fn alert(message: &str) {
-        let dialog = MessageDialog::new(
-            None::<&Window>,
-            DialogFlags::MODAL,
-            MessageType::Error,
-            ButtonsType::Close,
-            message,
-        );
-        dialog.run();
-        dialog.emit_close();
+    fn _disconnect(&self) -> Result<(), ClientError> {
+        self.client.lock()?.take();
+        Ok(())
+    }
+
+    fn handle_disconnect(self: &Rc<Self>, _: &Button) {
+        if let Err(err) = self._disconnect() {
+            self.icon(Icon::Error);
+            self.status_message(&format!("Error desconectando: {}", err));
+        } else {
+            self.show_connect_menu();
+            self.icon(Icon::Ok);
+            self.status_message("Desconectado");
+            self.connection_info(None);
+        }
     }
 }

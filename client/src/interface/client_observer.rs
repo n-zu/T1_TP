@@ -3,16 +3,15 @@ use gtk::{
     prelude::{BuilderExtManual, ContainerExt, WidgetExt},
     Box, Builder, Label, ListBox, ListBoxRow, Orientation,
 };
-use packets::{packet_reader::QoSLevel, publish::Publish};
+use packets::{packet_reader::QoSLevel, puback::Puback, publish::Publish, suback::Suback};
 
 use crate::{
     client::ClientError,
     client_packets::Connack,
-    interface::Controller,
     observer::{Message, Observer},
 };
 
-use super::utils::{Icon, InterfaceUtils};
+use super::utils::{alert, Icon, InterfaceUtils};
 
 #[derive(Clone)]
 pub struct ClientObserver {
@@ -22,7 +21,7 @@ pub struct ClientObserver {
 impl Observer for ClientObserver {
     fn update(&self, message: Message) {
         if let Err(e) = self.sender.send(message) {
-            Controller::alert(&format!("Error interno: {}", e));
+            alert(&format!("Error interno: {}", e));
         }
     }
 }
@@ -63,13 +62,40 @@ impl InternalObserver {
             Message::Connected(result) => {
                 self.connected(result);
             }
+            Message::Published(result) => {
+                self.published(result);
+            }
+            Message::Subscribed(result) => {
+                self.subscribed(result);
+            }
             Message::InternalError(error) => {
-                Controller::alert(&format!(
+                alert(&format!(
                     "Error interno: {}\n\nSe recomienda reiniciar el cliente",
                     error
                 ));
             }
-            _ => (),
+        }
+    }
+
+    fn subscribed(&self, result: Result<Suback, ClientError>) {
+        self.sensitive(true);
+        if let Err(e) = result {
+            self.icon(Icon::Error);
+            self.status_message(&format!("No se pudo suscribir: {}", e));
+        } else {
+            self.icon(Icon::Ok);
+            self.status_message("Suscrito");
+        }
+    }
+
+    fn published(&self, result: Result<Option<Puback>, ClientError>) {
+        self.sensitive(true);
+        if let Err(e) = result {
+            self.icon(Icon::Error);
+            self.status_message(&format!("No se pudo publicar: {}", e));
+        } else {
+            self.icon(Icon::Ok);
+            self.status_message("Publicado");
         }
     }
 
@@ -89,8 +115,8 @@ impl InternalObserver {
 
     fn connected(&self, result: Result<Connack, ClientError>) {
         if let Err(e) = result {
-            self.connection_info("");
-            self.sensitive_connect_menu(true);
+            self.connection_info(None);
+            self.sensitive(true);
             self.icon(Icon::Error);
             self.status_message(&format!("No se pudo conectar: {}", e));
         } else {
