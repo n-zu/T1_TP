@@ -28,9 +28,9 @@ impl Observer for ClientObserver {
 impl ClientObserver {
     pub fn new(builder: Builder) -> ClientObserver {
         let (sender, receiver) = glib::MainContext::channel(glib::PRIORITY_DEFAULT);
-
+        let internal = InternalObserver::new(builder);
         receiver.attach(None, move |message: Message| {
-            message_receiver(message, &builder);
+            internal.message_receiver(message);
             glib::Continue(true)
         });
 
@@ -38,21 +38,66 @@ impl ClientObserver {
     }
 }
 
-fn message_receiver(message: Message, builder: &Builder) {
-    match message {
-        Message::Publish(publish) => {
-            add_publish(publish, builder);
+struct InternalObserver {
+    builder: Builder,
+}
+
+impl InternalObserver {
+    fn new(builder: Builder) -> Self {
+        Self { builder }
+    }
+
+    fn message_receiver(&self, message: Message) {
+        match message {
+            Message::Publish(publish) => {
+                self.add_publish(publish);
+            }
+            Message::Connected(result) => {
+                self.connected(result);
+            }
+            Message::InternalError(error) => {
+                Controller::alert(&format!(
+                    "Error interno: {}\n\nSe recomienda reiniciar el cliente",
+                    error
+                ));
+            }
+            _ => (),
         }
-        Message::Connected(result) => {
-            connected(result, builder);
+    }
+
+    fn add_publish(&self, publish: Publish) {
+        let list: ListBox = self.builder.object("sub_msgs").unwrap();
+
+        let row = ListBoxRow::new();
+        row.add(&get_box(
+            publish.topic_name(),
+            publish.payload().unwrap_or(&"".to_string()),
+            publish.qos(),
+        ));
+
+        list.add(&row);
+        list.show_all();
+    }
+
+    fn connected(&self, result: Result<Connack, ClientError>) {
+        let status_icon: Stack = self.builder.object("status_icon").unwrap();
+        let status_text: Label = self.builder.object("status_label").unwrap();
+
+        if let Err(e) = result {
+            let connect_window: Box = self.builder.object("box_connection").unwrap();
+            let info: Label = self.builder.object("connection_info").unwrap();
+
+            connect_window.set_sensitive(true);
+            info.set_text("");
+
+            status_icon.set_visible_child_name("error");
+            status_text.set_text(&format!("No se pudo conectar: {}", e));
+        } else {
+            let stack: Stack = self.builder.object("content").unwrap();
+            stack.set_visible_child_name("box_connected");
+            status_icon.set_visible_child_name("ok");
+            status_text.set_text("Connected");
         }
-        Message::InternalError(error) => {
-            Controller::alert(&format!(
-                "Error interno: {}\n\nSe recomienda reiniciar el cliente",
-                error
-            ));
-        }
-        _ => (),
     }
 }
 
@@ -64,40 +109,4 @@ fn get_box(topic: &str, payload: &str, qos: QoSLevel) -> Box {
     outer_box.add(&inner_box);
     outer_box.add(&Label::new(Some(payload)));
     outer_box
-}
-
-fn add_publish(publish: Publish, builder: &Builder) {
-    let list: ListBox = builder.object("sub_msgs").unwrap();
-
-    let row = ListBoxRow::new();
-    row.add(&get_box(
-        publish.topic_name(),
-        publish.payload().unwrap_or(&"".to_string()),
-        publish.qos(),
-    ));
-
-    list.add(&row);
-    list.show_all();
-}
-
-fn connected(result: Result<Connack, ClientError>, builder: &Builder) {
-    let status_icon: Stack = builder.object("status_icon").unwrap();
-    let status_text: Label = builder.object("status_label").unwrap();
-
-    if let Err(e) = result {
-        Controller::alert(&format!("No se pudo conectar: {}", e));
-        let connect_window: Box = builder.object("box_connection").unwrap();
-        let info: Label = builder.object("connection_info").unwrap();
-
-        connect_window.set_sensitive(true);
-        info.set_text("");
-
-        status_icon.set_visible_child_name("error");
-        status_text.set_text(&format!("No se pudo conectar: {}", e));
-    } else {
-        let stack: Stack = builder.object("content").unwrap();
-        stack.set_visible_child_name("box_connected");
-        status_icon.set_visible_child_name("ok");
-        status_text.set_text("Connected");
-    }
 }
