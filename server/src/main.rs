@@ -10,7 +10,6 @@ mod config;
 mod server;
 mod server_packets;
 mod topic_handler;
-mod traits;
 
 fn main() {
     let config = Config::new("config.txt").expect("Error cargando la configuracion");
