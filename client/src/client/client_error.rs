@@ -7,7 +7,6 @@ use std::{
 
 use crate::{
     client::{Client, PendingAck},
-    client_packets::ConnackError,
     observer::Observer,
 };
 use packets::packet_reader::PacketError;
@@ -71,25 +70,5 @@ impl<T: Observer> From<PoisonError<MutexGuard<'_, Option<Client<T>>>>> for Clien
 impl From<PoisonError<MutexGuard<'_, TcpStream>>> for ClientError {
     fn from(err: PoisonError<MutexGuard<'_, TcpStream>>) -> ClientError {
         ClientError::new(&format!("Error usando lock: {}", err))
-    }
-}
-
-impl From<ConnackError> for ClientError {
-    fn from(err: ConnackError) -> ClientError {
-        match err {
-            ConnackError::WrongEncoding(e) => ClientError::new(&format!(
-                "Error parseando paquete Connack del servidor: {}",
-                e
-            )),
-            ConnackError::UnacceptableProtocolVersion => {
-                ClientError::new("El servidor usa una versión de MQTT diferente")
-            }
-            ConnackError::IdentifierRejected => ClientError::new("Se rechazó el identificador"),
-            ConnackError::ServerUnavailable => ClientError::new("Servidor no disponible"),
-            ConnackError::BadUserNameOrPassword => {
-                ClientError::new("Usuario o contraseña incorrectos")
-            }
-            ConnackError::NotAuthorized => ClientError::new("No se autorizó la conexión"),
-        }
     }
 }

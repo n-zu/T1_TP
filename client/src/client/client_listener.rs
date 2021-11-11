@@ -14,11 +14,7 @@ use packets::{
     suback::Suback,
 };
 
-use crate::{
-    client::PendingAck,
-    client_packets::{Connack, ConnackError},
-    observer::Observer,
-};
+use crate::{client::PendingAck, client_packets::Connack, observer::Observer};
 
 use crate::observer::Message;
 
@@ -44,6 +40,13 @@ pub enum PacketType {
     Pingresp,
     Disconnect,
 }
+
+// Bajo que errores no se reintenta conectar
+const CONNECT_USER_ERRORS: [ErrorKind; 3] = [
+    ErrorKind::BadUserNameOrPassword,
+    ErrorKind::NotAuthorized,
+    ErrorKind::IdentifierRejected,
+];
 
 impl<T: Observer> Listener<T> {
     pub fn new(
@@ -123,21 +126,19 @@ impl<T: Observer> Listener<T> {
 
     fn handle_connack(&mut self, header: u8) -> Result<(), ClientError> {
         let connack = Connack::read_from(&mut self.stream, header);
-        if let Err(ConnackError::WrongEncoding(str)) = connack {
-            return Err(ClientError::new(&format!(
-                "Error parseando Connack: {}",
-                str
-            )));
-        }
 
         // Si no estoy esperando un connack lo ignoro
         let mut lock = self.pending_ack.lock()?;
         if let Some(PendingAck::Connect(_)) = lock.as_ref() {
             match connack {
-                Err(err) => {
+                Err(err) if CONNECT_USER_ERRORS.contains(&err.kind()) => {
+                    lock.take();
+                    self.stop.store(true, Ordering::Relaxed);
                     self.observer
                         .update(Message::Connected(Err(ClientError::from(err))));
-                    self.stop.store(true, Ordering::Relaxed);
+                }
+                Err(err) => {
+                    return Err(ClientError::from(err));
                 }
                 Ok(packet) => {
                     lock.take();

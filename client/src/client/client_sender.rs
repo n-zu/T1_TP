@@ -103,7 +103,7 @@ impl<T: 'static + Observer> ClientSender<T> {
         self.stream.lock()?.write_all(&bytes)?;
 
         if qos == QoSLevel::QoSLevel0 {
-            self.observer.update(Message::Published(Ok(None)));    
+            self.observer.update(Message::Published(Ok(None)));
         }
         Ok(())
     }

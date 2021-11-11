@@ -53,6 +53,11 @@ pub enum ErrorKind {
     InvalidReturnCode,
     WouldBlock,
     UnexpectedEof,
+    UnacceptableProtocolVersion,
+    IdentifierRejected,
+    ServerUnavailable,
+    BadUserNameOrPassword,
+    NotAuthorized,
     Other,
 }
 
