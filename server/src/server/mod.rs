@@ -1,14 +1,16 @@
+#![allow(dead_code)]
+
 use core::panic;
 use std::{
+    collections::HashMap,
     io::{self, Read},
     net::{SocketAddr, TcpListener, TcpStream},
     sync::{
-        mpsc::{self, Receiver},
+        mpsc::{self, channel, Receiver, Sender},
         Arc, Mutex, RwLock,
     },
     thread::{self, JoinHandle},
     time::Duration,
-    vec,
 };
 
 use threadpool::ThreadPool;
@@ -24,6 +26,7 @@ pub use server_error::ServerError;
 
 const CONNECTION_WAIT_TIMEOUT: Duration = Duration::from_secs(180);
 const CLIENT_READ_TIMEOUT: Duration = Duration::from_secs(1);
+const ACCEPT_SLEEP_DUR: Duration = Duration::from_millis(100);
 
 use packets::publish::Publish;
 
@@ -70,8 +73,27 @@ pub struct Server {
     /// Manages the Publish / Subscribe tree
     topic_handler: TopicHandler,
     /// Vector with the handlers of the clients running in parallel
-    client_handlers: Mutex<Vec<JoinHandle<()>>>,
+    client_join_handles: Mutex<HashMap<SocketAddr, JoinHandle<()>>>,
     pool: Mutex<ThreadPool>,
+}
+
+pub struct ServerController {
+    shutdown_sender: Sender<()>,
+    handle: JoinHandle<()>,
+}
+
+impl ServerController {
+    fn new(shutdown_sender: Sender<()>, handle: JoinHandle<()>) -> ServerController {
+        ServerController {
+            shutdown_sender,
+            handle,
+        }
+    }
+
+    pub fn shutdown(self) {
+        self.shutdown_sender.send(()).unwrap();
+        self.handle.join().unwrap();
+    }
 }
 
 // Temporal
@@ -103,7 +125,7 @@ impl Server {
             clients_manager: RwLock::new(ClientsManager::new(config.accounts_path())),
             config,
             topic_handler: TopicHandler::new(),
-            client_handlers: Mutex::new(vec![]),
+            client_join_handles: Mutex::new(HashMap::new()),
             pool: Mutex::new(ThreadPool::new(threadpool_size)),
         })
     }
@@ -178,9 +200,10 @@ impl Server {
         self.topic_handler.publish(&publish, sender)?;
         // QoSLevel1
         if let Some(packet_id) = publish.packet_id() {
-            self.clients_manager
-                .read()?
-                .send_puback(id, &Puback::new(*packet_id)?)?;
+            self.clients_manager.read()?.client_do(id, |mut client| {
+                client.send_puback(Puback::new(*packet_id)?)?;
+                Ok(())
+            })?;
         }
         if let Err(err) = handler.join() {
             Err(ServerError::new_msg(&format!(
@@ -192,9 +215,13 @@ impl Server {
         }
     }
 
-    fn handle_subscribe(&self, subscribe: Subscribe, id: &str) -> ServerResult<()> {
+    fn handle_subscribe(&self, mut subscribe: Subscribe, id: &str) -> ServerResult<()> {
         debug!("<{}> Recibido SUBSCRIBE", id);
+        subscribe.set_max_qos(QoSLevel::QoSLevel1);
         self.topic_handler.subscribe(&subscribe, id)?;
+        self.clients_manager
+            .read()?
+            .client_do(id, |mut client| client.send_suback(subscribe.response()?))?;
         Ok(())
     }
 
@@ -291,27 +318,51 @@ impl Server {
         Ok(())
     }
 
-    fn manage_client(self: Arc<Self>, mut stream: TcpStream, addr: SocketAddr) -> ServerResult<()> {
+    fn manage_client(
+        self: Arc<Self>,
+        mut stream: TcpStream,
+        addr: SocketAddr,
+        finished_thread_sender: Sender<SocketAddr>,
+    ) -> ServerResult<()> {
         match self.connect_client(&mut stream, addr) {
             Err(err) => match err.kind() {
                 ServerErrorKind::ClientNotInWhitelist => {
                     warn!("Intento de conexion con usuario invalido");
-                    Ok(())
+                    finished_thread_sender.send(addr).unwrap();
                 }
                 ServerErrorKind::InvalidPassword => {
                     warn!("Intento de conexion con contraseña invalido");
-                    Ok(())
+                    finished_thread_sender.send(addr).unwrap();
                 }
-                ServerErrorKind::ProtocolViolation => Err(err),
+                ServerErrorKind::ProtocolViolation => {
+                    error!(
+                        "Addr {} - Violacion de protocolo: {}",
+                        addr,
+                        err.to_string()
+                    );
+                    finished_thread_sender.send(addr).unwrap();
+                    return Err(err);
+                }
                 _ => panic!("Error inesperado: {}", err.to_string()),
             },
-            Ok(id) => self.client_loop(id, stream),
+            Ok(id) => {
+                self.client_loop(id, stream)?;
+                finished_thread_sender.send(addr).unwrap();
+            }
         }
+        Ok(())
     }
 
-    fn accept_client(self: Arc<Self>, listener: &TcpListener) -> Result<Arc<Server>, ServerError> {
+    fn accept_client(
+        self: &Arc<Self>,
+        listener: &TcpListener,
+        finished_thread_sender: Sender<SocketAddr>,
+    ) -> ServerResult<()> {
         match listener.accept() {
-            Err(error) if error.kind() == io::ErrorKind::WouldBlock => Ok(self),
+            Err(error) if error.kind() == io::ErrorKind::WouldBlock => {
+                thread::sleep(ACCEPT_SLEEP_DUR);
+                Ok(())
+            }
             Err(error) => {
                 error!("No se pudo aceptar conexion TCP: {}", error.to_string());
                 Err(ServerError::from(error))
@@ -320,22 +371,61 @@ impl Server {
                 info!("Aceptada conexion TCP con {}", addr);
                 stream.set_read_timeout(Some(CONNECTION_WAIT_TIMEOUT))?;
                 let sv_copy = self.clone();
-                // No funcionan los nombres en el trace
-                let handle = thread::Builder::new()
-                    .name(addr.to_string())
-                    .spawn(move || sv_copy.manage_client(stream, addr).unwrap())
-                    .expect("Error creando el thread");
-                self.client_handlers.lock().unwrap().push(handle);
-                Ok(self)
+                let handle = thread::spawn(move || {
+                    sv_copy
+                        .manage_client(stream, addr, finished_thread_sender)
+                        .unwrap();
+                });
+                self.client_join_handles
+                    .lock()
+                    .unwrap()
+                    .insert(addr, handle);
+                Ok(())
             }
         }
     }
 
-    pub fn run(self: Arc<Self>) -> ServerResult<()> {
-        let listener = TcpListener::bind(format!("127.0.0.1:{}", self.config.port()))?;
-        let mut server = self;
-        loop {
-            server = server.accept_client(&listener)?;
+    fn join_finished_threads(&self, finished_thread_receiver: &Receiver<SocketAddr>) {
+        while let Ok(finished_addr) = finished_thread_receiver.try_recv() {
+            debug!("Iniciando join de thread con Addr {}", finished_addr);
+            let handle = self
+                .client_join_handles
+                .lock()
+                .unwrap()
+                .remove(&finished_addr)
+                .unwrap();
+            handle.join().unwrap();
+            debug!("Finalizado join de thread con Addr {}", finished_addr);
         }
+    }
+
+    fn server_loop(self: Arc<Self>, listener: TcpListener, shutdown_receiver: Receiver<()>) {
+        let (finished_thread_sender, finished_thread_receiver) = channel();
+        let mut recv_result = shutdown_receiver.try_recv();
+        while recv_result.is_err() {
+            self.accept_client(&listener, finished_thread_sender.clone())
+                .unwrap();
+            self.join_finished_threads(&finished_thread_receiver);
+            recv_result = shutdown_receiver.try_recv();
+        }
+        debug!("Apagando Servidor");
+        self.clients_manager
+            .write()
+            .unwrap()
+            .finish_all_sessions(false)
+            .unwrap();
+    }
+
+    pub fn run(self: Arc<Self>) -> ServerResult<ServerController> {
+        let listener = TcpListener::bind(format!("127.0.0.1:{}", self.config.port()))?;
+        listener.set_nonblocking(true).unwrap();
+        let (shutdown_sender, shutdown_receiver) = channel();
+        let server = self;
+
+        let server_handle = thread::spawn(move || {
+            server.server_loop(listener, shutdown_receiver);
+        });
+        let server_controller = ServerController::new(shutdown_sender, server_handle);
+        Ok(server_controller)
     }
 }

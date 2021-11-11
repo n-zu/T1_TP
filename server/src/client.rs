@@ -4,7 +4,7 @@ use std::{
     vec,
 };
 
-use packets::{packet_reader::QoSLevel, puback::Puback, publish::Publish};
+use packets::{packet_reader::QoSLevel, puback::Puback, publish::Publish, suback::Suback};
 use tracing::{debug, error, info};
 
 use crate::{
@@ -83,8 +83,7 @@ impl Client {
         }
     }
 
-    // TODO: probablemente no sea buena idea que sea publico
-    pub fn write_all(&mut self, buf: &[u8]) -> io::Result<()> {
+    fn write_all(&mut self, buf: &[u8]) -> io::Result<()> {
         if self.connected() {
             self.stream.write_all(buf)
         } else {
@@ -95,6 +94,11 @@ impl Client {
     pub fn send_connack(&mut self, session_present: u8, return_code: u8) -> io::Result<()> {
         self.stream
             .write_all(&Connack::new(session_present, return_code).encode())?;
+        Ok(())
+    }
+
+    pub fn send_puback(&mut self, puback: Puback) -> ServerResult<()> {
+        self.write_all(&puback.encode())?;
         Ok(())
     }
 
@@ -134,6 +138,11 @@ impl Client {
                     .packet_id()
                     .expect("Se esperaba un paquete con identificador (QoS > 0)")
         });
+        Ok(())
+    }
+
+    pub fn send_suback(&mut self, suback: Suback) -> ServerResult<()> {
+        self.write_all(&suback.encode()?)?;
         Ok(())
     }
 

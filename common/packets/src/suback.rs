@@ -63,7 +63,7 @@ impl Suback {
     ///  let expected: Vec<u8> = vec![0b10010000, 6, 0, 1, 0, 1, 1, 1];
     ///  assert_eq!(encoded_suback, expected)
     /// ```
-    pub fn encode(&mut self) -> Result<Vec<u8>, PacketError> {
+    pub fn encode(mut self) -> Result<Vec<u8>, PacketError> {
         let mut bytes = vec![];
         bytes.append(&mut self.fixed_header()?);
         bytes.append(&mut self.variable_header());

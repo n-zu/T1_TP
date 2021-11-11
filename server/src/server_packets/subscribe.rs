@@ -106,7 +106,7 @@ impl Subscribe {
     #[doc(hidden)]
     /// Sets max QoS for each Topic Filter in a Subscribe packet
     /// This is intended to be used by the server in case some QoS is not yet implemented by it
-    fn set_max_qos(&mut self, max_qos: QoSLevel) {
+    pub fn set_max_qos(&mut self, max_qos: QoSLevel) {
         for topic_filter in self.topic_filters.iter_mut() {
             if (topic_filter.qos as u8) > (max_qos as u8) {
                 topic_filter.qos = max_qos;

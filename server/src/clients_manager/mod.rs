@@ -2,7 +2,7 @@ mod login;
 
 use std::{collections::HashMap, sync::Mutex};
 
-use packets::{puback::Puback, publish::Publish};
+use packets::publish::Publish;
 use tracing::debug;
 
 use crate::{
@@ -70,15 +70,6 @@ impl ClientsManager {
     pub fn send_unacknowledged(&self, id: &str) -> ServerResult<()> {
         self.client_do(id, |mut client| {
             client.send_unacknowledged();
-            Ok(())
-        })
-    }
-
-    pub fn send_puback(&self, id: &str, puback: &Puback) -> ServerResult<()> {
-        debug!("Puback bytes: {:?}", puback.encode());
-        debug!("Puback ID {}", puback.packet_id());
-        self.client_do(id, |mut client| {
-            client.write_all(&puback.encode()).unwrap();
             Ok(())
         })
     }
@@ -185,6 +176,16 @@ impl ClientsManager {
             Err(err) if err.kind() == ServerErrorKind::ClientNotFound => Ok(false),
             Err(err) => Err(err),
         }
+    }
+
+    pub fn finish_all_sessions(&mut self, gracefully: bool) -> ServerResult<()> {
+        for (id, client) in &self.clients {
+            debug!("<{}>: Desconectando", id);
+            client.lock().unwrap().disconnect(gracefully);
+        }
+        self.clients
+            .retain(|_id, client| !client.get_mut().unwrap().clean_session());
+        Ok(())
     }
 
     pub fn keep_alive(&self, id: &str) -> ServerResult<u16> {

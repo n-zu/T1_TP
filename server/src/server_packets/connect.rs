@@ -212,10 +212,6 @@ impl Connect {
         }
     }
 
-    pub fn response(&self) -> &Connack {
-        &self.response
-    }
-
     /// Get a reference to the connect's client id.
     pub fn client_id(&self) -> &str {
         self.client_id.as_str()
