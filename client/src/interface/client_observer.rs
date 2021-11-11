@@ -1,7 +1,7 @@
 use gtk::{
     glib,
-    prelude::{BuilderExtManual, ContainerExt, LabelExt, StackExt, WidgetExt},
-    Box, Builder, Label, ListBox, ListBoxRow, Orientation, Stack,
+    prelude::{BuilderExtManual, ContainerExt, WidgetExt},
+    Box, Builder, Label, ListBox, ListBoxRow, Orientation,
 };
 use packets::{packet_reader::QoSLevel, publish::Publish};
 
@@ -11,6 +11,8 @@ use crate::{
     interface::Controller,
     observer::{Message, Observer},
 };
+
+use super::utils::{Icon, InterfaceUtils};
 
 #[derive(Clone)]
 pub struct ClientObserver {
@@ -40,6 +42,12 @@ impl ClientObserver {
 
 struct InternalObserver {
     builder: Builder,
+}
+
+impl InterfaceUtils for InternalObserver {
+    fn builder(&self) -> &Builder {
+        &self.builder
+    }
 }
 
 impl InternalObserver {
@@ -80,23 +88,15 @@ impl InternalObserver {
     }
 
     fn connected(&self, result: Result<Connack, ClientError>) {
-        let status_icon: Stack = self.builder.object("status_icon").unwrap();
-        let status_text: Label = self.builder.object("status_label").unwrap();
-
         if let Err(e) = result {
-            let connect_window: Box = self.builder.object("box_connection").unwrap();
-            let info: Label = self.builder.object("connection_info").unwrap();
-
-            connect_window.set_sensitive(true);
-            info.set_text("");
-
-            status_icon.set_visible_child_name("error");
-            status_text.set_text(&format!("No se pudo conectar: {}", e));
+            self.connection_info("");
+            self.sensitive_connect_menu(true);
+            self.icon(Icon::Error);
+            self.status_message(&format!("No se pudo conectar: {}", e));
         } else {
-            let stack: Stack = self.builder.object("content").unwrap();
-            stack.set_visible_child_name("box_connected");
-            status_icon.set_visible_child_name("ok");
-            status_text.set_text("Connected");
+            self.show_content_menu();
+            self.icon(Icon::Ok);
+            self.status_message("Connected");
         }
     }
 }

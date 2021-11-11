@@ -1,27 +1,33 @@
 use std::{rc::Rc, sync::Mutex};
 mod client_observer;
+mod utils;
 use crate::{
     client::ClientError,
     client_packets::{ConnectBuilder, Subscribe, Topic},
     interface::client_observer::ClientObserver,
 };
 
-use gtk::{
-    prelude::{
-        BuilderExtManual, ButtonExt, DialogExt, EntryExt, LabelExt, StackExt, TextBufferExt,
-        WidgetExt,
-    },
-    Box, Builder, Button, ButtonsType, DialogFlags, Entry, Label, MessageDialog, MessageType,
-    Stack, TextBuffer, Window,
-};
-
 use crate::client::Client;
 
+use gtk::{
+    prelude::{BuilderExtManual, ButtonExt, DialogExt, EntryExt, TextBufferExt},
+    Builder, Button, ButtonsType, DialogFlags, Entry, MessageDialog, MessageType, TextBuffer,
+    Window,
+};
+
 use packets::{packet_reader::QoSLevel, publish::Publish};
+
+use self::utils::{Icon, InterfaceUtils};
 
 pub struct Controller {
     builder: Builder,
     client: Mutex<Option<Client<ClientObserver>>>,
+}
+
+impl InterfaceUtils for Controller {
+    fn builder(&self) -> &Builder {
+        &self.builder
+    }
 }
 
 impl Controller {
@@ -31,8 +37,7 @@ impl Controller {
             client: Mutex::new(None),
         });
         cont.setup_handlers();
-        let stack: Stack = cont.builder.object("content").unwrap();
-        stack.set_visible_child_name("box_connection");
+        cont.show_connect_menu();
         cont
     }
 
@@ -77,25 +82,21 @@ impl Controller {
         let observer = ClientObserver::new(self.builder.clone());
         let client = Client::new(&full_addr, observer, connect)?;
 
-        let info: Label = self.builder.object("connection_info").unwrap();
-        info.set_text(&format!("Dirección del servidor: {}", full_addr));
+        self.connection_info(&format!("Dirección del servidor: {}", full_addr));
         self.client.lock()?.replace(client);
 
         Ok(())
     }
 
     fn handle_connect(&self, _: &Button) {
-        let window: Box = self.builder.object("box_connection").unwrap();
-        let status_icon: Stack = self.builder.object("status_icon").unwrap();
-        let status_text: Label = self.builder.object("status_label").unwrap();
-        status_icon.set_visible_child_name("loading");
-        status_text.set_text("Conectando... ");
-        window.set_sensitive(false);
+        self.icon(Icon::Loading);
+        self.status_message("Conectando...");
+        self.sensitive_connect_menu(false);
         if let Err(e) = self._connect() {
             Self::alert(&format!("No se pudo conectar: {}", e));
-            window.set_sensitive(true);
-            status_icon.set_visible_child_name("error");
-            status_text.set_text("No se pudo conectar");
+            self.sensitive_connect_menu(true);
+            self.icon(Icon::Error);
+            self.status_message(&format!("No se pudo conectar ({})", e));
         }
     }
 
