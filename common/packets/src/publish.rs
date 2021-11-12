@@ -355,8 +355,12 @@ impl Publish {
     }
 
     /// Set the publish's dup flag.
-    pub fn set_dup_flag(&mut self, dup_flag: DupFlag) {
-        self.dup_flag = dup_flag;
+    pub fn set_dup(&mut self, dup: bool) {
+        if dup {
+            self.dup_flag = DupFlag::DupFlag1;
+        } else {
+            self.dup_flag = DupFlag::DupFlag0;
+        }
     }
 }
 

@@ -9,20 +9,26 @@ use packets::packet_reader::QoSLevel;
 use crate::client_packets::unsubscribe::Unsubscribe;
 use crate::client_packets::{Connect, Disconnect, PingReq, Subscribe};
 use crate::observer::{Message, Observer};
-use packets::publish::{DupFlag, Publish};
+use packets::publish::Publish;
 
 use super::{ClientError, PendingAck};
 
-// Cuanto esperar antes de checkear que
-// haya que reenviar un paquete con QoS 1
-const RESEND_TIMEOUT: Duration = Duration::from_millis(5000);
+/// How much time should the sender wait until it tries
+/// to resend an unacknowledged packet.
+pub const RESEND_TIMEOUT: Duration = Duration::from_millis(5000);
 
-// Cada cuanto checkear si el listener ya recibió el ACK
-const ACK_CHECK: Duration = Duration::from_millis(500);
+/// How often should the sender check pending_ack after
+/// sending a packet that needs acknowledgement to see
+/// if it was acknowledged.
+pub const ACK_CHECK: Duration = Duration::from_millis(500);
 
-// Cuantas veces reintentar reenviar un paquete
+/// The maximum number of times the sender should try to
+/// resend an unacknowledged packet.
 const MAX_RETRIES: u16 = 3;
 
+/// The packet sender of the client. It is responsible
+/// for sending all packets to the server, except for
+/// acknowledgements.
 pub struct ClientSender<T: Observer, W: Write> {
     stream: Mutex<W>,
     pending_ack: Arc<Mutex<Option<PendingAck>>>,
@@ -30,7 +36,8 @@ pub struct ClientSender<T: Observer, W: Write> {
 }
 
 impl<T: Observer, W: Write> ClientSender<T, W> {
-    #![allow(dead_code)]
+    /// Creates a new sender with the given stream and observer,
+    /// and intializes pending_ack to None.
     pub fn new(stream: W, observer: T) -> Self {
         Self {
             stream: Mutex::new(stream),
@@ -39,14 +46,20 @@ impl<T: Observer, W: Write> ClientSender<T, W> {
         }
     }
 
+    /// Gets the pending_ack lock of the sender. This is used
+    /// by the sender after sending a packet to check if it was
+    /// acknowledged. If it was, it expects the lock to be
+    /// set to None.
     pub fn pending_ack(&self) -> Arc<Mutex<Option<PendingAck>>> {
         self.pending_ack.clone()
     }
 
+    /// Gets the stream that the sender is using.
     pub fn stream(&self) -> &Mutex<W> {
         &self.stream
     }
 
+    /// Gets a clone of the observer of the sender.
     pub fn observer(&self) -> Arc<T> {
         self.observer.clone()
     }
@@ -67,11 +80,11 @@ impl<T: Observer, W: Write> ClientSender<T, W> {
 
     /// Sends a CONNECT packet to the server.
     /// After sending the packet, it will set pending_ack to PendingAck::Connect()
-    /// and will wait until it is None. Every time a RESEND_TIMEOUT passes, it will
-    /// resend the package up to a maximum of MAX_RETRIES times, in which case
+    /// and will wait until it is None. Every time a RESEND_TIMEOUT duration passes,
+    /// it will resend the package up to a maximum of MAX_RETRIES times, after which
     /// it fails.
     /// If it fails, it sets failure_stop to true and sends a Message::Conected
-    /// with the error to the observer. pending_ack is set to None.
+    /// with the error to the observer and pending_ack is set to None.
     pub fn send_connect(&self, connect: Connect, failure_stop: Arc<AtomicBool>) {
         if let Err(err) = self._connect(connect) {
             failure_stop.store(true, std::sync::atomic::Ordering::Relaxed);
@@ -92,9 +105,15 @@ impl<T: Observer, W: Write> ClientSender<T, W> {
         Ok(())
     }
 
+    /// Sends a SUBSCRIBE packet to the server.
+    /// After sending the packet, it will set pending_ack to PendingAck::Subscribe()
+    /// and will wait until it is None. Every time a RESEND_TIMEOUT duration passes,
+    /// it will resend the package up to a maximum of MAX_RETRIES times, after which
+    /// it fails.
+    /// If it fails, it sends a Message::Subscribed with the error to the observer
+    /// and pending_ack is set to None.
     pub fn send_subscribe(&self, subscribe: Subscribe) {
         if let Err(err) = self._subscribe(subscribe) {
-            println!("sending error");
             self.observer.update(Message::Subscribed(Err(err)));
         }
     }
@@ -104,18 +123,37 @@ impl<T: Observer, W: Write> ClientSender<T, W> {
         let qos = publish.qos();
         if qos == QoSLevel::QoSLevel1 {
             *self.pending_ack.lock()? = Some(PendingAck::Publish(publish));
+        }
+
+        self.stream.lock()?.write_all(&bytes)?;
+
+        if qos == QoSLevel::QoSLevel1 {
             if !self.wait_for_ack()? {
                 return Err(ClientError::new("No se recibió paquete puback (QoS 1)"));
             }
-        }
-        self.stream.lock()?.write_all(&bytes)?;
-
-        if qos == QoSLevel::QoSLevel0 {
+        } else {
             self.observer.update(Message::Published(Ok(None)));
         }
+
         Ok(())
     }
 
+    /// Sends a PUBLISH packet to the server.
+    ///
+    /// If the packet has QoSLevel 1:
+    /// After sending the packet, it will set pending_ack to PendingAck::Publish() and
+    /// will wait until it is None. Every time a RESEND_TIMEOUT duration passes, it will
+    /// resend the package with the DUP flag set up to a maximum of MAX_RETRIES times,
+    /// after which it fails.
+    ///
+    /// If the packet has QoSLevel 0:
+    /// After sending the packet, it will send a Message::Published with Ok() to the
+    /// observer.
+    ///
+    /// If the packet has QoSLevel 2, the behaviour is undefined.
+    ///
+    /// If it fails, it sends a Message::Published with the error to the observer
+    /// (and pending_ack is set to None if QoSLevel was 1)
     pub fn send_publish(&self, publish: Publish) {
         if let Err(err) = self._publish(publish) {
             self.observer.update(Message::Published(Err(err)));
@@ -137,6 +175,13 @@ impl<T: Observer, W: Write> ClientSender<T, W> {
         Ok(())
     }
 
+    /// Sends a SUBSCRIBE packet to the server.
+    /// After sending the packet, it will set pending_ack to PendingAck::PingReq()
+    /// and will wait until it is None. Every time a RESEND_TIMEOUT duration passes,
+    /// it will resend the package up to a maximum of MAX_RETRIES times, after which
+    /// it fails.
+    /// If it fails, it sends a Message::InternalError() with the error to the observer
+    /// and pending_ack is set to None.
     pub fn send_pingreq(&self) {
         let pingreq = PingReq::new();
         if let Err(err) = self._pingreq(pingreq) {
@@ -149,6 +194,8 @@ impl<T: Observer, W: Write> ClientSender<T, W> {
         Ok(())
     }
 
+    /// Sends a DISCONNECT packet to the server.
+    /// If it fails, it sends a Message::InternalError with the error to the observer
     pub fn send_disconnect(&self) {
         let disconnect = Disconnect::new();
         if let Err(err) = self._disconnect(disconnect) {
@@ -169,6 +216,13 @@ impl<T: Observer, W: Write> ClientSender<T, W> {
         Ok(())
     }
 
+    /// Sends an UNSUBSCRIBE packet to the server.
+    /// After sending the packet, it will set pending_ack to PendingAck::Unsubscribe()
+    /// and will wait until it is None. Every time a RESEND_TIMEOUT duration passes,
+    /// it will resend the package up to a maximum of MAX_RETRIES times, after which
+    /// it fails.
+    /// If it fails, it sends a Message::Unsubscribed with the error to the observer
+    /// and pending_ack is set to None.
     pub fn send_unsubscribe(&self, unsubscribe: Unsubscribe) {
         if let Err(err) = self._unsubscribe(unsubscribe) {
             self.observer.update(Message::Unsubscribed(Err(err)));
@@ -185,7 +239,7 @@ impl<T: Observer, W: Write> ClientSender<T, W> {
                 stream.write_all(&ping_req.encode())?;
             }
             PendingAck::Publish(publish) => {
-                publish.set_dup_flag(DupFlag::DupFlag1);
+                publish.set_dup(true);
                 stream.write_all(&publish.encode()?)?;
             }
             PendingAck::Connect(connect) => {
@@ -235,9 +289,15 @@ mod tests {
         time::Instant,
     };
 
+    use packets::{packet_reader::QoSLevel, publish::Publish};
+
     use crate::{
         client::{client_sender::MAX_RETRIES, PendingAck},
-        client_packets::ConnectBuilder,
+        client_packets::{
+            subscribe::{Subscribe, Topic},
+            unsubscribe::Unsubscribe,
+            ConnectBuilder, Disconnect, PingReq,
+        },
         observer::Message,
     };
 
@@ -352,21 +412,20 @@ mod tests {
         let stream = Cursor::new(Vec::new());
         let observer = ObserverMock::new();
 
-        let client_sender = Arc::new(ClientSender::new(stream.clone(), observer.clone()));
+        let client_sender = ClientSender::new(stream.clone(), observer.clone());
         let pending = client_sender.pending_ack();
         let stop = Arc::new(AtomicBool::new(false));
 
-        let client_sender_clone = client_sender.clone();
         let stop_clone = stop.clone();
 
-        client_sender_clone.send_connect(connect, stop_clone);
+        client_sender.send_connect(connect, stop_clone);
         // No le saco el pending_ack()
 
         assert!(pending.lock().unwrap().is_none());
         // Al fallar, tiene que dejar vacío el pending_ack
 
         assert!(stop.load(std::sync::atomic::Ordering::Relaxed));
-        // Falló asique tiene que cambiar el stop
+        // Falló asi que tiene que cambiar el stop
 
         assert_eq!(stream.content(), bytes.repeat(1 + MAX_RETRIES as usize));
         // Debería haber escrito el connect en el stream, con el intento inicial + MAX_RETRIES veces
@@ -374,6 +433,378 @@ mod tests {
         assert!(matches!(
             observer.messages.lock().unwrap()[0],
             Message::Connected(Err(_))
+        ));
+        // Debería haber mandado el error al observer
+    }
+
+    #[test]
+    fn test_subscribe() {
+        let topic = Topic::new("cars/wheels", QoSLevel::QoSLevel0).unwrap();
+        let subscribe = Subscribe::new(vec![topic], 123);
+        let bytes = subscribe.encode().unwrap();
+
+        let stream = Cursor::new(Vec::new());
+        let observer = ObserverMock::new();
+
+        let client_sender = Arc::new(ClientSender::new(stream.clone(), observer.clone()));
+        let pending = client_sender.pending_ack();
+
+        let client_sender_clone = client_sender.clone();
+        let handle = thread::spawn(move || {
+            client_sender_clone.send_subscribe(subscribe);
+        });
+
+        assert!(matches!(
+            take_ack(&client_sender),
+            Some(PendingAck::Subscribe(_))
+        ));
+        // Debería haber puesto en el pending_ack un PendingAck::Subscribe()
+
+        handle.join().unwrap();
+
+        assert!(pending.lock().unwrap().is_none());
+        // Una vez terminó y ya habiendo otro thread sacado el PendingAck, debería
+        // haber quedado en None
+
+        assert_eq!(stream.content(), bytes);
+        // Debería haber escrito el subscribe en el stream
+
+        assert!(observer.messages.lock().unwrap().is_empty());
+        // No le debería haber mandado nada al observer
+    }
+
+    #[test]
+    fn test_subscribe_fail() {
+        let topic = Topic::new("cars/wheels", QoSLevel::QoSLevel0).unwrap();
+        let subscribe = Subscribe::new(vec![topic], 123);
+        let bytes = subscribe.encode().unwrap();
+
+        let stream = Cursor::new(Vec::new());
+        let observer = ObserverMock::new();
+
+        let client_sender = ClientSender::new(stream.clone(), observer.clone());
+        let pending = client_sender.pending_ack();
+
+        client_sender.send_subscribe(subscribe);
+
+        assert!(pending.lock().unwrap().is_none());
+        // Al fallar, tiene que dejar vacío el pending_ack
+
+        assert_eq!(stream.content(), bytes.repeat(1 + MAX_RETRIES as usize));
+        // Debería haber escrito el subscribe en el stream, con el intento inicial + MAX_RETRIES veces
+
+        assert!(matches!(
+            observer.messages.lock().unwrap()[0],
+            Message::Subscribed(Err(_))
+        ));
+        // Debería haber mandado el error al observer
+    }
+
+    #[test]
+    fn test_unsubscribe() {
+        let unsubscribe = Unsubscribe::new(123, vec!["car/wheels".to_string()]).unwrap();
+        let bytes = unsubscribe.encode().unwrap();
+
+        let stream = Cursor::new(Vec::new());
+        let observer = ObserverMock::new();
+
+        let client_sender = Arc::new(ClientSender::new(stream.clone(), observer.clone()));
+        let pending = client_sender.pending_ack();
+
+        let client_sender_clone = client_sender.clone();
+        let handle = thread::spawn(move || {
+            client_sender_clone.send_unsubscribe(unsubscribe);
+        });
+
+        assert!(matches!(
+            take_ack(&client_sender),
+            Some(PendingAck::Unsubscribe(_))
+        ));
+        // Debería haber puesto en el pending_ack un PendingAck::Unsubscribe()
+
+        handle.join().unwrap();
+
+        assert!(pending.lock().unwrap().is_none());
+        // Una vez terminó y ya habiendo otro thread sacado el PendingAck, debería
+        // haber quedado en None
+
+        assert_eq!(stream.content(), bytes);
+        // Debería haber escrito el subscribe en el stream
+
+        assert!(observer.messages.lock().unwrap().is_empty());
+        // No le debería haber mandado nada al observer
+    }
+
+    #[test]
+    fn test_unsubscribe_fail() {
+        let unsubscribe = Unsubscribe::new(123, vec!["car/wheels".to_string()]).unwrap();
+        let bytes = unsubscribe.encode().unwrap();
+
+        let stream = Cursor::new(Vec::new());
+        let observer = ObserverMock::new();
+
+        let client_sender = ClientSender::new(stream.clone(), observer.clone());
+        let pending = client_sender.pending_ack();
+
+        client_sender.send_unsubscribe(unsubscribe);
+
+        assert!(pending.lock().unwrap().is_none());
+        // Al fallar, tiene que dejar vacío el pending_ack
+
+        assert_eq!(stream.content(), bytes.repeat(1 + MAX_RETRIES as usize));
+        // Debería haber escrito el unsubscribe en el stream, con el intento inicial + MAX_RETRIES veces
+
+        assert!(matches!(
+            observer.messages.lock().unwrap()[0],
+            Message::Unsubscribed(Err(_))
+        ));
+        // Debería haber mandado el error al observer
+    }
+
+    #[test]
+    fn test_pingreq() {
+        let stream = Cursor::new(Vec::new());
+        let observer = ObserverMock::new();
+
+        let client_sender = Arc::new(ClientSender::new(stream.clone(), observer.clone()));
+        let pending = client_sender.pending_ack();
+
+        let client_sender_clone = client_sender.clone();
+        let handle = thread::spawn(move || {
+            client_sender_clone.send_pingreq();
+        });
+
+        assert!(matches!(
+            take_ack(&client_sender),
+            Some(PendingAck::PingReq(_))
+        ));
+        // Debería haber puesto en el pending_ack un PendingAck::PingReq()
+
+        handle.join().unwrap();
+
+        assert!(pending.lock().unwrap().is_none());
+        // Una vez terminó y ya habiendo otro thread sacado el PendingAck, debería
+        // haber quedado en None
+
+        assert_eq!(stream.content(), PingReq::new().encode());
+        // Debería haber escrito el pingreq en el stream
+
+        assert!(observer.messages.lock().unwrap().is_empty());
+        // No le debería haber mandado nada al observer
+    }
+
+    #[test]
+    fn test_pingreq_fail() {
+        let stream = Cursor::new(Vec::new());
+        let observer = ObserverMock::new();
+
+        let client_sender = ClientSender::new(stream.clone(), observer.clone());
+        let pending = client_sender.pending_ack();
+
+        client_sender.send_pingreq();
+
+        assert!(pending.lock().unwrap().is_none());
+        // Al fallar, tiene que dejar vacío el pending_ack
+
+        assert_eq!(
+            stream.content(),
+            PingReq::new().encode().repeat(1 + MAX_RETRIES as usize)
+        );
+        // Debería haber escrito el unsubscribe en el stream, con el intento inicial + MAX_RETRIES veces
+
+        assert!(matches!(
+            observer.messages.lock().unwrap()[0],
+            Message::InternalError(_)
+        ));
+        // Debería haber mandado el error al observer
+    }
+
+    #[test]
+    fn test_disconnect() {
+        let stream = Cursor::new(Vec::new());
+        let observer = ObserverMock::new();
+
+        let client_sender = Arc::new(ClientSender::new(stream.clone(), observer.clone()));
+
+        client_sender.send_disconnect();
+
+        assert_eq!(stream.content(), Disconnect::new().encode());
+        // Debería haber escrito el disconnect en el stream
+
+        assert!(observer.messages.lock().unwrap().is_empty());
+        // No le debería haber mandado nada al observer
+    }
+
+    struct BadWriter;
+    impl Write for BadWriter {
+        fn write(&mut self, _: &[u8]) -> std::io::Result<usize> {
+            Err(std::io::Error::new(
+                std::io::ErrorKind::Other,
+                "can't write",
+            ))
+        }
+
+        fn flush(&mut self) -> std::io::Result<()> {
+            Err(std::io::Error::new(
+                std::io::ErrorKind::Other,
+                "can't flush",
+            ))
+        }
+    }
+
+    #[test]
+    fn test_disconnect_fail() {
+        let observer = ObserverMock::new();
+
+        let client_sender = Arc::new(ClientSender::new(BadWriter {}, observer.clone()));
+
+        client_sender.send_disconnect();
+
+        assert!(matches!(
+            observer.messages.lock().unwrap()[0],
+            Message::InternalError(_)
+        ));
+        // Debería haber mandado el error al observer
+    }
+
+    #[test]
+    fn test_publish_qos1() {
+        let publish = Publish::new(
+            false,
+            QoSLevel::QoSLevel1,
+            false,
+            "car/wheels",
+            "wow such wheel",
+            Some(123),
+        )
+        .unwrap();
+        let bytes = publish.encode().unwrap();
+
+        let stream = Cursor::new(Vec::new());
+        let observer = ObserverMock::new();
+
+        let client_sender = Arc::new(ClientSender::new(stream.clone(), observer.clone()));
+        let pending = client_sender.pending_ack();
+
+        let client_sender_clone = client_sender.clone();
+        let handle = thread::spawn(move || {
+            client_sender_clone.send_publish(publish);
+        });
+
+        assert!(matches!(
+            take_ack(&client_sender),
+            Some(PendingAck::Publish(_))
+        ));
+        // Debería haber puesto en el pending_ack un PendingAck::Publish()
+
+        handle.join().unwrap();
+
+        assert!(pending.lock().unwrap().is_none());
+        // Una vez terminó y ya habiendo otro thread sacado el PendingAck, debería
+        // haber quedado en None
+
+        assert_eq!(stream.content(), bytes);
+        // Debería haber escrito el publish en el stream
+
+        assert!(observer.messages.lock().unwrap().is_empty());
+        // No le debería haber mandado nada al observer
+    }
+
+    #[test]
+    fn test_publish_qos1_fail() {
+        let publish = Publish::new(
+            false,
+            QoSLevel::QoSLevel1,
+            false,
+            "car/wheels",
+            "wow such wheel",
+            Some(123),
+        )
+        .unwrap();
+        let mut bytes = publish.encode().unwrap();
+        let mut pub_dup = publish.clone();
+        pub_dup.set_dup(true);
+        let dup_bytes = pub_dup.encode().unwrap();
+
+        let stream = Cursor::new(Vec::new());
+        let observer = ObserverMock::new();
+
+        let client_sender = ClientSender::new(stream.clone(), observer.clone());
+        let pending = client_sender.pending_ack();
+
+        client_sender.send_publish(publish);
+
+        assert!(pending.lock().unwrap().is_none());
+        // Al fallar, tiene que dejar vacío el pending_ack
+
+        assert!(pending.lock().unwrap().is_none());
+        // Al fallar, tiene que dejar vacío el pending_ack
+
+        println!("{:?}", bytes);
+        println!("{:?}", dup_bytes);
+        bytes.append(&mut dup_bytes.repeat(MAX_RETRIES as usize));
+        assert_eq!(stream.content(), bytes);
+        // Debería haber escrito el unsubscribe en el stream, con el intento inicial + MAX_RETRIES veces,
+        // y los ultimos deberían tener la flag de DUP
+
+        assert!(matches!(
+            observer.messages.lock().unwrap()[0],
+            Message::Published(Err(_))
+        ));
+        // Debería haber mandado el error al observer
+    }
+
+    #[test]
+    fn test_publish_qos0() {
+        let publish = Publish::new(
+            false,
+            QoSLevel::QoSLevel0,
+            false,
+            "car/wheels",
+            "wow such wheel",
+            None,
+        )
+        .unwrap();
+        let bytes = publish.encode().unwrap();
+
+        let stream = Cursor::new(Vec::new());
+        let observer = ObserverMock::new();
+
+        let client_sender = ClientSender::new(stream.clone(), observer.clone());
+
+        client_sender.send_publish(publish);
+
+        assert_eq!(stream.content(), bytes);
+        // Debería haber escrito el publish en el stream
+
+        assert!(matches!(
+            observer.messages.lock().unwrap()[0],
+            Message::Published(Ok(_))
+        ));
+        // Le debería haber mandado el Ok al observer
+    }
+
+    #[test]
+    fn test_publish_qos0_fail() {
+        let publish = Publish::new(
+            false,
+            QoSLevel::QoSLevel0,
+            false,
+            "car/wheels",
+            "wow such wheel",
+            None,
+        )
+        .unwrap();
+
+        let observer = ObserverMock::new();
+
+        let client_sender = ClientSender::new(BadWriter {}, observer.clone());
+
+        client_sender.send_publish(publish);
+
+        assert!(matches!(
+            observer.messages.lock().unwrap()[0],
+            Message::Published(Err(_))
         ));
         // Debería haber mandado el error al observer
     }
