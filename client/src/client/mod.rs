@@ -7,6 +7,7 @@ pub mod client_error;
 mod client_listener;
 mod client_sender;
 
+use crate::client_packets::unsubscribe::Unsubscribe;
 use crate::client_packets::{Connect, PingReq, Subscribe};
 use client_listener::Listener;
 use client_sender::ClientSender;
@@ -19,6 +20,7 @@ use threadpool::ThreadPool;
 #[allow(dead_code)]
 pub enum PendingAck {
     Subscribe(Subscribe),
+    Unsubscribe(Unsubscribe),
     PingReq(PingReq),
     Publish(Publish),
     Connect(Connect),
@@ -116,6 +118,16 @@ impl<T: Observer> Client<T> {
 
         self.thread_pool.spawn(move || {
             sender.send_subscribe(subscribe);
+        })?;
+
+        Ok(())
+    }
+
+    pub fn unsubscribe(&mut self, unsubscribe: Unsubscribe) -> Result<(), ClientError> {
+        let sender = self.sender.clone();
+
+        self.thread_pool.spawn(move || {
+            sender.send_unsubscribe(unsubscribe);
         })?;
 
         Ok(())

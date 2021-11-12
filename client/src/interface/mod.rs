@@ -45,6 +45,7 @@ impl Controller {
         self.setup_subscribe();
         self.setup_publish();
         self.setup_disconnect();
+        self.setup_unsubscribe();
     }
 
     fn setup_connect(self: &Rc<Self>) {
@@ -77,6 +78,14 @@ impl Controller {
         disconnect.connect_clicked(move |button: &Button| {
             cont_clone.handle_disconnect(button);
         });
+    }
+
+    fn setup_unsubscribe(self: &Rc<Self>) {
+        let _cont_clone = self.clone();
+        /*let unsubscribe: Button = self.builder.object("unsub_btn").unwrap();
+        unsubscribe.connect_clicked(move |button: &Button| {
+            cont_clone.handle_unsubscribe(button);
+        });*/ //TODO
     }
 
     fn _connect(&self) -> Result<(), ClientError> {
@@ -160,7 +169,7 @@ impl Controller {
         Ok(())
     }
 
-    fn handle_publish(self: &Rc<Self>, _: &Button) {
+    fn handle_publish(&self, _: &Button) {
         self.sensitive(false);
         self.status_message("Publicando...");
         self.icon(Icon::Loading);
@@ -176,7 +185,7 @@ impl Controller {
         Ok(())
     }
 
-    fn handle_disconnect(self: &Rc<Self>, _: &Button) {
+    fn handle_disconnect(&self, _: &Button) {
         if let Err(err) = self._disconnect() {
             self.icon(Icon::Error);
             self.status_message(&format!("Error desconectando: {}", err));
@@ -185,6 +194,23 @@ impl Controller {
             self.icon(Icon::Ok);
             self.status_message("Desconectado");
             self.connection_info(None);
+        }
+    }
+
+    fn _unsubscribe(&self) -> Result<(), ClientError> {
+        // TODO
+        Err(ClientError::new("No implementado"))
+    }
+
+    #[allow(dead_code)]
+    fn handle_unsubscribe(&self, _: &Button) {
+        self.sensitive(false);
+        self.status_message("Desuscribiendose...");
+        self.icon(Icon::Loading);
+        if let Err(e) = self._unsubscribe() {
+            self.sensitive(true);
+            self.status_message(&format!("No se pudo desuscribir: {}", e));
+            self.icon(Icon::Error);
         }
     }
 }

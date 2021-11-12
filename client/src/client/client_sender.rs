@@ -6,6 +6,7 @@ use std::{thread, time};
 
 use packets::packet_reader::QoSLevel;
 
+use crate::client_packets::unsubscribe::Unsubscribe;
 use crate::client_packets::{Connect, Disconnect, PingReq, Subscribe};
 use crate::observer::{Message, Observer};
 use packets::publish::{DupFlag, Publish};
@@ -28,7 +29,7 @@ pub struct ClientSender<T: Observer> {
     observer: Arc<T>,
 }
 
-impl<T: 'static + Observer> ClientSender<T> {
+impl<T: Observer> ClientSender<T> {
     #![allow(dead_code)]
     pub fn new(stream: TcpStream, observer: T) -> Self {
         Self {
@@ -149,6 +150,25 @@ impl<T: 'static + Observer> ClientSender<T> {
         }
     }
 
+    fn _unsubscribe(&self, unsubscribe: Unsubscribe) -> Result<(), ClientError> {
+        let bytes = unsubscribe.encode()?;
+        self.pending_ack
+            .lock()?
+            .replace(PendingAck::Unsubscribe(unsubscribe));
+        self.stream.lock()?.write_all(&bytes)?;
+        if !self.wait_for_ack()? {
+            return Err(ClientError::new("No se recibió paquete unsuback"));
+        }
+
+        Ok(())
+    }
+
+    pub fn send_unsubscribe(&self, unsubscribe: Unsubscribe) {
+        if let Err(err) = self._unsubscribe(unsubscribe) {
+            self.observer.update(Message::Unsubscribed(Err(err)));
+        }
+    }
+
     fn resend_pending(
         stream: &mut TcpStream,
         pending_ack: &mut PendingAck,
@@ -167,6 +187,9 @@ impl<T: 'static + Observer> ClientSender<T> {
             }
             PendingAck::Connect(connect) => {
                 stream.write_all(&connect.encode())?;
+            }
+            PendingAck::Unsubscribe(unsubscribe) => {
+                stream.write_all(&unsubscribe.encode()?)?;
             }
         }
         Ok(())
