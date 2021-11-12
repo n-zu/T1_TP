@@ -9,9 +9,10 @@ use crate::{
 
 use crate::client::Client;
 
+use gtk::prelude::SwitchExt;
 use gtk::{
     prelude::{BuilderExtManual, ButtonExt, EntryExt, TextBufferExt},
-    Builder, Button, Entry, TextBuffer,
+    Builder, Button, Entry, Switch, TextBuffer,
 };
 
 use crate::client_packets::Connect;
@@ -87,7 +88,7 @@ impl Controller {
         let user_entry: Entry = self.builder.object("con_usr").unwrap();
         let password_entry: Entry = self.builder.object("con_psw").unwrap();
         let keep_alive_entry: Entry = self.builder.object("con_ka").unwrap();
-        let _clean_session_entry: Entry = self.builder.object("con_cs").unwrap();
+        let clean_session_switch: Switch = self.builder.object("con_cs").unwrap();
 
         let full_addr = format!(
             "{}:{}",
@@ -96,11 +97,17 @@ impl Controller {
         );
         let user_name = user_entry.text().to_string();
         let password = password_entry.text().to_string();
-        let keep_alive: u16 = keep_alive_entry.text().to_string().parse().unwrap();
+        let keep_alive = keep_alive_entry.text().to_string().parse::<u16>().unwrap();
         let client_id = id_entry.text().to_string();
+        let clean_session = clean_session_switch.is_active();
 
-        let connect =
-            Self::_create_connect_packet(&client_id, &user_name, &password, keep_alive, true)?;
+        let connect = Self::_create_connect_packet(
+            &client_id,
+            &user_name,
+            &password,
+            keep_alive,
+            clean_session,
+        )?;
         let observer = ClientObserver::new(self.builder.clone());
         let client = Client::new(&full_addr, observer, connect)?;
 
