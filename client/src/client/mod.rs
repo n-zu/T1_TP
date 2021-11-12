@@ -19,9 +19,10 @@ use threadpool::ThreadPool;
 
 use self::client_listener::Stream;
 
-#[allow(dead_code)]
+/// Enum for Pending Acknowledgments of sent packets
+/// Common interface for the listener and the sender
 #[derive(Debug)]
-pub enum PendingAck {
+pub(crate) enum PendingAck {
     Subscribe(Subscribe),
     Unsubscribe(Unsubscribe),
     PingReq(PingReq),
@@ -29,6 +30,8 @@ pub enum PendingAck {
     Connect(Connect),
 }
 
+/// Internal Client. Fully functional MQTT Client
+/// which lacks any I/O to the user
 pub struct Client<T: Observer> {
     thread_pool: ThreadPool,
     stop: Arc<AtomicBool>,
@@ -41,14 +44,20 @@ impl Stream for TcpStream {
     }
 }
 
-// Cuanto esperar antes de checkear si hay que parar
-const STOP_TIMEOUT: Duration = Duration::from_millis(200);
+/// How often should the listener and ping sender check to see if they should stop
+pub(crate) const STOP_TIMEOUT: Duration = Duration::from_millis(200);
 
-// Cuanto restarle al Keep Alive como márgen de error
-const KEEP_ALIVE_SUBSTRACTION: Duration = Duration::from_secs(2);
+/// How much to reduce from the given Keep Alive time in orden to have an error margin
+pub(crate) const KEEP_ALIVE_SUBSTRACTION: Duration = Duration::from_secs(2);
 
 impl<T: Observer> Client<T> {
     #![allow(dead_code)]
+    /// Creates a new Client which connects to the TCP Listener on the given address, by
+    /// sending the given CONNECT packet.
+    /// The client must be initialized with an Observer to receive the different
+    /// Messages the client sends after relevant events (defined in the trait Observer).
+    /// If the connect packet has a Keep Alive set, it will automatically send and receive
+    /// the PingReq and PingResp packets
     pub fn new(address: &str, observer: T, connect: Connect) -> Result<Client<T>, ClientError> {
         let stream = TcpStream::connect(address)?;
         let mut threads = 3;
@@ -70,6 +79,7 @@ impl<T: Observer> Client<T> {
         Ok(ret)
     }
 
+    #[doc(hidden)]
     fn setup_keep_alive(&self, seconds: u16) -> Result<(), ClientError> {
         if seconds == 0 {
             return Ok(());
@@ -85,6 +95,7 @@ impl<T: Observer> Client<T> {
         Ok(())
     }
 
+    #[doc(hidden)]
     fn keep_alive(
         sender: Arc<ClientSender<T, TcpStream>>,
         stop: Arc<AtomicBool>,
@@ -104,6 +115,7 @@ impl<T: Observer> Client<T> {
         }
     }
 
+    #[doc(hidden)]
     fn connect(&mut self, connect: Connect) -> Result<(), ClientError> {
         let read_stream = self.sender.stream().lock()?.try_clone()?;
         let mut listener = ClientListener::new(
@@ -126,6 +138,9 @@ impl<T: Observer> Client<T> {
         Ok(())
     }
 
+    /// Sends the given SUBSCRIBE packet to the server. The Client then either returns
+    /// Err(ClientError) or Ok(()). In the latter case, the result of the operation
+    /// is sent to the Observer with a Subscribed() message.
     pub fn subscribe(&mut self, subscribe: Subscribe) -> Result<(), ClientError> {
         let sender = self.sender.clone();
 
@@ -136,6 +151,9 @@ impl<T: Observer> Client<T> {
         Ok(())
     }
 
+    /// Sends the given UNSUBSCRIBE packet to the server. The Client then either returns
+    /// Err(ClientError) or Ok(()). In the latter case, the result of the operation
+    /// is sent to the Observer with a Unsubscribed() message.
     pub fn unsubscribe(&mut self, unsubscribe: Unsubscribe) -> Result<(), ClientError> {
         let sender = self.sender.clone();
 
@@ -146,6 +164,13 @@ impl<T: Observer> Client<T> {
         Ok(())
     }
 
+    /// Sends the given publish packet to the server. The Client then either returns
+    /// Err(ClientError) or Ok(()). In the latter case, the result of the operation
+    /// is sent to the Observer with a Published() message. If the QoS of the packet
+    /// is QoSLevel1, not receiving the corresponding PUBACK packet will result in an
+    /// Error. If it succeeds, it sends a Published(Ok(None)) message if the packet
+    /// had QoSLevel0 or Published(Ok(Some())) with the corresponding PUBACK if the
+    /// packet had QoSLevel1. Behaviour is undefined for QoSLevel2.
     pub fn publish(&mut self, publish: Publish) -> Result<(), ClientError> {
         let sender = self.sender.clone();
         self.thread_pool.spawn(move || {
@@ -156,8 +181,9 @@ impl<T: Observer> Client<T> {
     }
 }
 
-// Se desconecta al dropearse
 impl<T: Observer> Drop for Client<T> {
+    /// The client automatically sends a disconnect packet before dropping and closing the connection.
+    /// If this fails, an InternalError is sent to the observer but the connection is closed anyway.
     fn drop(&mut self) {
         self.stop.store(true, std::sync::atomic::Ordering::Relaxed);
         let sender = self.sender.clone();

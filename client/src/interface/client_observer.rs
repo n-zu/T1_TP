@@ -13,6 +13,8 @@ use crate::{
 
 use super::utils::{alert, Icon, InterfaceUtils};
 
+/// Observer for the internal client. It sends all messages through
+/// a channel to the main GTK thread.
 #[derive(Clone)]
 pub struct ClientObserver {
     sender: glib::Sender<Message>,
@@ -27,6 +29,8 @@ impl Observer for ClientObserver {
 }
 
 impl ClientObserver {
+    /// Creates a new ClientObserver with the given Builder
+    /// of the interface
     pub fn new(builder: Builder) -> ClientObserver {
         let (sender, receiver) = glib::MainContext::channel(glib::PRIORITY_DEFAULT);
         let internal = InternalObserver::new(builder);
@@ -39,6 +43,8 @@ impl ClientObserver {
     }
 }
 
+/// Internal structure for the ClientObserver, which stores
+/// the interface's Builder and runs in the main GKT thread
 struct InternalObserver {
     builder: Builder,
 }
@@ -50,10 +56,14 @@ impl InterfaceUtils for InternalObserver {
 }
 
 impl InternalObserver {
+    /// Creates a new InternalObserver with the given
+    /// interface builder
     fn new(builder: Builder) -> Self {
         Self { builder }
     }
 
+    /// Receives a message and updates the interface
+    /// accordingly
     fn message_receiver(&self, message: Message) {
         match message {
             Message::Publish(publish) => {
@@ -80,6 +90,8 @@ impl InternalObserver {
         }
     }
 
+    /// Re-enables the interface and shows information
+    /// about the result of the subscribe operation
     fn subscribed(&self, result: Result<Suback, ClientError>) {
         self.sensitive(true);
         if let Err(e) = result {
@@ -91,6 +103,8 @@ impl InternalObserver {
         }
     }
 
+    /// Re-enables the interface and shows information
+    /// about the result of the publish operation
     fn published(&self, result: Result<Option<Puback>, ClientError>) {
         self.sensitive(true);
         if let Err(e) = result {
@@ -102,6 +116,7 @@ impl InternalObserver {
         }
     }
 
+    /// Adds a new received publish packet to the feed
     fn add_publish(&self, publish: Publish) {
         let list: ListBox = self.builder.object("sub_msgs").unwrap();
 
@@ -116,6 +131,9 @@ impl InternalObserver {
         list.show_all();
     }
 
+    /// Re-enables the interface and shows information
+    /// about the result of the connect operation. If
+    /// it succeed it switches to the connected/content menu
     fn connected(&self, result: Result<Connack, ClientError>) {
         if let Err(e) = result {
             self.connection_info(None);
@@ -129,6 +147,8 @@ impl InternalObserver {
         }
     }
 
+    /// Re-enables the interfaces and shows information
+    /// about the result of the unsubscribe operation
     fn unsubscribed(&self, result: Result<Unsuback, ClientError>) {
         self.sensitive(true);
         if let Err(e) = result {
@@ -141,6 +161,7 @@ impl InternalObserver {
     }
 }
 
+#[doc(hidden)]
 fn get_box(topic: &str, payload: &str, qos: QoSLevel) -> Box {
     let outer_box = Box::new(Orientation::Vertical, 5);
     let inner_box = Box::new(Orientation::Horizontal, 5);
