@@ -101,7 +101,7 @@ impl Controller {
         let last_will_retain_switch: Switch = self.builder.object("con_lw_ret").unwrap();
         let last_will_topic_entry: Entry = self.builder.object("con_lw_top").unwrap();
         let last_will_msg_entry: Entry = self.builder.object("con_lw_msg").unwrap();
-        let last_will_qos_entry: Entry = self.builder.object("entry_qos_combobox").unwrap();
+        // let last_will_qos_entry: Entry = self.builder.object("entry_qos_combobox").unwrap();
 
         let full_addr = format!(
             "{}:{}",
@@ -117,7 +117,7 @@ impl Controller {
         let _last_will_retain = last_will_retain_switch.is_active();
         let _last_will_topic = last_will_topic_entry.text().to_string();
         let _last_will_msg = last_will_msg_entry.text().to_string();
-        let _last_will_qos = last_will_qos_entry.text().to_string().parse::<u8>()?;
+        // let _last_will_qos = last_will_qos_entry.text().to_string().parse::<u8>()?;
 
         let connect = Self::_create_connect_packet(
             &client_id,
