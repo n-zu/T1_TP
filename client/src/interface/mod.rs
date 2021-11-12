@@ -14,6 +14,7 @@ use gtk::{
     Builder, Button, Entry, TextBuffer,
 };
 
+use crate::client_packets::Connect;
 use packets::{packet_reader::QoSLevel, publish::Publish};
 
 use self::utils::{Icon, InterfaceUtils};
@@ -80,13 +81,26 @@ impl Controller {
     }
 
     fn _connect(&self) -> Result<(), ClientError> {
-        let addr: Entry = self.builder.object("con_host").unwrap();
-        let port: Entry = self.builder.object("con_port").unwrap();
-        let id: Entry = self.builder.object("con_cli").unwrap();
+        let address_entry: Entry = self.builder.object("con_host").unwrap();
+        let port_entry: Entry = self.builder.object("con_port").unwrap();
+        let id_entry: Entry = self.builder.object("con_cli").unwrap();
+        let user_entry: Entry = self.builder.object("con_usr").unwrap();
+        let password_entry: Entry = self.builder.object("con_psw").unwrap();
+        let keep_alive_entry: Entry = self.builder.object("con_ka").unwrap();
+        let _clean_session_entry: Entry = self.builder.object("con_cs").unwrap();
 
-        let full_addr = format!("{}:{}", &addr.text().to_string(), &port.text().to_string());
+        let full_addr = format!(
+            "{}:{}",
+            &address_entry.text().to_string(),
+            &port_entry.text().to_string()
+        );
+        let user_name = user_entry.text().to_string();
+        let password = password_entry.text().to_string();
+        let keep_alive: u16 = keep_alive_entry.text().to_string().parse().unwrap();
+        let client_id = id_entry.text().to_string();
 
-        let connect = ConnectBuilder::new(&id.text().to_string(), 0, true)?.build()?;
+        let connect =
+            Self::_create_connect_packet(&client_id, &user_name, &password, keep_alive, true)?;
         let observer = ClientObserver::new(self.builder.clone());
         let client = Client::new(&full_addr, observer, connect)?;
 
@@ -94,6 +108,23 @@ impl Controller {
         self.client.lock()?.replace(client);
 
         Ok(())
+    }
+
+    fn _create_connect_packet(
+        client_id: &str,
+        user_name: &str,
+        password: &str,
+        keep_alive: u16,
+        clean_session: bool,
+    ) -> Result<Connect, ClientError> {
+        let mut connect_builder = ConnectBuilder::new(client_id, keep_alive, clean_session)?;
+        if !user_name.is_empty() {
+            connect_builder = connect_builder.user_name(user_name)?;
+        }
+        if !password.is_empty() {
+            connect_builder = connect_builder.password(password)?;
+        }
+        Ok(connect_builder.build()?)
     }
 
     fn handle_connect(&self, _: &Button) {

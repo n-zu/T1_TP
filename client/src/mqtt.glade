@@ -805,6 +805,7 @@
                           <object class="GtkEntry" id="con_psw">
                             <property name="visible">True</property>
                             <property name="can_focus">True</property>
+                            <property name="input_purpose">password</property>
                           </object>
                           <packing>
                             <property name="expand">False</property>
@@ -846,6 +847,8 @@
                           <object class="GtkEntry" id="con_ka">
                             <property name="visible">True</property>
                             <property name="can_focus">True</property>
+                            <property name="text" translatable="yes">0</property>
+                            <property name="input_purpose">number</property>
                           </object>
                           <packing>
                             <property name="expand">False</property>
