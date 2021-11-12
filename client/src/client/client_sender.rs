@@ -175,7 +175,7 @@ impl<T: Observer, W: Write> ClientSender<T, W> {
         Ok(())
     }
 
-    /// Sends a SUBSCRIBE packet to the server.
+    /// Sends a PINGREQ packet to the server.
     /// After sending the packet, it will set pending_ack to PendingAck::PingReq()
     /// and will wait until it is None. Every time a RESEND_TIMEOUT duration passes,
     /// it will resend the package up to a maximum of MAX_RETRIES times, after which
