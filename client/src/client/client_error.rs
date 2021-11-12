@@ -1,3 +1,4 @@
+use std::num::ParseIntError;
 use std::{
     error::Error,
     fmt::Display,
@@ -35,6 +36,15 @@ impl ClientError {
 impl From<PacketError> for ClientError {
     fn from(err: PacketError) -> ClientError {
         ClientError::new(&format!("Error parseando paquete del servidor: {}", err))
+    }
+}
+
+impl From<ParseIntError> for ClientError {
+    fn from(err: ParseIntError) -> ClientError {
+        ClientError::new(&format!(
+            "Keep alive debe ser numero mayor o igual a 0, {}",
+            err
+        ))
     }
 }
 
