@@ -42,7 +42,7 @@ impl From<PacketError> for ClientError {
 impl From<ParseIntError> for ClientError {
     fn from(err: ParseIntError) -> ClientError {
         ClientError::new(&format!(
-            "Keep alive debe ser numero mayor o igual a 0, {}",
+            "Keep alive o QoS Last Will debe ser un numero mayor o igual a 0, {}",
             err
         ))
     }
