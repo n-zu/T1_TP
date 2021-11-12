@@ -86,6 +86,11 @@ impl Unsubscribe {
         }
         Ok(payload_buffer)
     }
+
+    /// Returns packet identifier
+    pub fn packet_id(&self) -> u16 {
+        self.packet_id
+    }
 }
 
 #[cfg(test)]
@@ -172,5 +177,12 @@ mod tests {
             1, // packet id
         ];
         assert_eq!(result, expected);
+    }
+
+    #[test]
+    fn test_returns_same_identifier() {
+        let topics = vec!["temperatura/Argentina".to_string()];
+        let packet = Unsubscribe::new(123, topics).unwrap();
+        assert_eq!(packet.packet_id(), 123);
     }
 }

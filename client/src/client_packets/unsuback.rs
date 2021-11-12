@@ -73,6 +73,11 @@ impl Unsuback {
         }
         Ok(())
     }
+
+    /// Returns the packet identifier
+    pub fn packet_id(&self) -> u16 {
+        self.packet_id
+    }
 }
 
 #[cfg(test)]
@@ -128,5 +133,15 @@ mod tests {
         let expected_error =
             PacketError::new_kind(MSG_INVALID_PACKET_ID, ErrorKind::InvalidProtocol);
         assert_eq!(expected_error, result);
+    }
+
+    #[test]
+    fn test_returns_same_identifier() {
+        let control_byte = 0b10110000;
+        let remaining_length = 2;
+        let data_buffer: Vec<u8> = vec![remaining_length, 0, 123];
+        let mut stream = Cursor::new(data_buffer);
+        let result = Unsuback::read_from(&mut stream, control_byte).unwrap();
+        assert_eq!(123, result.packet_id());
     }
 }

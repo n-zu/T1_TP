@@ -7,7 +7,7 @@ use packets::{packet_reader::QoSLevel, puback::Puback, publish::Publish, suback:
 
 use crate::{
     client::ClientError,
-    client_packets::Connack,
+    client_packets::{Connack, Unsuback},
     observer::{Message, Observer},
 };
 
@@ -129,7 +129,7 @@ impl InternalObserver {
         }
     }
 
-    fn unsubscribed(&self, result: Result<Suback, ClientError>) {
+    fn unsubscribed(&self, result: Result<Unsuback, ClientError>) {
         self.sensitive(true);
         if let Err(e) = result {
             self.icon(Icon::Error);

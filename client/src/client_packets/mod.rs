@@ -13,3 +13,5 @@ pub use disconnect::*;
 pub use pingreq::*;
 pub use pingresp::*;
 pub use subscribe::*;
+pub use unsuback::*;
+pub use unsubscribe::*;

@@ -14,7 +14,11 @@ use packets::{
     suback::Suback,
 };
 
-use crate::{client::PendingAck, client_packets::Connack, observer::Observer};
+use crate::{
+    client::PendingAck,
+    client_packets::{Connack, PingResp, Unsuback},
+    observer::Observer,
+};
 
 use crate::observer::Message;
 
@@ -99,17 +103,15 @@ impl<T: Observer, S: Stream> Listener<T, S> {
 
     fn handle_packet(&mut self, header: u8) -> Result<(), ClientError> {
         match get_code_type(header >> 4) {
-            Ok(packet) => {
-                match packet {
-                    PacketType::Publish => self.handle_publish(header),
-                    PacketType::Puback => self.handle_puback(header),
-                    PacketType::Suback => self.handle_suback(header),
-                    /*PacketType::Unsuback => self.handle_unsuback(),
-                    PacketType::Pingresp => self.handle_pingresp(),*/
-                    PacketType::Connack => self.handle_connack(header),
-                    _ => Err(ClientError::new("Received an unsupported packet type")),
-                }
-            }
+            Ok(packet) => match packet {
+                PacketType::Publish => self.handle_publish(header),
+                PacketType::Puback => self.handle_puback(header),
+                PacketType::Suback => self.handle_suback(header),
+                PacketType::Unsuback => self.handle_unsuback(header),
+                PacketType::Pingresp => self.handle_pingresp(header),
+                PacketType::Connack => self.handle_connack(header),
+                _ => Err(ClientError::new("Received an unsupported packet type")),
+            },
             Err(error) => {
                 self.observer
                     .update(Message::InternalError(ClientError::from(error)));
@@ -122,6 +124,8 @@ impl<T: Observer, S: Stream> Listener<T, S> {
         let publish = Publish::read_from(&mut self.stream, header)?;
         let id_opt = publish.packet_id().cloned();
         self.observer.update(Message::Publish(publish));
+
+        // Si tiene id no es QoS 0
         if let Some(id) = id_opt {
             self.stream.write_all(&Puback::new(id)?.encode())?;
         }
@@ -132,7 +136,6 @@ impl<T: Observer, S: Stream> Listener<T, S> {
     fn handle_connack(&mut self, header: u8) -> Result<(), ClientError> {
         let connack = Connack::read_from(&mut self.stream, header);
 
-        // Si no estoy esperando un connack lo ignoro
         let mut lock = self.pending_ack.lock()?;
         if let Some(PendingAck::Connect(_)) = lock.as_ref() {
             match connack {
@@ -159,7 +162,7 @@ impl<T: Observer, S: Stream> Listener<T, S> {
         let suback = Suback::read_from(&mut self.stream, header)?;
 
         let mut lock = self.pending_ack.lock()?;
-        // Si no estoy esperando un suback lo ignoro
+
         if let Some(PendingAck::Subscribe(subscribe)) = lock.as_ref() {
             if subscribe.packet_identifier() == suback.packet_id() {
                 lock.take();
@@ -174,12 +177,39 @@ impl<T: Observer, S: Stream> Listener<T, S> {
         let puback = Puback::read_from(&mut self.stream, header)?;
 
         let mut lock = self.pending_ack.lock()?;
-        // Si no estoy esperando un puback lo ignoro
+
         if let Some(PendingAck::Publish(publish)) = lock.as_ref() {
             // Este unwrap no falla ya que lo checkeo al ponerlo en el lock
             if *publish.packet_id().unwrap() == puback.packet_id() {
                 lock.take();
                 self.observer.update(Message::Published(Ok(Some(puback))));
+            }
+        }
+
+        Ok(())
+    }
+
+    fn handle_pingresp(&mut self, header: u8) -> Result<(), ClientError> {
+        let _ = PingResp::read_from(&mut self.stream, header)?;
+
+        let mut lock = self.pending_ack.lock()?;
+
+        if let Some(PendingAck::PingReq(_)) = lock.as_ref() {
+            lock.take();
+        }
+
+        Ok(())
+    }
+
+    fn handle_unsuback(&mut self, header: u8) -> Result<(), ClientError> {
+        let unsuback = Unsuback::read_from(&mut self.stream, header)?;
+
+        let mut lock = self.pending_ack.lock()?;
+
+        if let Some(PendingAck::Unsubscribe(unsubscribe)) = lock.as_ref() {
+            if unsubscribe.packet_id() == unsuback.packet_id() {
+                lock.take();
+                self.observer.update(Message::Unsubscribed(Ok(unsuback)));
             }
         }
 
