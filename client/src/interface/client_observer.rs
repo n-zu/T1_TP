@@ -68,6 +68,9 @@ impl InternalObserver {
             Message::Subscribed(result) => {
                 self.subscribed(result);
             }
+            Message::Unsubscribed(result) => {
+                self.unsubscribed(result);
+            }
             Message::InternalError(error) => {
                 alert(&format!(
                     "Error interno: {}\n\nSe recomienda reiniciar el cliente",
@@ -123,6 +126,17 @@ impl InternalObserver {
             self.show_content_menu();
             self.icon(Icon::Ok);
             self.status_message("Connected");
+        }
+    }
+
+    fn unsubscribed(&self, result: Result<Suback, ClientError>) {
+        self.sensitive(true);
+        if let Err(e) = result {
+            self.icon(Icon::Error);
+            self.status_message(&format!("No se pudo desuscribir: {}", e));
+        } else {
+            self.icon(Icon::Ok);
+            self.status_message("Desuscrito");
         }
     }
 }

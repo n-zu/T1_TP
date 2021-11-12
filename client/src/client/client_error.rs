@@ -2,14 +2,9 @@ use std::num::ParseIntError;
 use std::{
     error::Error,
     fmt::Display,
-    net::TcpStream,
     sync::{MutexGuard, PoisonError},
 };
 
-use crate::{
-    client::{Client, PendingAck},
-    observer::Observer,
-};
 use packets::packet_reader::PacketError;
 use threadpool::ThreadPoolError;
 
@@ -65,20 +60,8 @@ impl From<ThreadPoolError> for ClientError {
     }
 }
 
-impl From<PoisonError<MutexGuard<'_, Option<PendingAck>>>> for ClientError {
-    fn from(err: PoisonError<MutexGuard<'_, Option<PendingAck>>>) -> ClientError {
-        ClientError::new(&format!("Error usando lock: {}", err))
-    }
-}
-
-impl<T: Observer> From<PoisonError<MutexGuard<'_, Option<Client<T>>>>> for ClientError {
-    fn from(err: PoisonError<MutexGuard<'_, Option<Client<T>>>>) -> ClientError {
-        ClientError::new(&format!("Error usando lock: {}", err))
-    }
-}
-
-impl From<PoisonError<MutexGuard<'_, TcpStream>>> for ClientError {
-    fn from(err: PoisonError<MutexGuard<'_, TcpStream>>) -> ClientError {
+impl<R> From<PoisonError<MutexGuard<'_, R>>> for ClientError {
+    fn from(err: PoisonError<MutexGuard<'_, R>>) -> ClientError {
         ClientError::new(&format!("Error usando lock: {}", err))
     }
 }

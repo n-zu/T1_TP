@@ -1,12 +1,13 @@
 use std::sync::atomic::AtomicBool;
 use std::sync::Arc;
-use std::thread;
+use std::{io, thread};
 use std::{net::TcpStream, time::Duration};
 
 pub mod client_error;
 mod client_listener;
 mod client_sender;
 
+use crate::client_packets::unsubscribe::Unsubscribe;
 use crate::client_packets::{Connect, PingReq, Subscribe};
 use client_listener::Listener;
 use client_sender::ClientSender;
@@ -16,9 +17,13 @@ pub use client_error::ClientError;
 use packets::publish::Publish;
 use threadpool::ThreadPool;
 
+use self::client_listener::Stream;
+
 #[allow(dead_code)]
+#[derive(Debug)]
 pub enum PendingAck {
     Subscribe(Subscribe),
+    Unsubscribe(Unsubscribe),
     PingReq(PingReq),
     Publish(Publish),
     Connect(Connect),
@@ -27,7 +32,13 @@ pub enum PendingAck {
 pub struct Client<T: Observer> {
     thread_pool: ThreadPool,
     stop: Arc<AtomicBool>,
-    sender: Arc<ClientSender<T>>,
+    sender: Arc<ClientSender<T, TcpStream>>,
+}
+
+impl Stream for TcpStream {
+    fn set_read_timeout(&self, dur: Option<Duration>) -> io::Result<()> {
+        self.set_read_timeout(dur)
+    }
 }
 
 // Cuanto esperar antes de checkear si hay que parar
@@ -74,7 +85,11 @@ impl<T: Observer> Client<T> {
         Ok(())
     }
 
-    fn keep_alive(sender: Arc<ClientSender<T>>, stop: Arc<AtomicBool>, mut duration: Duration) {
+    fn keep_alive(
+        sender: Arc<ClientSender<T, TcpStream>>,
+        stop: Arc<AtomicBool>,
+        mut duration: Duration,
+    ) {
         let mut now = std::time::Instant::now();
         if duration > KEEP_ALIVE_SUBSTRACTION {
             duration -= KEEP_ALIVE_SUBSTRACTION;
@@ -116,6 +131,16 @@ impl<T: Observer> Client<T> {
 
         self.thread_pool.spawn(move || {
             sender.send_subscribe(subscribe);
+        })?;
+
+        Ok(())
+    }
+
+    pub fn unsubscribe(&mut self, unsubscribe: Unsubscribe) -> Result<(), ClientError> {
+        let sender = self.sender.clone();
+
+        self.thread_pool.spawn(move || {
+            sender.send_unsubscribe(unsubscribe);
         })?;
 
         Ok(())

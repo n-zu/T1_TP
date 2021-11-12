@@ -53,6 +53,7 @@ fn encode_len(len: u32) -> Vec<u8> {
     bytes_vec
 }
 
+#[derive(Debug)]
 pub struct LastWill {
     retain: bool,
     qos: QoSLevel,
@@ -60,6 +61,7 @@ pub struct LastWill {
     message: Field,
 }
 
+#[derive(Debug)]
 pub struct Connect {
     client_id: Field,
     clean_session: bool,
