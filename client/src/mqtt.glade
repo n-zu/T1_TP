@@ -8,18 +8,14 @@
   <object class="GtkListStore" id="qos_list">
     <columns>
       <!-- column-name 0 -->
-      <column type="gint"/>
-      <!-- column-name 1 -->
       <column type="gchararray"/>
     </columns>
     <data>
       <row>
-        <col id="0">0</col>
-        <col id="1" translatable="yes">qos0</col>
+        <col id="0" translatable="yes">0</col>
       </row>
       <row>
-        <col id="0">1</col>
-        <col id="1" translatable="yes">qos1</col>
+        <col id="0" translatable="yes">1</col>
       </row>
     </data>
   </object>
@@ -847,7 +843,6 @@
                           <object class="GtkEntry" id="con_ka">
                             <property name="visible">True</property>
                             <property name="can_focus">True</property>
-                            <property name="text" translatable="yes">0</property>
                             <property name="input_purpose">number</property>
                           </object>
                           <packing>
@@ -989,6 +984,13 @@
                             <property name="visible">True</property>
                             <property name="can_focus">False</property>
                             <property name="model">qos_list</property>
+                            <property name="has_entry">True</property>
+                            <property name="entry_text_column">0</property>
+                            <child internal-child="entry">
+                              <object class="GtkEntry" id="entry_qos_combobox">
+                                <property name="can_focus">False</property>
+                              </object>
+                            </child>
                           </object>
                           <packing>
                             <property name="expand">False</property>
