@@ -7,6 +7,7 @@ const REMAINING_LENGTH: u8 = 0b00000000;
 #[doc(hidden)]
 const RESERVED_BYTES_MASK: u8 = 0b00001111;
 
+#[derive(Debug)]
 /// The PingReq packet is sent from a Client to the Server,
 /// during the Keep Alive process
 pub struct PingReq;

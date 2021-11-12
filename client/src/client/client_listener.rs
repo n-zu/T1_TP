@@ -1,10 +1,10 @@
 use std::{
     io::{self, Read, Write},
-    net::TcpStream,
     sync::{
         atomic::{AtomicBool, Ordering},
         Arc, Mutex,
     },
+    time::Duration,
 };
 
 use packets::{
@@ -20,8 +20,12 @@ use crate::observer::Message;
 
 use super::{ClientError, STOP_TIMEOUT};
 
-pub struct Listener<T: Observer> {
-    stream: TcpStream,
+pub trait Stream: Read + Write {
+    fn set_read_timeout(&self, dur: Option<Duration>) -> io::Result<()>;
+}
+
+pub struct Listener<T: Observer, S: Stream> {
+    stream: S,
     pending_ack: Arc<Mutex<Option<PendingAck>>>,
     observer: Arc<T>,
     stop: Arc<AtomicBool>,
@@ -48,9 +52,9 @@ const CONNECT_USER_ERRORS: [ErrorKind; 3] = [
     ErrorKind::IdentifierRejected,
 ];
 
-impl<T: Observer> Listener<T> {
+impl<T: Observer, S: Stream> Listener<T, S> {
     pub fn new(
-        stream: TcpStream,
+        stream: S,
         pending_ack: Arc<Mutex<Option<PendingAck>>>,
         observer: Arc<T>,
         stop: Arc<AtomicBool>,
