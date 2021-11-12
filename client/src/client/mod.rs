@@ -9,7 +9,7 @@ mod client_sender;
 
 use crate::client_packets::unsubscribe::Unsubscribe;
 use crate::client_packets::{Connect, PingReq, Subscribe};
-use client_listener::Listener;
+use client_listener::ClientListener;
 use client_sender::ClientSender;
 
 use crate::observer::{Message, Observer};
@@ -106,7 +106,7 @@ impl<T: Observer> Client<T> {
 
     fn connect(&mut self, connect: Connect) -> Result<(), ClientError> {
         let read_stream = self.sender.stream().lock()?.try_clone()?;
-        let mut listener = Listener::new(
+        let mut listener = ClientListener::new(
             read_stream,
             self.sender.pending_ack(),
             self.sender.observer(),

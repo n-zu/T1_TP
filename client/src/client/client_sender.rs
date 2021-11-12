@@ -328,9 +328,9 @@ mod tests {
     }
 
     impl Cursor {
-        fn new(data: Vec<u8>) -> Self {
+        fn new() -> Self {
             Self {
-                cursor: Arc::new(Mutex::new(IoCursor::new(data))),
+                cursor: Arc::new(Mutex::new(IoCursor::new(Vec::new()))),
             }
         }
 
@@ -369,7 +369,7 @@ mod tests {
         let connect = ConnectBuilder::new("id", 0, true).unwrap().build().unwrap();
         let bytes = connect.encode();
 
-        let stream = Cursor::new(Vec::new());
+        let stream = Cursor::new();
         let observer = ObserverMock::new();
 
         let client_sender = Arc::new(ClientSender::new(stream.clone(), observer.clone()));
@@ -409,7 +409,7 @@ mod tests {
         let connect = ConnectBuilder::new("id", 0, true).unwrap().build().unwrap();
         let bytes = connect.encode();
 
-        let stream = Cursor::new(Vec::new());
+        let stream = Cursor::new();
         let observer = ObserverMock::new();
 
         let client_sender = ClientSender::new(stream.clone(), observer.clone());
@@ -443,7 +443,7 @@ mod tests {
         let subscribe = Subscribe::new(vec![topic], 123);
         let bytes = subscribe.encode().unwrap();
 
-        let stream = Cursor::new(Vec::new());
+        let stream = Cursor::new();
         let observer = ObserverMock::new();
 
         let client_sender = Arc::new(ClientSender::new(stream.clone(), observer.clone()));
@@ -479,7 +479,7 @@ mod tests {
         let subscribe = Subscribe::new(vec![topic], 123);
         let bytes = subscribe.encode().unwrap();
 
-        let stream = Cursor::new(Vec::new());
+        let stream = Cursor::new();
         let observer = ObserverMock::new();
 
         let client_sender = ClientSender::new(stream.clone(), observer.clone());
@@ -505,7 +505,7 @@ mod tests {
         let unsubscribe = Unsubscribe::new(123, vec!["car/wheels".to_string()]).unwrap();
         let bytes = unsubscribe.encode().unwrap();
 
-        let stream = Cursor::new(Vec::new());
+        let stream = Cursor::new();
         let observer = ObserverMock::new();
 
         let client_sender = Arc::new(ClientSender::new(stream.clone(), observer.clone()));
@@ -540,7 +540,7 @@ mod tests {
         let unsubscribe = Unsubscribe::new(123, vec!["car/wheels".to_string()]).unwrap();
         let bytes = unsubscribe.encode().unwrap();
 
-        let stream = Cursor::new(Vec::new());
+        let stream = Cursor::new();
         let observer = ObserverMock::new();
 
         let client_sender = ClientSender::new(stream.clone(), observer.clone());
@@ -563,7 +563,7 @@ mod tests {
 
     #[test]
     fn test_pingreq() {
-        let stream = Cursor::new(Vec::new());
+        let stream = Cursor::new();
         let observer = ObserverMock::new();
 
         let client_sender = Arc::new(ClientSender::new(stream.clone(), observer.clone()));
@@ -595,7 +595,7 @@ mod tests {
 
     #[test]
     fn test_pingreq_fail() {
-        let stream = Cursor::new(Vec::new());
+        let stream = Cursor::new();
         let observer = ObserverMock::new();
 
         let client_sender = ClientSender::new(stream.clone(), observer.clone());
@@ -621,7 +621,7 @@ mod tests {
 
     #[test]
     fn test_disconnect() {
-        let stream = Cursor::new(Vec::new());
+        let stream = Cursor::new();
         let observer = ObserverMock::new();
 
         let client_sender = Arc::new(ClientSender::new(stream.clone(), observer.clone()));
@@ -680,7 +680,7 @@ mod tests {
         .unwrap();
         let bytes = publish.encode().unwrap();
 
-        let stream = Cursor::new(Vec::new());
+        let stream = Cursor::new();
         let observer = ObserverMock::new();
 
         let client_sender = Arc::new(ClientSender::new(stream.clone(), observer.clone()));
@@ -726,7 +726,7 @@ mod tests {
         pub_dup.set_dup(true);
         let dup_bytes = pub_dup.encode().unwrap();
 
-        let stream = Cursor::new(Vec::new());
+        let stream = Cursor::new();
         let observer = ObserverMock::new();
 
         let client_sender = ClientSender::new(stream.clone(), observer.clone());
@@ -767,7 +767,7 @@ mod tests {
         .unwrap();
         let bytes = publish.encode().unwrap();
 
-        let stream = Cursor::new(Vec::new());
+        let stream = Cursor::new();
         let observer = ObserverMock::new();
 
         let client_sender = ClientSender::new(stream.clone(), observer.clone());
