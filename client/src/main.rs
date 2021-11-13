@@ -24,7 +24,6 @@ fn main() {
         win.set_default_height(200);
         win.set_title("MQTT Client");
 
-        // Don't forget to make all widgets visible.
         win.show_all();
 
         Controller::new(builder);

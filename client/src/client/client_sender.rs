@@ -15,21 +15,21 @@ use super::{ClientError, PendingAck};
 
 /// How much time should the sender wait until it tries
 /// to resend an unacknowledged packet.
-pub const RESEND_TIMEOUT: Duration = Duration::from_millis(5000);
+pub(crate) const RESEND_TIMEOUT: Duration = Duration::from_millis(5000);
 
 /// How often should the sender check pending_ack after
 /// sending a packet that needs acknowledgement to see
 /// if it was acknowledged.
-pub const ACK_CHECK: Duration = Duration::from_millis(500);
+pub(crate) const ACK_CHECK: Duration = Duration::from_millis(500);
 
 /// The maximum number of times the sender should try to
 /// resend an unacknowledged packet.
-const MAX_RETRIES: u16 = 3;
+pub(crate) const MAX_RETRIES: u16 = 3;
 
 /// The packet sender of the client. It is responsible
 /// for sending all packets to the server, except for
 /// acknowledgements.
-pub struct ClientSender<T: Observer, W: Write> {
+pub(crate) struct ClientSender<T: Observer, W: Write> {
     stream: Mutex<W>,
     pending_ack: Arc<Mutex<Option<PendingAck>>>,
     observer: Arc<T>,
@@ -64,6 +64,7 @@ impl<T: Observer, W: Write> ClientSender<T, W> {
         self.observer.clone()
     }
 
+    #[doc(hidden)]
     fn _connect(&self, connect: Connect) -> Result<(), ClientError> {
         let bytes = connect.encode();
         self.pending_ack
@@ -92,7 +93,8 @@ impl<T: Observer, W: Write> ClientSender<T, W> {
         }
     }
 
-    pub fn _subscribe(&self, subscribe: Subscribe) -> Result<(), ClientError> {
+    #[doc(hidden)]
+    fn _subscribe(&self, subscribe: Subscribe) -> Result<(), ClientError> {
         let bytes = subscribe.encode()?;
         self.pending_ack
             .lock()?
@@ -160,6 +162,7 @@ impl<T: Observer, W: Write> ClientSender<T, W> {
         }
     }
 
+    #[doc(hidden)]
     fn _pingreq(&self, pingreq: PingReq) -> Result<(), ClientError> {
         let bytes = pingreq.encode();
         self.pending_ack
@@ -189,6 +192,7 @@ impl<T: Observer, W: Write> ClientSender<T, W> {
         }
     }
 
+    #[doc(hidden)]
     fn _disconnect(&self, disconnect: Disconnect) -> Result<(), ClientError> {
         self.stream.lock()?.write_all(&disconnect.encode())?;
         Ok(())
@@ -203,6 +207,7 @@ impl<T: Observer, W: Write> ClientSender<T, W> {
         }
     }
 
+    #[doc(hidden)]
     fn _unsubscribe(&self, unsubscribe: Unsubscribe) -> Result<(), ClientError> {
         let bytes = unsubscribe.encode()?;
         self.pending_ack
@@ -229,6 +234,7 @@ impl<T: Observer, W: Write> ClientSender<T, W> {
         }
     }
 
+    #[doc(hidden)]
     fn resend_pending(stream: &mut W, pending_ack: &mut PendingAck) -> Result<(), ClientError> {
         // TODO: realmente deberiamos hacer de una vez el trait de encode asi evitamos esto
         match pending_ack {
@@ -252,6 +258,7 @@ impl<T: Observer, W: Write> ClientSender<T, W> {
         Ok(())
     }
 
+    #[doc(hidden)]
     // Devuelve verdadero si se pudo mandar, falso si no se recibió el ack
     fn wait_for_ack(&self) -> Result<bool, ClientError> {
         let mut retries = 0;

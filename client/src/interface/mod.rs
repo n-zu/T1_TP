@@ -20,6 +20,9 @@ use packets::{packet_reader::QoSLevel, publish::Publish};
 
 use self::utils::{Icon, InterfaceUtils};
 
+/// Controller for the client. It both creates the
+/// internal client and handles all the user inputs
+/// from the interface
 pub struct Controller {
     builder: Builder,
     client: Mutex<Option<Client<ClientObserver>>>,
@@ -32,6 +35,8 @@ impl InterfaceUtils for Controller {
 }
 
 impl Controller {
+    /// Creates a new Controller with the given
+    /// interface builder
     pub fn new(builder: Builder) -> Rc<Self> {
         let cont = Rc::new(Self {
             builder,
@@ -42,6 +47,8 @@ impl Controller {
         cont
     }
 
+    /// Sets up the different listeners for
+    /// the interface buttons
     fn setup_handlers(self: &Rc<Self>) {
         self.setup_connect();
         self.setup_subscribe();
@@ -50,6 +57,7 @@ impl Controller {
         self.setup_unsubscribe();
     }
 
+    #[doc(hidden)]
     fn setup_connect(self: &Rc<Self>) {
         let cont_clone = self.clone();
         let connect: Button = self.builder.object("con_btn").unwrap();
@@ -58,6 +66,7 @@ impl Controller {
         });
     }
 
+    #[doc(hidden)]
     fn setup_subscribe(self: &Rc<Self>) {
         let cont_clone = self.clone();
         let subscribe: Button = self.builder.object("sub_btn").unwrap();
@@ -66,6 +75,7 @@ impl Controller {
         });
     }
 
+    #[doc(hidden)]
     fn setup_publish(self: &Rc<Self>) {
         let cont_clone = self.clone();
         let publish: Button = self.builder.object("pub_btn").unwrap();
@@ -74,6 +84,7 @@ impl Controller {
         });
     }
 
+    #[doc(hidden)]
     fn setup_disconnect(self: &Rc<Self>) {
         let cont_clone = self.clone();
         let disconnect: Button = self.builder.object("discon_btn").unwrap();
@@ -82,6 +93,7 @@ impl Controller {
         });
     }
 
+    #[doc(hidden)]
     fn setup_unsubscribe(self: &Rc<Self>) {
         let _cont_clone = self.clone();
         /*let unsubscribe: Button = self.builder.object("unsub_btn").unwrap();
@@ -90,6 +102,7 @@ impl Controller {
         });*/ //TODO
     }
 
+    #[doc(hidden)]
     fn _connect(&self) -> Result<(), ClientError> {
         let address_entry: Entry = self.builder.object("con_host").unwrap();
         let port_entry: Entry = self.builder.object("con_port").unwrap();
@@ -135,6 +148,7 @@ impl Controller {
         Ok(())
     }
 
+    #[doc(hidden)]
     fn _create_connect_packet(
         client_id: &str,
         user_name: &str,
@@ -152,6 +166,10 @@ impl Controller {
         Ok(connect_builder.build()?)
     }
 
+    /// Listener of the Connect button
+    /// Tries to connect the client to the
+    /// server with the given inputs, and sets
+    /// up the ClientObserver
     fn handle_connect(&self, _: &Button) {
         self.icon(Icon::Loading);
         self.status_message("Conectando...");
@@ -163,6 +181,7 @@ impl Controller {
         }
     }
 
+    #[doc(hidden)]
     fn _subscribe(&self) -> Result<(), ClientError> {
         let topic: Entry = self.builder.object("sub_top").unwrap();
         let qos = QoSLevel::QoSLevel0; // TODO
@@ -180,6 +199,10 @@ impl Controller {
         Ok(())
     }
 
+    /// Listener of the Subscribe button
+    /// Tries to build a subscribe packet
+    /// and send it to the server with the
+    /// given inputs
     fn handle_subscribe(&self, _: &Button) {
         self.sensitive(false);
         self.status_message("Suscribiendose...");
@@ -191,6 +214,7 @@ impl Controller {
         }
     }
 
+    #[doc(hidden)]
     fn _publish(&self) -> Result<(), ClientError> {
         let topic: Entry = self.builder.object("pub_top").unwrap();
         let qos = QoSLevel::QoSLevel0; // TODO
@@ -216,6 +240,10 @@ impl Controller {
         Ok(())
     }
 
+    /// Listener of the Publish button
+    /// Tries to build a publish packet
+    /// and send it to the server with the
+    /// given inputs
     fn handle_publish(&self, _: &Button) {
         self.sensitive(false);
         self.status_message("Publicando...");
@@ -227,11 +255,16 @@ impl Controller {
         }
     }
 
+    #[doc(hidden)]
     fn _disconnect(&self) -> Result<(), ClientError> {
         self.client.lock()?.take();
         Ok(())
     }
 
+    /// Listener of the Disconnect button
+    /// Tries to disconnect the client and
+    /// allow the user to connect to another
+    /// server
     fn handle_disconnect(&self, _: &Button) {
         if let Err(err) = self._disconnect() {
             self.icon(Icon::Error);
@@ -244,11 +277,16 @@ impl Controller {
         }
     }
 
+    #[doc(hidden)]
     fn _unsubscribe(&self) -> Result<(), ClientError> {
         // TODO
         Err(ClientError::new("No implementado"))
     }
 
+    /// Listener of the Unsubscribe button
+    /// Tries to build an unsubscribe packet
+    /// and send it to the server with the
+    /// given inputs
     #[allow(dead_code)]
     fn handle_unsubscribe(&self, _: &Button) {
         self.sensitive(false);

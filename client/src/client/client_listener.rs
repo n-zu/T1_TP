@@ -26,14 +26,14 @@ use super::{ClientError, STOP_TIMEOUT};
 
 /// Stream trait from which the listener reads the packets
 /// and writes the acknowledgements.
-pub trait Stream: Read + Write {
+pub(crate) trait Stream: Read + Write {
     fn set_read_timeout(&self, dur: Option<Duration>) -> io::Result<()>;
 }
 
 /// The packet listener of the client. It is responsible
 /// for receiving all packets from the server, and
 /// acknowledging the ones in which it is required.
-pub struct ClientListener<T: Observer, S: Stream> {
+pub(crate) struct ClientListener<T: Observer, S: Stream> {
     stream: S,
     pending_ack: Arc<Mutex<Option<PendingAck>>>,
     observer: Arc<T>,
@@ -134,6 +134,7 @@ impl<T: Observer, S: Stream> ClientListener<T, S> {
         }
     }
 
+    #[doc(hidden)]
     fn try_read_packet(&mut self) -> Result<(), ClientError> {
         let mut buf = [0u8; 1];
 
@@ -152,6 +153,7 @@ impl<T: Observer, S: Stream> ClientListener<T, S> {
         }
     }
 
+    #[doc(hidden)]
     fn handle_packet(&mut self, header: u8) -> Result<(), ClientError> {
         match get_code_type(header >> 4) {
             Ok(packet) => match packet {
@@ -171,6 +173,7 @@ impl<T: Observer, S: Stream> ClientListener<T, S> {
         }
     }
 
+    #[doc(hidden)]
     fn handle_publish(&mut self, header: u8) -> Result<(), ClientError> {
         let publish = Publish::read_from(&mut self.stream, header)?;
         let id_opt = publish.packet_id().cloned();
@@ -184,6 +187,7 @@ impl<T: Observer, S: Stream> ClientListener<T, S> {
         Ok(())
     }
 
+    #[doc(hidden)]
     fn handle_connack(&mut self, header: u8) -> Result<(), ClientError> {
         let connack = Connack::read_from(&mut self.stream, header);
 
@@ -210,6 +214,7 @@ impl<T: Observer, S: Stream> ClientListener<T, S> {
         Ok(())
     }
 
+    #[doc(hidden)]
     fn handle_suback(&mut self, header: u8) -> Result<(), ClientError> {
         let suback = Suback::read_from(&mut self.stream, header)?;
 
@@ -225,6 +230,7 @@ impl<T: Observer, S: Stream> ClientListener<T, S> {
         Ok(())
     }
 
+    #[doc(hidden)]
     fn handle_puback(&mut self, header: u8) -> Result<(), ClientError> {
         let puback = Puback::read_from(&mut self.stream, header)?;
 
@@ -246,6 +252,7 @@ impl<T: Observer, S: Stream> ClientListener<T, S> {
         Ok(())
     }
 
+    #[doc(hidden)]
     fn handle_pingresp(&mut self, header: u8) -> Result<(), ClientError> {
         let _ = PingResp::read_from(&mut self.stream, header)?;
 
@@ -258,6 +265,7 @@ impl<T: Observer, S: Stream> ClientListener<T, S> {
         Ok(())
     }
 
+    #[doc(hidden)]
     fn handle_unsuback(&mut self, header: u8) -> Result<(), ClientError> {
         let unsuback = Unsuback::read_from(&mut self.stream, header)?;
         let mut lock = self.pending_ack.lock()?;
@@ -273,6 +281,7 @@ impl<T: Observer, S: Stream> ClientListener<T, S> {
     }
 }
 
+#[doc(hidden)]
 fn get_code_type(code: u8) -> Result<PacketType, PacketError> {
     match code {
         1 => Ok(PacketType::Connect),
