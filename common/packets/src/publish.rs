@@ -353,6 +353,15 @@ impl Publish {
             self.qos = max_qos;
         }
     }
+
+    /// Set the publish's dup flag.
+    pub fn set_dup(&mut self, dup: bool) {
+        if dup {
+            self.dup_flag = DupFlag::DupFlag1;
+        } else {
+            self.dup_flag = DupFlag::DupFlag0;
+        }
+    }
 }
 
 #[cfg(test)]

@@ -73,9 +73,11 @@ impl Connack {
     /// - the stream's bytes doesn't follow MQTT v3.1.1 protocol
     /// - return_code is not 0
     ///
-    pub fn read_from(stream: &mut impl Read) -> Result<Connack, PacketError> {
+
+    /// If return_code is not 0, this function returns a specific ConnackError
+    pub fn read_from(stream: &mut impl Read, control_byte: u8) -> Result<Connack, PacketError> {
         let buffer = [0u8; 1];
-        Connack::verify_first_byte_control_packet(buffer, stream)?;
+        Connack::verify_first_byte_control_packet(control_byte)?;
         Connack::verify_remaining_length(buffer, stream)?;
         let session_present = Connack::verify_session_present_flag(buffer, stream)?;
         let return_code = Connack::verify_return_code(buffer, stream)?;
@@ -86,12 +88,7 @@ impl Connack {
     }
 
     #[doc(hidden)]
-    fn verify_first_byte_control_packet(
-        mut buffer: [u8; 1],
-        stream: &mut impl Read,
-    ) -> Result<(), PacketError> {
-        stream.read_exact(&mut buffer);
-        let first_byte = buffer[0];
+    fn verify_first_byte_control_packet(first_byte: u8) -> Result<(), PacketError> {
         let reserved_bits = first_byte & 0b1111;
         if reserved_bits != CONNACK_RESERVED_BITS {
             return Err(PacketError::new_kind(
@@ -175,12 +172,11 @@ impl Connack {
 mod tests {
     use super::*;
     use std::io::Cursor;
-
     #[test]
     fn test_reserved_bits_at_1_should_raise_invalid_reserved_bits_error() {
-        let v: Vec<u8> = vec![0b10010001];
+        let v: Vec<u8> = vec![2, 0, 0];
         let mut stream = Cursor::new(v);
-        let result = Connack::read_from(&mut stream).unwrap_err();
+        let result = Connack::read_from(&mut stream, 0b100101).unwrap_err();
         let expected_error =
             PacketError::new_kind(MSG_INVALID_RESERVED_BITS, ErrorKind::InvalidReservedBits);
         assert_eq!(result, expected_error);
@@ -188,9 +184,9 @@ mod tests {
 
     #[test]
     fn test_control_packet_type_other_than_2_should_raise_invalid_control_packet_type_error() {
-        let v: Vec<u8> = vec![0b110000];
+        let v: Vec<u8> = vec![2, 0, 0];
         let mut stream = Cursor::new(v);
-        let result = Connack::read_from(&mut stream).unwrap_err();
+        let result = Connack::read_from(&mut stream, 0b110000).unwrap_err();
         let expected_error =
             PacketError::new_kind(MSG_PACKET_TYPE_CONNACK, ErrorKind::InvalidControlPacketType);
         assert_eq!(result, expected_error);
@@ -198,19 +194,19 @@ mod tests {
 
     #[test]
     fn test_should_raise_wrong_encoding_error_at_remaining_length() {
-        let v: Vec<u8> = vec![0b100000, 0b11]; // first byte + remaining length = 3
+        let v: Vec<u8> = vec![0b11];
         let mut stream = Cursor::new(v);
-        let result = Connack::read_from(&mut stream).unwrap_err();
+        let result = Connack::read_from(&mut stream, 32).unwrap_err();
         let expected_error =
             PacketError::new_kind(MSG_INVALID_REMAINING_LENGTH, ErrorKind::InvalidProtocol);
         assert_eq!(result, expected_error);
     }
 
     #[test]
-    fn test_should_raise_wrong_encoding_error_at_unknown_session_present_flag() {
-        let v: Vec<u8> = vec![0b100000, 0b10, 3]; // first byte + remaining length + session present flag
+    fn test_should_raise_wrong_encoding_error_at_unknown_connack_flag() {
+        let v: Vec<u8> = vec![0b10, 3];
         let mut stream = Cursor::new(v);
-        let result = Connack::read_from(&mut stream).unwrap_err();
+        let result = Connack::read_from(&mut stream, 0b100000).unwrap_err();
         let expected_error =
             PacketError::new_kind(MSG_INVALID_SESSION_PRESENT_FLAG, ErrorKind::InvalidProtocol);
         assert_eq!(result, expected_error);
@@ -218,9 +214,9 @@ mod tests {
 
     #[test]
     fn test_return_code_1_should_raise_unacceptable_protocol_version_error() {
-        let v: Vec<u8> = vec![0b100000, 0b10, 0b0, 0b01];
+        let v: Vec<u8> = vec![2, 0, 1];
         let mut stream = Cursor::new(v);
-        let result = Connack::read_from(&mut stream).unwrap_err();
+        let result = Connack::read_from(&mut stream, 0b100000).unwrap_err();
         let error_expected = PacketError::new_kind(
             MSG_UNACCEPTABLE_PROTOCOL_VERSION,
             ErrorKind::UnacceptableProtocolVersion,
@@ -230,9 +226,9 @@ mod tests {
 
     #[test]
     fn test_return_code_2_should_raise_identifier_rejected_error() {
-        let v: Vec<u8> = vec![0b100000, 0b10, 0b0, 0b10];
+        let v: Vec<u8> = vec![2, 1, 2];
         let mut stream = Cursor::new(v);
-        let result = Connack::read_from(&mut stream).unwrap_err();
+        let result = Connack::read_from(&mut stream, 0b100000).unwrap_err();
         let error_expected =
             PacketError::new_kind(MSG_IDENTIFIER_REJECTED, ErrorKind::IdentifierRejected);
         assert_eq!(result, error_expected);
@@ -240,9 +236,9 @@ mod tests {
 
     #[test]
     fn test_return_code_3_should_raise_server_unavailable_error() {
-        let v: Vec<u8> = vec![0b100000, 0b10, 0b0, 0b11];
+        let v: Vec<u8> = vec![2, 1, 3];
         let mut stream = Cursor::new(v);
-        let result = Connack::read_from(&mut stream).unwrap_err();
+        let result = Connack::read_from(&mut stream, 0b100000).unwrap_err();
         let error_expected =
             PacketError::new_kind(MSG_SERVER_UNAVAILABLE, ErrorKind::ServerUnavailable);
         assert_eq!(result, error_expected);
@@ -250,9 +246,9 @@ mod tests {
 
     #[test]
     fn test_return_code_4_should_raise_bad_username_or_password_error() {
-        let v: Vec<u8> = vec![0b100000, 0b10, 0b0, 0b100];
+        let v: Vec<u8> = vec![2, 1, 4];
         let mut stream = Cursor::new(v);
-        let result = Connack::read_from(&mut stream).unwrap_err();
+        let result = Connack::read_from(&mut stream, 0b100000).unwrap_err();
         let error_expected = PacketError::new_kind(
             MSG_BAD_USER_NAME_OR_PASSWORD,
             ErrorKind::BadUserNameOrPassword,
@@ -262,34 +258,38 @@ mod tests {
 
     #[test]
     fn test_return_code_5_should_raise_not_authorized_error() {
-        let v: Vec<u8> = vec![0b100000, 0b10, 0b0, 0b101];
+        let v: Vec<u8> = vec![2, 1, 5];
         let mut stream = Cursor::new(v);
-        let result = Connack::read_from(&mut stream).unwrap_err();
+        let result = Connack::read_from(&mut stream, 0b100000).unwrap_err();
         let error_expected = PacketError::new_kind(MSG_NOT_AUTHORIZED, ErrorKind::NotAuthorized);
         assert_eq!(result, error_expected);
     }
 
     #[test]
-    fn test_should_return_valid_connack_packet_with_session_present_0_and_return_code_0() {
-        let v: Vec<u8> = vec![0b100000, 0b10, 0b0, 0b0];
+    fn test_should_return_valid_connack_packet_with_session_present_0_and_return_code_0(
+    ) -> Result<(), PacketError> {
+        let v: Vec<u8> = vec![0b10, 0b0, 0b0];
         let mut stream = Cursor::new(v);
-        let result = Connack::read_from(&mut stream).unwrap();
+        let result = Connack::read_from(&mut stream, 0b100000)?;
         let connack_expected = Connack {
             session_present: 0,
             return_code: 0,
         };
         assert_eq!(result, connack_expected);
+        Ok(())
     }
 
     #[test]
-    fn test_should_return_valid_connack_packet_with_session_present_1_and_return_code_0() {
-        let v: Vec<u8> = vec![32, 2, 1, 0];
+    fn test_should_return_valid_connack_packet_with_session_present_1_and_return_code_0(
+    ) -> Result<(), PacketError> {
+        let v: Vec<u8> = vec![2, 1, 0];
         let mut stream = Cursor::new(v);
-        let result = Connack::read_from(&mut stream).unwrap();
+        let result = Connack::read_from(&mut stream, 32)?;
         let connack_expected = Connack {
             session_present: 1,
             return_code: 0,
         };
         assert_eq!(result, connack_expected);
+        Ok(())
     }
 }

@@ -187,6 +187,11 @@ impl Suback {
         variable_header.append(&mut self.subscribe_packet_id.to_be_bytes().to_vec());
         variable_header
     }
+
+    /// Get the suback's subscribe packet id.
+    pub fn packet_id(&self) -> u16 {
+        self.subscribe_packet_id
+    }
 }
 
 #[cfg(test)]

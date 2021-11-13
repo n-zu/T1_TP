@@ -1,8 +1,8 @@
 mod client;
-mod client_error;
 mod client_packets;
-mod controller;
-use crate::controller::Controller;
+mod interface;
+mod observer;
+use crate::interface::Controller;
 use gtk::Builder;
 use gtk::{
     prelude::{ApplicationExt, ApplicationExtManual, BuilderExtManual, GtkWindowExt, WidgetExt},
@@ -24,7 +24,6 @@ fn main() {
         win.set_default_height(200);
         win.set_title("MQTT Client");
 
-        // Don't forget to make all widgets visible.
         win.show_all();
 
         Controller::new(builder);
