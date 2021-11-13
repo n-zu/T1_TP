@@ -10,8 +10,6 @@ use packets::{
     utf8::Field,
 };
 
-use super::{connack::CONNACK_CONNECTION_ACCEPTED, Connack};
-
 /*
 const MAX_PAYLOAD_FIELD_LEN: usize = 65535;
 const CONNECT_FIXED_HEADER_TYPE: u8 = 0x01;
@@ -45,7 +43,6 @@ pub struct Connect {
     password: Option<String>,
     last_will: Option<LastWill>,
     keep_alive: u16,
-    response: Connack,
 }
 
 const PROTOCOL_LEVEL: u8 = 4;
@@ -120,18 +117,6 @@ impl Connect {
             },
             last_will: Connect::get_will(buf)?,
             keep_alive: 0,
-            response: Connack::new(
-                if buf[0] & CLEAN_SESSION == 0
-                // & server has persistant session
-                {
-                    1
-                } else {
-                    0
-                }, // TODO - When handling persistant sessions
-                // If the Server accepts a connection with CleanSession set to 0,
-                // the value set in Session Present depends on whether the Server already has stored Session state for the supplied client ID
-                CONNACK_CONNECTION_ACCEPTED,
-            ),
         })
     }
 

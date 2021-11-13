@@ -1,7 +1,8 @@
 use std::{
     collections::HashMap,
     fmt, io,
-    sync::{Mutex, MutexGuard, PoisonError, RwLockReadGuard, RwLockWriteGuard},
+    sync::{mpsc::SendError, Mutex, MutexGuard, PoisonError, RwLockReadGuard, RwLockWriteGuard},
+    thread::JoinHandle,
 };
 
 use packets::packet_reader::{ErrorKind, PacketError};
@@ -103,6 +104,28 @@ impl From<PoisonError<MutexGuard<'_, ThreadPool>>> for ServerError {
 impl From<PoisonError<RwLockWriteGuard<'_, ClientsManager>>> for ServerError {
     fn from(err: PoisonError<RwLockWriteGuard<'_, ClientsManager>>) -> Self {
         ServerError::new_kind(&err.to_string(), ServerErrorKind::PoinsonedLock)
+    }
+}
+
+impl From<PoisonError<MutexGuard<'_, HashMap<std::net::SocketAddr, JoinHandle<()>>>>>
+    for ServerError
+{
+    fn from(
+        err: PoisonError<MutexGuard<'_, HashMap<std::net::SocketAddr, JoinHandle<()>>>>,
+    ) -> Self {
+        ServerError::new_kind(&err.to_string(), ServerErrorKind::PoinsonedLock)
+    }
+}
+
+impl From<SendError<std::net::SocketAddr>> for ServerError {
+    fn from(err: SendError<std::net::SocketAddr>) -> Self {
+        ServerError::new_msg(&err.to_string())
+    }
+}
+
+impl From<SendError<()>> for ServerError {
+    fn from(err: SendError<()>) -> Self {
+        ServerError::new_msg(&err.to_string())
     }
 }
 

@@ -8,6 +8,7 @@ use tracing::debug;
 use crate::{
     client::Client,
     server::{server_error::ServerErrorKind, ServerError, ServerResult},
+    server_packets::{connack::ConnackReturnCode, Connack},
 };
 
 pub struct ClientsManager {
@@ -42,29 +43,30 @@ impl ClientsManager {
         }
     }
 
-    fn client_remove(&mut self, id: &str) -> ServerResult<()> {
-        self.clients.remove(id);
-        Ok(())
-    }
-
     pub fn finish_session(&mut self, id: &str, gracefully: bool) -> ServerResult<()> {
         self.client_do(id, |mut client| {
             client.disconnect(gracefully);
             Ok(())
         })?;
-        if self.clients.get(id).unwrap().lock()?.clean_session() {
+        // Si la funcion anterior no devolvio error, entonces existe el cliente
+        if self
+            .clients
+            .get(id)
+            .expect("Error inesperado: no se encontro el cliente en el HashMap")
+            .lock()?
+            .clean_session()
+        {
             debug!("<{}>: Terminando sesion con clean_session = true", id);
-            self.client_remove(id)?;
+            self.clients.remove(id);
         } else {
             debug!("<{}>: Terminando sesion con clean_session = false", id);
         }
         Ok(())
     }
 
-    fn client_add(&mut self, client: Client) -> ServerResult<()> {
+    fn client_add(&mut self, client: Client) -> Option<Mutex<Client>> {
         self.clients
-            .insert(client.id().to_owned(), Mutex::new(client));
-        Ok(())
+            .insert(client.id().to_owned(), Mutex::new(client))
     }
 
     pub fn send_unacknowledged(&self, id: &str) -> ServerResult<()> {
@@ -108,7 +110,7 @@ impl ClientsManager {
                 self.check_taken_ids(client.id(), user_name)
             } else {
                 Err(ServerError::new_kind(
-                    "Contraseña invalida",
+                    "Contraseña incorrecta",
                     ServerErrorKind::InvalidPassword,
                 ))
             }
@@ -121,20 +123,19 @@ impl ClientsManager {
     }
 
     fn new_session_unchecked(&mut self, mut client: Client) -> ServerResult<()> {
+        let id = client.id().to_owned();
         // Hay una sesion_presente en el servidor con la misma ID
         // (con clean_sesion = false)
-        let id = client.id().to_owned();
         if self.exists(client.id())? {
-            // El nuevo cliente tiene clean_sesion = true, descarto
-            // sesion vieja
+            // Descarto sesion vieja
             if client.clean_session() {
-                self.client_remove(client.id())?;
-                client.send_connack(0, 0)?;
-                self.client_add(client)?;
+                self.clients.remove(client.id());
+                client.send_connack(Connack::new(false, ConnackReturnCode::Accepted))?;
+                self.client_add(client);
             }
             // El cliente quiere reconectarse a la sesion guaradada
             else {
-                client.send_connack(0, 0)?;
+                client.send_connack(Connack::new(true, ConnackReturnCode::Accepted))?;
                 self.client_do(&id, |mut old_client| {
                     old_client.reconnect(client)?;
                     Ok(())
@@ -145,8 +146,8 @@ impl ClientsManager {
                 })?;
             }
         } else {
-            client.send_connack(0, 0)?;
-            self.client_add(client)?;
+            client.send_connack(Connack::new(false, ConnackReturnCode::Accepted))?;
+            self.client_add(client);
         }
         Ok(())
     }
@@ -155,12 +156,15 @@ impl ClientsManager {
         match self.check_credentials(&client) {
             Ok(()) => self.new_session_unchecked(client),
             Err(err) if err.kind() == ServerErrorKind::ClientNotInWhitelist => {
-                client.send_connack(0, 5)?;
-                Ok(())
+                client.send_connack(Connack::new(false, ConnackReturnCode::NotAuthorized))?;
+                Err(err)
             }
             Err(err) if err.kind() == ServerErrorKind::InvalidPassword => {
-                client.send_connack(0, 4)?;
-                Ok(())
+                client.send_connack(Connack::new(
+                    false,
+                    ConnackReturnCode::BadUserNameOrPassword,
+                ))?;
+                Err(err)
             }
             Err(err) => Err(err),
         }
@@ -181,10 +185,12 @@ impl ClientsManager {
     pub fn finish_all_sessions(&mut self, gracefully: bool) -> ServerResult<()> {
         for (id, client) in &self.clients {
             debug!("<{}>: Desconectando", id);
-            client.lock().unwrap().disconnect(gracefully);
+            client.lock()?.disconnect(gracefully);
         }
-        self.clients
-            .retain(|_id, client| !client.get_mut().unwrap().clean_session());
+        self.clients.retain(|_id, client| match client.get_mut() {
+            Ok(client) => client.clean_session(),
+            Err(_) => false,
+        });
         Ok(())
     }
 

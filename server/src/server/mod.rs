@@ -90,9 +90,13 @@ impl ServerController {
         }
     }
 
-    pub fn shutdown(self) {
-        self.shutdown_sender.send(()).unwrap();
-        self.handle.join().unwrap();
+    pub fn shutdown(self) -> ServerResult<()> {
+        self.shutdown_sender.send(())?;
+        match self.handle.join() {
+            Ok(()) => debug!("El thread del servidor fue joineado normalmente (sin panic)"),
+            Err(err) => debug!("El thread del servidor fue joineado con panic: {:?}", err),
+        }
+        Ok(())
     }
 }
 
@@ -255,7 +259,7 @@ impl Server {
                 if keep_alive == 0 {
                     stream.set_read_timeout(None)?;
                 } else {
-                    stream.set_read_timeout(Some(CLIENT_READ_TIMEOUT)).unwrap();
+                    stream.set_read_timeout(Some(CLIENT_READ_TIMEOUT))?;
                 }
                 self.clients_manager.write()?.new_session(client)?;
                 Ok(id)
@@ -283,7 +287,17 @@ impl Server {
         let id_copy = id.to_owned();
         self.pool
             .lock()?
-            .spawn(move || sv_copy.handle_packet(packet, &id_copy).unwrap())?;
+            .spawn(move || match sv_copy.handle_packet(packet, &id_copy) {
+                Ok(()) => debug!(
+                    "ThreadPool: Paquete de cliente <{}> procesado con exito",
+                    id_copy
+                ),
+                Err(err) => error!(
+                    "ThreadPool: Error procesando paquete de cliente <{}>: {}",
+                    id_copy,
+                    err.to_string()
+                ),
+            })?;
         Ok(())
     }
 
@@ -296,7 +310,11 @@ impl Server {
             match self.receive_packet(&mut stream) {
                 Ok(packet) => {
                     timeout_counter = 0;
-                    self.to_threadpool(&id, packet)?;
+                    if let Packet::DisconnectType(_disconnect) = packet {
+                        self.clients_manager.write()?.finish_all_sessions(true)?;
+                    } else {
+                        self.to_threadpool(&id, packet)?;
+                    }
                 }
                 Err(err) if err.kind() == ServerErrorKind::Timeout => {
                     timeout_counter += 1;
@@ -327,12 +345,15 @@ impl Server {
         match self.connect_client(&mut stream, addr) {
             Err(err) => match err.kind() {
                 ServerErrorKind::ClientNotInWhitelist => {
-                    warn!("Intento de conexion con usuario invalido");
-                    finished_thread_sender.send(addr).unwrap();
+                    warn!("Addr {} - Intento de conexion con usuario invalido", addr);
+                    finished_thread_sender.send(addr)?;
                 }
                 ServerErrorKind::InvalidPassword => {
-                    warn!("Intento de conexion con contraseña invalido");
-                    finished_thread_sender.send(addr).unwrap();
+                    warn!(
+                        "Addr {} - Intento de conexion con contraseña invalido",
+                        addr
+                    );
+                    finished_thread_sender.send(addr)?;
                 }
                 ServerErrorKind::ProtocolViolation => {
                     error!(
@@ -340,14 +361,14 @@ impl Server {
                         addr,
                         err.to_string()
                     );
-                    finished_thread_sender.send(addr).unwrap();
+                    finished_thread_sender.send(addr)?;
                     return Err(err);
                 }
                 _ => panic!("Error inesperado: {}", err.to_string()),
             },
             Ok(id) => {
                 self.client_loop(id, stream)?;
-                finished_thread_sender.send(addr).unwrap();
+                finished_thread_sender.send(addr)?;
             }
         }
         Ok(())
@@ -372,58 +393,82 @@ impl Server {
                 stream.set_read_timeout(Some(CONNECTION_WAIT_TIMEOUT))?;
                 let sv_copy = self.clone();
                 let handle = thread::spawn(move || {
-                    sv_copy
-                        .manage_client(stream, addr, finished_thread_sender)
-                        .unwrap();
+                    match sv_copy.manage_client(stream, addr, finished_thread_sender) {
+                        Ok(()) => debug!("Cliente con Address {} procesado con exito", addr),
+                        Err(err) => error!(
+                            "Error procesando al cliente con Address {}: {}",
+                            addr,
+                            err.to_string()
+                        ),
+                    }
                 });
-                self.client_join_handles
-                    .lock()
-                    .unwrap()
-                    .insert(addr, handle);
+                self.client_join_handles.lock()?.insert(addr, handle);
                 Ok(())
             }
         }
     }
 
-    fn join_finished_threads(&self, finished_thread_receiver: &Receiver<SocketAddr>) {
+    fn join_finished_threads(
+        &self,
+        finished_thread_receiver: &Receiver<SocketAddr>,
+    ) -> ServerResult<()> {
         while let Ok(finished_addr) = finished_thread_receiver.try_recv() {
             debug!("Iniciando join de thread con Addr {}", finished_addr);
             let handle = self
                 .client_join_handles
-                .lock()
-                .unwrap()
+                .lock()?
                 .remove(&finished_addr)
-                .unwrap();
-            handle.join().unwrap();
-            debug!("Finalizado join de thread con Addr {}", finished_addr);
+                .unwrap_or_else(|| {
+                    panic!(
+                        "No se encontro el handle con address {} para joinear",
+                        finished_addr
+                    )
+                });
+            match handle.join() {
+                Ok(()) => debug!(
+                    "El thread con Addr {} finalizo normalmente (sin panic) y fue joineado",
+                    finished_addr
+                ),
+                Err(_) => debug!(
+                    "El thread con Addr {} finalizo con panic y fue joineado",
+                    finished_addr
+                ),
+            }
         }
+        Ok(())
     }
 
-    fn server_loop(self: Arc<Self>, listener: TcpListener, shutdown_receiver: Receiver<()>) {
+    fn server_loop(
+        self: Arc<Self>,
+        listener: TcpListener,
+        shutdown_receiver: Receiver<()>,
+    ) -> ServerResult<()> {
         let (finished_thread_sender, finished_thread_receiver) = channel();
         let mut recv_result = shutdown_receiver.try_recv();
         while recv_result.is_err() {
-            self.accept_client(&listener, finished_thread_sender.clone())
-                .unwrap();
-            self.join_finished_threads(&finished_thread_receiver);
+            self.accept_client(&listener, finished_thread_sender.clone())?;
+            self.join_finished_threads(&finished_thread_receiver)?;
             recv_result = shutdown_receiver.try_recv();
         }
         debug!("Apagando Servidor");
-        self.clients_manager
-            .write()
-            .unwrap()
-            .finish_all_sessions(false)
-            .unwrap();
+        self.clients_manager.write()?.finish_all_sessions(false)
     }
 
     pub fn run(self: Arc<Self>) -> ServerResult<ServerController> {
         let listener = TcpListener::bind(format!("127.0.0.1:{}", self.config.port()))?;
-        listener.set_nonblocking(true).unwrap();
+        listener
+            .set_nonblocking(true)
+            .expect("No se pudo setear el Listener de forma no bloqueante");
         let (shutdown_sender, shutdown_receiver) = channel();
         let server = self;
 
         let server_handle = thread::spawn(move || {
-            server.server_loop(listener, shutdown_receiver);
+            if let Err(err) = server.server_loop(listener, shutdown_receiver) {
+                error!(
+                    "Error inesperado del servidor: {} - Se recomienda apagarlo",
+                    err.to_string()
+                )
+            }
         });
         let server_controller = ServerController::new(shutdown_sender, server_handle);
         Ok(server_controller)

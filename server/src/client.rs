@@ -73,11 +73,11 @@ impl Client {
     pub fn handle_packet(&mut self, packet: Packet) -> ServerResult<()> {
         match packet {
             Packet::PubackType(puback) => self.acknowledge(puback),
-            Packet::PingReqType(_) => self.send_pingresp(),
-            Packet::DisconnectType(_) => {
-                self.disconnect(true);
-                Ok(())
+            Packet::PingReqType(_) => {
+                debug!("<{}>: Recibido PINGREQ", self.id);
+                self.send_pingresp()
             }
+            Packet::DisconnectType(_) => unreachable!(),
             Packet::PublishTypee(_) => unreachable!(),
             Packet::SubscribeType(_) => unreachable!(),
         }
@@ -91,9 +91,8 @@ impl Client {
         }
     }
 
-    pub fn send_connack(&mut self, session_present: u8, return_code: u8) -> io::Result<()> {
-        self.stream
-            .write_all(&Connack::new(session_present, return_code).encode())?;
+    pub fn send_connack(&mut self, connack: Connack) -> io::Result<()> {
+        self.stream.write_all(&connack.encode())?;
         Ok(())
     }
 
