@@ -1,4 +1,6 @@
+use std::convert::TryFrom;
 use std::{rc::Rc, sync::Mutex};
+
 mod client_observer;
 mod utils;
 use crate::{
@@ -185,11 +187,7 @@ impl Controller {
     fn _subscribe(&self) -> Result<(), ClientError> {
         let topic_entry: Entry = self.builder.object("sub_top").unwrap();
         let qos_entry: Entry = self.builder.object("sub_qos_entry").unwrap();
-        let qos = if qos_entry.text().to_string().parse::<u8>()? == 0 {
-            QoSLevel::QoSLevel0
-        } else {
-            QoSLevel::QoSLevel1
-        };
+        let qos = QoSLevel::try_from(qos_entry.text().to_string().parse::<u8>()?)?;
 
         let topic = Topic::new(&topic_entry.text().to_string(), qos)?;
 
@@ -224,11 +222,7 @@ impl Controller {
         let topic_entry: Entry = self.builder.object("pub_top").unwrap();
         let qos_entry: Entry = self.builder.object("pub_qos_entry").unwrap();
         let retain_switch: Switch = self.builder.object("pub_ret").unwrap();
-        let qos = if qos_entry.text().to_string().parse::<u8>()? == 0 {
-            QoSLevel::QoSLevel0
-        } else {
-            QoSLevel::QoSLevel1
-        };
+        let qos = QoSLevel::try_from(qos_entry.text().to_string().parse::<u8>()?)?;
 
         let retain = retain_switch.is_active();
         let msg: TextBuffer = self.builder.object("pub_mg_txtbuffer").unwrap();
