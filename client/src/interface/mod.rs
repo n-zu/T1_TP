@@ -183,10 +183,15 @@ impl Controller {
 
     #[doc(hidden)]
     fn _subscribe(&self) -> Result<(), ClientError> {
-        let topic: Entry = self.builder.object("sub_top").unwrap();
-        let qos = QoSLevel::QoSLevel0; // TODO
+        let topic_entry: Entry = self.builder.object("sub_top").unwrap();
+        let qos_entry: Entry = self.builder.object("sub_qos_entry").unwrap();
+        let qos = if qos_entry.text().to_string().parse::<u8>()? == 0 {
+            QoSLevel::QoSLevel0
+        } else {
+            QoSLevel::QoSLevel1
+        };
 
-        let topic = Topic::new(&topic.text().to_string(), qos)?;
+        let topic = Topic::new(&topic_entry.text().to_string(), qos)?;
 
         let packet = Subscribe::new(vec![topic], 0);
 
@@ -216,7 +221,7 @@ impl Controller {
 
     #[doc(hidden)]
     fn _publish(&self) -> Result<(), ClientError> {
-        let topic: Entry = self.builder.object("pub_top").unwrap();
+        let topic_entry: Entry = self.builder.object("pub_top").unwrap();
         let qos = QoSLevel::QoSLevel0; // TODO
         let retain = false; // TODO
         let msg: TextBuffer = self.builder.object("pub_mg_txtbuffer").unwrap();
@@ -225,7 +230,7 @@ impl Controller {
             false, // TODO
             qos,
             retain,
-            &topic.text().to_string(),
+            &topic_entry.text().to_string(),
             &msg.text(&msg.start_iter(), &msg.end_iter(), false)
                 .ok_or_else(|| ClientError::new("Se debe completar el campo de mensaje"))?,
             None, // TODO
