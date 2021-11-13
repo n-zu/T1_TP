@@ -166,7 +166,7 @@
                                 <property name="has_entry">True</property>
                                 <property name="entry_text_column">0</property>
                                 <child internal-child="entry">
-                                  <object class="GtkEntry">
+                                  <object class="GtkEntry" id="pub_qos_entry">
                                     <property name="can_focus">False</property>
                                     <property name="editable">False</property>
                                     <property name="text" translatable="yes">0</property>
@@ -442,7 +442,7 @@
                             <property name="has_entry">True</property>
                             <property name="entry_text_column">0</property>
                             <child internal-child="entry">
-                              <object class="GtkEntry">
+                              <object class="GtkEntry" id="sub_qos_entry">
                                 <property name="can_focus">False</property>
                                 <property name="editable">False</property>
                                 <property name="text" translatable="yes">0</property>

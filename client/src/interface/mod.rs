@@ -222,8 +222,15 @@ impl Controller {
     #[doc(hidden)]
     fn _publish(&self) -> Result<(), ClientError> {
         let topic_entry: Entry = self.builder.object("pub_top").unwrap();
-        let qos = QoSLevel::QoSLevel0; // TODO
-        let retain = false; // TODO
+        let qos_entry: Entry = self.builder.object("pub_qos_entry").unwrap();
+        let retain_switch: Switch = self.builder.object("pub_ret").unwrap();
+        let qos = if qos_entry.text().to_string().parse::<u8>()? == 0 {
+            QoSLevel::QoSLevel0
+        } else {
+            QoSLevel::QoSLevel1
+        };
+
+        let retain = retain_switch.is_active();
         let msg: TextBuffer = self.builder.object("pub_mg_txtbuffer").unwrap();
 
         let packet = Publish::new(
