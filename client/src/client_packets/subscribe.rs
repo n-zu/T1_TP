@@ -90,6 +90,11 @@ impl Subscribe {
         }
         Ok(packet)
     }
+
+    /// Get a the subscribe's packet identifier.
+    pub fn packet_identifier(&self) -> u16 {
+        self.packet_identifier
+    }
 }
 
 #[cfg(test)]

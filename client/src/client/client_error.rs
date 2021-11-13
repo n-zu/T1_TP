@@ -1,4 +1,9 @@
-use std::{error::Error, fmt::Display};
+use std::num::ParseIntError;
+use std::{
+    error::Error,
+    fmt::Display,
+    sync::{MutexGuard, PoisonError},
+};
 
 use packets::packet_reader::PacketError;
 use threadpool::ThreadPoolError;
@@ -34,6 +39,15 @@ impl From<PacketError> for ClientError {
     }
 }
 
+impl From<ParseIntError> for ClientError {
+    fn from(err: ParseIntError) -> ClientError {
+        ClientError::new(&format!(
+            "Keep alive o QoS Last Will debe ser un numero mayor o igual a 0, {}",
+            err
+        ))
+    }
+}
+
 impl From<std::io::Error> for ClientError {
     fn from(err: std::io::Error) -> ClientError {
         ClientError::new(&format!("Error inesperado: {}", err))
@@ -43,5 +57,11 @@ impl From<std::io::Error> for ClientError {
 impl From<ThreadPoolError> for ClientError {
     fn from(err: ThreadPoolError) -> ClientError {
         ClientError::new(&format!("Error inesperado: {}", err))
+    }
+}
+
+impl<R> From<PoisonError<MutexGuard<'_, R>>> for ClientError {
+    fn from(err: PoisonError<MutexGuard<'_, R>>) -> ClientError {
+        ClientError::new(&format!("Error usando lock: {}", err))
     }
 }
