@@ -196,7 +196,7 @@ fn get_sub_box(topic: &str, qos: QoSLevel) -> Box {
     outer_box.add(&Label::new(Some(topic)));
 
     // ADD UNSUB BUTTON
-    let _topic = topic.to_string().clone();
+    let _topic = topic.to_string();
     let button = Button::with_label("Unsubscribe");
     button.connect_clicked(move |_| {
         // TODO: Unsubscribe

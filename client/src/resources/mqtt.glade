@@ -354,6 +354,9 @@
                     <property name="visible">True</property>
                     <property name="can-focus">False</property>
                     <property name="label" translatable="yes">PUBLICAR</property>
+                    <style>
+                      <class name="greenBg"/>
+                    </style>
                   </object>
                   <packing>
                     <property name="tab-fill">False</property>
