@@ -110,6 +110,25 @@ impl Controller {
     fn _connect(&self) -> Result<(), ClientError> {
         let address_entry: Entry = self.builder.object("con_host").unwrap();
         let port_entry: Entry = self.builder.object("con_port").unwrap();
+        let full_addr = format!(
+            "{}:{}",
+            &address_entry.text().to_string(),
+            &port_entry.text().to_string()
+        );
+
+        let connect = self._create_connect_packet()?;
+        let observer = ClientObserver::new(self.builder.clone());
+        let client = Client::new(&full_addr, observer, connect)?;
+
+        self.connection_info(Some(&format!("Conectado a {}", full_addr)));
+        self.client.lock()?.replace(client);
+
+        Ok(())
+    }
+
+    #[doc(hidden)]
+    fn _create_connect_packet(&self) -> Result<Connect, ClientError> {
+        // Get the entries from the interface
         let id_entry: Entry = self.builder.object("con_cli").unwrap();
         let user_entry: Entry = self.builder.object("con_usr").unwrap();
         let password_entry: Entry = self.builder.object("con_psw").unwrap();
@@ -120,12 +139,7 @@ impl Controller {
         let last_will_msg_entry: Entry = self.builder.object("con_lw_msg").unwrap();
         let last_will_qos_entry: Entry = self.builder.object("con_lw_qos_entry").unwrap();
 
-        let full_addr = format!(
-            "{}:{}",
-            &address_entry.text().to_string(),
-            &port_entry.text().to_string()
-        );
-
+        // Get the values from the entries
         let user_name = user_entry.text().to_string();
         let password = password_entry.text().to_string();
         let keep_alive = keep_alive_entry
@@ -144,55 +158,26 @@ impl Controller {
             .parse::<u8>()
             .unwrap_or(0);
 
-        let connect = Self::_create_connect_packet(
-            &client_id,
-            &user_name,
-            &password,
-            keep_alive,
-            clean_session,
-            last_will_retain,
-            &last_will_topic,
-            &last_will_msg,
-            last_will_qos,
-        )?;
-        let observer = ClientObserver::new(self.builder.clone());
-        let client = Client::new(&full_addr, observer, connect)?;
-
-        self.connection_info(Some(&format!("Conectado a {}", full_addr)));
-        self.client.lock()?.replace(client);
-
-        Ok(())
-    }
-
-    #[doc(hidden)]
-    fn _create_connect_packet(
-        client_id: &str,
-        user_name: &str,
-        password: &str,
-        keep_alive: u16,
-        clean_session: bool,
-        last_will_retain: bool,
-        last_will_topic: &str,
-        last_will_msg: &str,
-        last_will_qos: u8,
-    ) -> Result<Connect, ClientError> {
-        let mut connect_builder = ConnectBuilder::new(client_id, keep_alive, clean_session)?;
+        // Create the connect builder
+        let mut connect_builder = ConnectBuilder::new(&client_id, keep_alive, clean_session)?;
         if !user_name.is_empty() {
-            connect_builder = connect_builder.user_name(user_name)?;
+            connect_builder = connect_builder.user_name(&user_name)?;
         }
         if !password.is_empty() {
-            connect_builder = connect_builder.password(password)?;
+            connect_builder = connect_builder.password(&password)?;
         }
 
         if !last_will_topic.trim().is_empty() {
             let last_will = LastWill::new(
-                Field::new_from_string(last_will_topic)?,
-                Field::new_from_string(last_will_msg)?,
+                Field::new_from_string(&last_will_topic)?,
+                Field::new_from_string(&last_will_msg)?,
                 QoSLevel::try_from(last_will_qos)?,
                 last_will_retain,
             );
             connect_builder = connect_builder.last_will(last_will);
         }
+
+        // Return the built connect packet
         Ok(connect_builder.build()?)
     }
 
