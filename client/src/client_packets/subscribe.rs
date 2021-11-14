@@ -1,45 +1,12 @@
 #![allow(dead_code)]
 
 use packets::{
-    packet_reader::{PacketError, QoSLevel, RemainingLength},
-    utf8::Field,
+    packet_reader::{PacketError, RemainingLength},
+    topic::Topic,
 };
 
 const SUBSCRIBE_PACKET_TYPE: u8 = 0x80;
 const FIXED_FLAGS: u8 = 2;
-
-#[derive(Debug)]
-pub struct Topic {
-    /// Topic for a subsribe packet
-    name: Field,
-    qos: QoSLevel,
-}
-
-impl Topic {
-    /// Creates a new topic
-    /// Returns PacketError if the topic name is invalid
-    pub fn new(name: &str, qos: QoSLevel) -> Result<Topic, PacketError> {
-        Ok(Topic {
-            name: Field::new_from_string(name)?,
-            qos,
-        })
-    }
-
-    /// Encodes the topic and returns the encoded bytes
-    pub fn encode(&self) -> Vec<u8> {
-        let mut bytes = Vec::new();
-        bytes.extend(self.name.encode());
-        bytes.push(self.qos as u8);
-        bytes
-    }
-
-    // Returns the topic length
-    pub fn len(&self) -> usize {
-        self.name.encode().len()
-        - 2 // remove 2 bytes from encoded length 
-        + 1 // add 1 byte for qos
-    }
-}
 
 #[derive(Debug)]
 pub struct Subscribe {
@@ -95,10 +62,17 @@ impl Subscribe {
     pub fn packet_identifier(&self) -> u16 {
         self.packet_identifier
     }
+
+    /// Get the subscribe's topics.
+    pub fn topics(&self) -> Vec<Topic> {
+        self.topics.clone()
+    }
 }
 
 #[cfg(test)]
 mod tests {
+    use packets::packet_reader::QoSLevel;
+
     use super::*;
 
     #[test]

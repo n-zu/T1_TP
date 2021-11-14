@@ -296,14 +296,12 @@ mod tests {
         time::Instant,
     };
 
-    use packets::{packet_reader::QoSLevel, publish::Publish};
+    use packets::{packet_reader::QoSLevel, publish::Publish, topic::Topic};
 
     use crate::{
         client::{client_sender::MAX_RETRIES, PendingAck},
         client_packets::{
-            subscribe::{Subscribe, Topic},
-            unsubscribe::Unsubscribe,
-            ConnectBuilder, Disconnect, PingReq,
+            subscribe::Subscribe, unsubscribe::Unsubscribe, ConnectBuilder, Disconnect, PingReq,
         },
         observer::Message,
     };
