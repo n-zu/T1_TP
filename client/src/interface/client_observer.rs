@@ -1,7 +1,7 @@
 use gtk::{
     glib,
-    prelude::{BuilderExtManual, ContainerExt, WidgetExt},
-    Box, Builder, Label, ListBox, ListBoxRow, Orientation,
+    prelude::{BuilderExtManual, ButtonExt, ContainerExt, WidgetExt},
+    Box, Builder, Button, Label, ListBox, ListBoxRow, Orientation,
 };
 use packets::{packet_reader::QoSLevel, puback::Puback, publish::Publish, suback::Suback};
 
@@ -194,6 +194,15 @@ fn get_sub_box(topic: &str, qos: QoSLevel) -> Box {
     let outer_box = Box::new(Orientation::Horizontal, 5);
     outer_box.add(&Label::new(Some(&format!("QOS: {}", qos as u8))));
     outer_box.add(&Label::new(Some(topic)));
+
     // ADD UNSUB BUTTON
+    let _topic = topic.to_string().clone();
+    let button = Button::with_label("Unsubscribe");
+    button.connect_clicked(move |_| {
+        // TODO: Unsubscribe
+        println!("Unsubscribing from {}", _topic);
+    });
+    outer_box.add(&button);
+
     outer_box
 }
