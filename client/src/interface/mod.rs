@@ -1,4 +1,6 @@
+use std::convert::TryFrom;
 use std::{rc::Rc, sync::Mutex};
+
 mod client_observer;
 mod utils;
 use crate::{
@@ -183,10 +185,11 @@ impl Controller {
 
     #[doc(hidden)]
     fn _subscribe(&self) -> Result<(), ClientError> {
-        let topic: Entry = self.builder.object("sub_top").unwrap();
-        let qos = QoSLevel::QoSLevel0; // TODO
+        let topic_entry: Entry = self.builder.object("sub_top").unwrap();
+        let qos_entry: Entry = self.builder.object("sub_qos_entry").unwrap();
+        let qos = QoSLevel::try_from(qos_entry.text().to_string().parse::<u8>()?)?;
 
-        let topic = Topic::new(&topic.text().to_string(), qos)?;
+        let topic = Topic::new(&topic_entry.text().to_string(), qos)?;
 
         let packet = Subscribe::new(vec![topic], 0);
 
@@ -216,16 +219,19 @@ impl Controller {
 
     #[doc(hidden)]
     fn _publish(&self) -> Result<(), ClientError> {
-        let topic: Entry = self.builder.object("pub_top").unwrap();
-        let qos = QoSLevel::QoSLevel0; // TODO
-        let retain = false; // TODO
+        let topic_entry: Entry = self.builder.object("pub_top").unwrap();
+        let qos_entry: Entry = self.builder.object("pub_qos_entry").unwrap();
+        let retain_switch: Switch = self.builder.object("pub_ret").unwrap();
+        let qos = QoSLevel::try_from(qos_entry.text().to_string().parse::<u8>()?)?;
+
+        let retain = retain_switch.is_active();
         let msg: TextBuffer = self.builder.object("pub_mg_txtbuffer").unwrap();
 
         let packet = Publish::new(
             false, // TODO
             qos,
             retain,
-            &topic.text().to_string(),
+            &topic_entry.text().to_string(),
             &msg.text(&msg.start_iter(), &msg.end_iter(), false)
                 .ok_or_else(|| ClientError::new("Se debe completar el campo de mensaje"))?,
             None, // TODO

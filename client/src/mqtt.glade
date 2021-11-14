@@ -165,9 +165,9 @@
                                 <property name="has_entry">True</property>
                                 <property name="entry_text_column">0</property>
                                 <child internal-child="entry">
-                                  <object class="GtkEntry">
+                                  <object class="GtkEntry" id="pub_qos_entry">
                                     <property name="can_focus">False</property>
-                                    <property name="text" translatable="yes">0</property>
+                                    <property name="editable">False</property>
                                   </object>
                                 </child>
                               </object>
@@ -370,10 +370,10 @@
                       <object class="GtkBox">
                         <property name="visible">True</property>
                         <property name="can_focus">False</property>
-                        <property name="margin_left">5</property>
-                        <property name="margin_right">10</property>
-                        <property name="margin_start">5</property>
-                        <property name="margin_end">10</property>
+                        <property name="margin_left">10</property>
+                        <property name="margin_right">5</property>
+                        <property name="margin_start">10</property>
+                        <property name="margin_end">5</property>
                         <property name="margin_top">11</property>
                         <property name="hexpand">True</property>
                         <property name="orientation">vertical</property>
@@ -381,6 +381,7 @@
                           <object class="GtkLabel">
                             <property name="visible">True</property>
                             <property name="can_focus">False</property>
+                            <property name="label" translatable="yes">Topico</property>
                           </object>
                           <packing>
                             <property name="expand">False</property>
@@ -389,11 +390,10 @@
                           </packing>
                         </child>
                         <child>
-                          <object class="GtkButton" id="sub_btn">
-                            <property name="label" translatable="yes">Suscribirse</property>
+                          <object class="GtkEntry" id="sub_top">
                             <property name="visible">True</property>
                             <property name="can_focus">True</property>
-                            <property name="receives_default">True</property>
+                            <property name="text" translatable="yes">top/sub</property>
                           </object>
                           <packing>
                             <property name="expand">False</property>
@@ -439,8 +439,9 @@
                             <property name="has_entry">True</property>
                             <property name="entry_text_column">0</property>
                             <child internal-child="entry">
-                              <object class="GtkEntry">
+                              <object class="GtkEntry" id="sub_qos_entry">
                                 <property name="can_focus">False</property>
+                                <property name="editable">False</property>
                               </object>
                             </child>
                           </object>
@@ -461,10 +462,10 @@
                       <object class="GtkBox">
                         <property name="visible">True</property>
                         <property name="can_focus">False</property>
-                        <property name="margin_left">10</property>
-                        <property name="margin_right">5</property>
-                        <property name="margin_start">10</property>
-                        <property name="margin_end">5</property>
+                        <property name="margin_left">5</property>
+                        <property name="margin_right">10</property>
+                        <property name="margin_start">5</property>
+                        <property name="margin_end">10</property>
                         <property name="margin_top">11</property>
                         <property name="hexpand">True</property>
                         <property name="orientation">vertical</property>
@@ -472,7 +473,6 @@
                           <object class="GtkLabel">
                             <property name="visible">True</property>
                             <property name="can_focus">False</property>
-                            <property name="label" translatable="yes">Topico</property>
                           </object>
                           <packing>
                             <property name="expand">False</property>
@@ -481,10 +481,11 @@
                           </packing>
                         </child>
                         <child>
-                          <object class="GtkEntry" id="sub_top">
+                          <object class="GtkButton" id="sub_btn">
+                            <property name="label" translatable="yes">Suscribirse</property>
                             <property name="visible">True</property>
                             <property name="can_focus">True</property>
-                            <property name="text" translatable="yes">top/sub</property>
+                            <property name="receives_default">True</property>
                           </object>
                           <packing>
                             <property name="expand">False</property>
@@ -1006,6 +1007,7 @@
                             <child internal-child="entry">
                               <object class="GtkEntry" id="entry_qos_combobox">
                                 <property name="can_focus">False</property>
+                                <property name="editable">False</property>
                               </object>
                             </child>
                           </object>
