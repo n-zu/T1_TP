@@ -5,6 +5,7 @@ use std::time::Duration;
 use std::{thread, time};
 
 use packets::packet_reader::QoSLevel;
+use packets::puback::Puback;
 
 use crate::client_packets::unsubscribe::Unsubscribe;
 use crate::client_packets::{Connect, Disconnect, PingReq, Subscribe};
@@ -12,6 +13,7 @@ use crate::observer::{Message, Observer};
 use packets::publish::Publish;
 
 use super::{ClientError, PendingAck};
+use crate::client::client_listener::AckSender;
 
 /// How much time should the sender wait until it tries
 /// to resend an unacknowledged packet.
@@ -27,12 +29,19 @@ pub(crate) const ACK_CHECK: Duration = Duration::from_millis(500);
 pub(crate) const MAX_RETRIES: u16 = 3;
 
 /// The packet sender of the client. It is responsible
-/// for sending all packets to the server, except for
-/// acknowledgements.
+/// for sending all packets to the server.
 pub(crate) struct ClientSender<T: Observer, W: Write> {
     stream: Mutex<W>,
     pending_ack: Arc<Mutex<Option<PendingAck>>>,
     observer: Arc<T>,
+}
+
+impl<T: Observer, W: Write> AckSender for ClientSender<T, W> {
+    fn send_puback(&self, puback: Puback) {
+        if let Err(e) = self._puback(puback) {
+            self.observer.update(Message::InternalError(e));
+        }
+    }
 }
 
 impl<T: Observer, W: Write> ClientSender<T, W> {
@@ -54,14 +63,10 @@ impl<T: Observer, W: Write> ClientSender<T, W> {
         self.pending_ack.clone()
     }
 
-    /// Gets the stream that the sender is using.
-    pub fn stream(&self) -> &Mutex<W> {
-        &self.stream
-    }
-
-    /// Gets a clone of the observer of the sender.
-    pub fn observer(&self) -> Arc<T> {
-        self.observer.clone()
+    #[doc(hidden)]
+    fn _puback(&self, puback: Puback) -> Result<(), ClientError> {
+        self.stream.lock()?.write_all(&puback.encode())?;
+        Ok(())
     }
 
     #[doc(hidden)]
@@ -279,6 +284,10 @@ impl<T: Observer, W: Write> ClientSender<T, W> {
 
         self.pending_ack.lock()?.take();
         Ok(false)
+    }
+
+    pub fn send_error(&self, error: ClientError) {
+        self.observer.update(Message::InternalError(error));
     }
 }
 
