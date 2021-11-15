@@ -8,7 +8,7 @@ use std::{
 
 type PacketId = u16;
 
-use packets::{packet_reader::QoSLevel, puback::Puback, publish::Publish};
+use packets::{packet_reader::QoSLevel, puback::Puback, publish::Publish, suback::Suback};
 use tracing::{debug, error, info};
 
 use crate::{
@@ -108,6 +108,11 @@ impl Client {
     pub fn acknowledge(&mut self, puback: Puback) {
         debug!("<{}>: Acknowledge {}", self.id, puback.packet_id());
         self.unacknowledged.remove(&puback.packet_id()).unwrap();
+    }
+
+    pub fn send_suback(&mut self, suback: &mut Suback) -> ServerResult<()> {
+        self.write_all(&suback.encode()?)?;
+        Ok(())
     }
 
     pub fn send_unacknowledged(&mut self) {

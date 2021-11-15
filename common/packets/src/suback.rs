@@ -1,13 +1,15 @@
 #![allow(unused)]
-use crate::packet_reader;
+use crate::packet_reader::{self, QoSLevel};
 use crate::packet_reader::{ErrorKind, PacketError, RemainingLength};
+use crate::topic::Topic;
 use std::io::Read;
 
-#[derive(Debug, Eq, PartialEq)]
+#[derive(Debug)]
 /// Client/Server side structure for Suback packet
 pub struct Suback {
     return_codes: Vec<u8>,
     subscribe_packet_id: u16,
+    topics: Vec<Topic>,
 }
 
 #[doc(hidden)]
@@ -45,6 +47,7 @@ impl Suback {
         Ok(Self {
             return_codes,
             subscribe_packet_id,
+            topics: Vec::new(),
         })
     }
 
@@ -104,6 +107,7 @@ impl Suback {
         Ok(Self {
             return_codes,
             subscribe_packet_id,
+            topics: Vec::new(),
         })
     }
 
@@ -191,6 +195,15 @@ impl Suback {
     /// Get the suback's subscribe packet id.
     pub fn packet_id(&self) -> u16 {
         self.subscribe_packet_id
+    }
+
+    /// Set the suback's subscribe topics
+    pub fn set_topics(&mut self, topics: Vec<Topic>) {
+        self.topics = topics;
+    }
+    /// Get the suback's subscribe topics
+    pub fn topics(&self) -> &Vec<Topic> {
+        &self.topics
     }
 }
 

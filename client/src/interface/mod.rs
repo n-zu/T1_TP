@@ -5,7 +5,7 @@ mod client_observer;
 mod utils;
 use crate::{
     client::ClientError,
-    client_packets::{ConnectBuilder, Subscribe, Topic},
+    client_packets::{ConnectBuilder, Subscribe},
     interface::client_observer::ClientObserver,
 };
 
@@ -16,8 +16,10 @@ use gtk::{
     prelude::{BuilderExtManual, ButtonExt, EntryExt, TextBufferExt},
     Builder, Button, Entry, Switch, TextBuffer,
 };
+use packets::topic::Topic;
+use packets::utf8::Field;
 
-use crate::client_packets::Connect;
+use crate::client_packets::{Connect, LastWill};
 use packets::{packet_reader::QoSLevel, publish::Publish};
 
 use self::utils::{Icon, InterfaceUtils};
@@ -108,39 +110,13 @@ impl Controller {
     fn _connect(&self) -> Result<(), ClientError> {
         let address_entry: Entry = self.builder.object("con_host").unwrap();
         let port_entry: Entry = self.builder.object("con_port").unwrap();
-        let id_entry: Entry = self.builder.object("con_cli").unwrap();
-        let user_entry: Entry = self.builder.object("con_usr").unwrap();
-        let password_entry: Entry = self.builder.object("con_psw").unwrap();
-        let keep_alive_entry: Entry = self.builder.object("con_ka").unwrap();
-        let clean_session_switch: Switch = self.builder.object("con_cs").unwrap();
-        let last_will_retain_switch: Switch = self.builder.object("con_lw_ret").unwrap();
-        let last_will_topic_entry: Entry = self.builder.object("con_lw_top").unwrap();
-        let last_will_msg_entry: Entry = self.builder.object("con_lw_msg").unwrap();
-        // let last_will_qos_entry: Entry = self.builder.object("entry_qos_combobox").unwrap();
-
         let full_addr = format!(
             "{}:{}",
             &address_entry.text().to_string(),
             &port_entry.text().to_string()
         );
 
-        let user_name = user_entry.text().to_string();
-        let password = password_entry.text().to_string();
-        let keep_alive = keep_alive_entry.text().to_string().parse::<u16>()?;
-        let client_id = id_entry.text().to_string();
-        let clean_session = clean_session_switch.is_active();
-        let _last_will_retain = last_will_retain_switch.is_active();
-        let _last_will_topic = last_will_topic_entry.text().to_string();
-        let _last_will_msg = last_will_msg_entry.text().to_string();
-        // let _last_will_qos = last_will_qos_entry.text().to_string().parse::<u8>()?;
-
-        let connect = Self::_create_connect_packet(
-            &client_id,
-            &user_name,
-            &password,
-            keep_alive,
-            clean_session,
-        )?;
+        let connect = self._create_connect_packet()?;
         let observer = ClientObserver::new(self.builder.clone());
         let client = Client::new(&full_addr, observer, connect)?;
 
@@ -151,20 +127,57 @@ impl Controller {
     }
 
     #[doc(hidden)]
-    fn _create_connect_packet(
-        client_id: &str,
-        user_name: &str,
-        password: &str,
-        keep_alive: u16,
-        clean_session: bool,
-    ) -> Result<Connect, ClientError> {
-        let mut connect_builder = ConnectBuilder::new(client_id, keep_alive, clean_session)?;
+    fn _create_connect_packet(&self) -> Result<Connect, ClientError> {
+        // Get the entries from the interface
+        let id_entry: Entry = self.builder.object("con_cli").unwrap();
+        let user_entry: Entry = self.builder.object("con_usr").unwrap();
+        let password_entry: Entry = self.builder.object("con_psw").unwrap();
+        let keep_alive_entry: Entry = self.builder.object("con_ka").unwrap();
+        let clean_session_switch: Switch = self.builder.object("con_cs").unwrap();
+        let last_will_retain_switch: Switch = self.builder.object("con_lw_ret").unwrap();
+        let last_will_topic_entry: Entry = self.builder.object("con_lw_top").unwrap();
+        let last_will_msg_entry: Entry = self.builder.object("con_lw_msg").unwrap();
+        let last_will_qos_entry: Entry = self.builder.object("con_lw_qos_entry").unwrap();
+
+        // Get the values from the entries
+        let user_name = user_entry.text().to_string();
+        let password = password_entry.text().to_string();
+        let keep_alive = keep_alive_entry
+            .text()
+            .to_string()
+            .parse::<u16>()
+            .unwrap_or(0);
+        let client_id = id_entry.text().to_string();
+        let clean_session = clean_session_switch.is_active();
+        let last_will_retain = last_will_retain_switch.is_active();
+        let last_will_topic = last_will_topic_entry.text().to_string();
+        let last_will_msg = last_will_msg_entry.text().to_string();
+        let last_will_qos = last_will_qos_entry
+            .text()
+            .to_string()
+            .parse::<u8>()
+            .unwrap_or(0);
+
+        // Create the connect builder
+        let mut connect_builder = ConnectBuilder::new(&client_id, keep_alive, clean_session)?;
         if !user_name.is_empty() {
-            connect_builder = connect_builder.user_name(user_name)?;
+            connect_builder = connect_builder.user_name(&user_name)?;
         }
         if !password.is_empty() {
-            connect_builder = connect_builder.password(password)?;
+            connect_builder = connect_builder.password(&password)?;
         }
+
+        if !last_will_topic.trim().is_empty() {
+            let last_will = LastWill::new(
+                Field::new_from_string(&last_will_topic)?,
+                Field::new_from_string(&last_will_msg)?,
+                QoSLevel::try_from(last_will_qos)?,
+                last_will_retain,
+            );
+            connect_builder = connect_builder.last_will(last_will);
+        }
+
+        // Return the built connect packet
         Ok(connect_builder.build()?)
     }
 
@@ -187,9 +200,9 @@ impl Controller {
     fn _subscribe(&self) -> Result<(), ClientError> {
         let topic_entry: Entry = self.builder.object("sub_top").unwrap();
         let qos_entry: Entry = self.builder.object("sub_qos_entry").unwrap();
-        let qos = QoSLevel::try_from(qos_entry.text().to_string().parse::<u8>()?)?;
+        let qos = qos_entry.text().to_string().parse::<u8>().unwrap_or(0);
 
-        let topic = Topic::new(&topic_entry.text().to_string(), qos)?;
+        let topic = Topic::new(&topic_entry.text().to_string(), QoSLevel::try_from(qos)?)?;
 
         let packet = Subscribe::new(vec![topic], 0);
 
@@ -222,14 +235,14 @@ impl Controller {
         let topic_entry: Entry = self.builder.object("pub_top").unwrap();
         let qos_entry: Entry = self.builder.object("pub_qos_entry").unwrap();
         let retain_switch: Switch = self.builder.object("pub_ret").unwrap();
-        let qos = QoSLevel::try_from(qos_entry.text().to_string().parse::<u8>()?)?;
+        let qos = qos_entry.text().to_string().parse::<u8>().unwrap_or(0);
 
         let retain = retain_switch.is_active();
         let msg: TextBuffer = self.builder.object("pub_mg_txtbuffer").unwrap();
 
         let packet = Publish::new(
             false, // TODO
-            qos,
+            QoSLevel::try_from(qos)?,
             retain,
             &topic_entry.text().to_string(),
             &msg.text(&msg.start_iter(), &msg.end_iter(), false)

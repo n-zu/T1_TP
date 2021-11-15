@@ -193,6 +193,9 @@ impl Server {
     fn handle_subscribe(&self, subscribe: Subscribe, id: &str) -> ServerResult<()> {
         debug!("Recibido SUBSCRIBE de <{}>", id);
         self.topic_handler.subscribe(&subscribe, id)?;
+        self.session.read()?.client_do(id, |mut client| {
+            client.send_suback(&mut subscribe.response()?)
+        })?;
         Ok(())
     }
 

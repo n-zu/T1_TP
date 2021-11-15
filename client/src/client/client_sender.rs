@@ -302,17 +302,14 @@ mod tests {
         time::Instant,
     };
 
-    use packets::{packet_reader::QoSLevel, puback::Puback, publish::Publish};
-
     use crate::{
         client::{client_listener::AckSender, client_sender::MAX_RETRIES, ClientError, PendingAck},
         client_packets::{
-            subscribe::{Subscribe, Topic},
-            unsubscribe::Unsubscribe,
-            ConnectBuilder, Disconnect, PingReq,
+            subscribe::Subscribe, unsubscribe::Unsubscribe, ConnectBuilder, Disconnect, PingReq,
         },
         observer::Message,
     };
+    use packets::{packet_reader::QoSLevel, puback::Puback, publish::Publish, topic::Topic};
 
     use super::ClientSender;
 

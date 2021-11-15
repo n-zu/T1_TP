@@ -225,12 +225,13 @@ impl<T: Observer, R: ReadTimeout, A: AckSender> ClientListener<T, R, A> {
 
     #[doc(hidden)]
     fn handle_suback(&mut self, header: u8) -> Result<(), ClientError> {
-        let suback = Suback::read_from(&mut self.stream, header)?;
+        let mut suback = Suback::read_from(&mut self.stream, header)?;
 
         let mut lock = self.pending_ack.lock()?;
 
         if let Some(PendingAck::Subscribe(subscribe)) = lock.as_ref() {
             if subscribe.packet_identifier() == suback.packet_id() {
+                suback.set_topics(subscribe.topics());
                 lock.take();
                 self.observer.update(Message::Subscribed(Ok(suback)));
             }
@@ -320,11 +321,12 @@ mod tests {
     use std::time::Duration;
 
     use crate::client::PendingAck;
-    use crate::client_packets::{ConnectBuilder, PingReq, Subscribe, Topic, Unsubscribe};
+    use crate::client_packets::{ConnectBuilder, PingReq, Subscribe, Unsubscribe};
     use crate::observer::Message;
     use packets::packet_reader::QoSLevel::*;
     use packets::puback::Puback;
     use packets::publish::Publish;
+    use packets::topic::Topic;
 
     use super::{AckSender, ClientListener, ReadTimeout};
 

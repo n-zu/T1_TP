@@ -1,7 +1,7 @@
 use gtk::{
     glib,
-    prelude::{BuilderExtManual, ContainerExt, WidgetExt},
-    Box, Builder, Label, ListBox, ListBoxRow, Orientation,
+    prelude::{BuilderExtManual, ButtonExt, ContainerExt, WidgetExt},
+    Box, Builder, Button, Label, ListBox, ListBoxRow, Orientation,
 };
 use packets::{packet_reader::QoSLevel, puback::Puback, publish::Publish, suback::Suback};
 
@@ -94,13 +94,30 @@ impl InternalObserver {
     /// about the result of the subscribe operation
     fn subscribed(&self, result: Result<Suback, ClientError>) {
         self.sensitive(true);
-        if let Err(e) = result {
-            self.icon(Icon::Error);
-            self.status_message(&format!("No se pudo suscribir: {}", e));
-        } else {
-            self.icon(Icon::Ok);
-            self.status_message("Suscrito");
+        match result {
+            Ok(suback) => {
+                self.icon(Icon::Ok);
+                self.status_message("Suscrito");
+                self.add_subscription(suback);
+            }
+            Err(error) => {
+                self.icon(Icon::Error);
+                self.status_message(&format!("No se pudo suscribir: {}", error));
+            }
         }
+    }
+
+    fn add_subscription(&self, _result: Suback) {
+        let list: ListBox = self.builder.object("sub_subs").unwrap();
+
+        // for each topic in the suback, add a new row to the list
+        for topic in _result.topics() {
+            let row = ListBoxRow::new();
+            row.add(&get_sub_box(topic.name(), topic.qos()));
+            list.add(&row);
+        }
+
+        list.show_all();
     }
 
     /// Re-enables the interface and shows information
@@ -169,5 +186,23 @@ fn get_box(topic: &str, payload: &str, qos: QoSLevel) -> Box {
     inner_box.add(&Label::new(Some(&format!("QOS: {}", qos as u8))));
     outer_box.add(&inner_box);
     outer_box.add(&Label::new(Some(payload)));
+    outer_box
+}
+
+#[doc(hidden)]
+fn get_sub_box(topic: &str, qos: QoSLevel) -> Box {
+    let outer_box = Box::new(Orientation::Horizontal, 5);
+    outer_box.add(&Label::new(Some(&format!("QOS: {}", qos as u8))));
+    outer_box.add(&Label::new(Some(topic)));
+
+    // ADD UNSUB BUTTON
+    let _topic = topic.to_string();
+    let button = Button::with_label("Unsubscribe");
+    button.connect_clicked(move |_| {
+        // TODO: Unsubscribe
+        println!("Unsubscribing from {}", _topic);
+    });
+    outer_box.add(&button);
+
     outer_box
 }

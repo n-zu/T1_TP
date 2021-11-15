@@ -60,6 +60,16 @@ pub struct LastWill {
     topic: Field,
     message: Field,
 }
+impl LastWill {
+    pub fn new(topic: Field, message: Field, qos: QoSLevel, retain: bool) -> LastWill {
+        LastWill {
+            retain,
+            qos,
+            topic,
+            message,
+        }
+    }
+}
 
 #[derive(Debug)]
 pub struct Connect {
