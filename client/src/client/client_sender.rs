@@ -286,6 +286,8 @@ impl<T: Observer, W: Write> ClientSender<T, W> {
         Ok(false)
     }
 
+    /// Sends the specified error to the Observer
+    /// as an InternalError message
     pub fn send_error(&self, error: ClientError) {
         self.observer.update(Message::InternalError(error));
     }
@@ -300,10 +302,10 @@ mod tests {
         time::Instant,
     };
 
-    use packets::{packet_reader::QoSLevel, publish::Publish};
+    use packets::{packet_reader::QoSLevel, puback::Puback, publish::Publish};
 
     use crate::{
-        client::{client_sender::MAX_RETRIES, PendingAck},
+        client::{client_listener::AckSender, client_sender::MAX_RETRIES, ClientError, PendingAck},
         client_packets::{
             subscribe::{Subscribe, Topic},
             unsubscribe::Unsubscribe,
@@ -818,5 +820,38 @@ mod tests {
             Message::Published(Err(_))
         ));
         // Debería haber mandado el error al observer
+    }
+
+    #[test]
+    fn test_send_puback() {
+        let puback = Puback::new(123).unwrap();
+        let bytes = puback.encode();
+
+        let observer = ObserverMock::new();
+        let stream = Cursor::new();
+
+        let client_sender = ClientSender::new(stream.clone(), observer.clone());
+
+        client_sender.send_puback(puback);
+
+        assert_eq!(stream.content(), bytes);
+    }
+
+    #[test]
+    fn test_send_error() {
+        let error = ClientError::new("error de prueba");
+
+        let observer = ObserverMock::new();
+        let stream = Cursor::new();
+
+        let client_sender = ClientSender::new(stream, observer.clone());
+
+        client_sender.send_error(error);
+
+        let lock = observer.messages.lock().unwrap();
+        assert!(matches!(lock[0], Message::InternalError(_)));
+        if let Message::InternalError(error) = &lock[0] {
+            assert!(error.to_string().contains("error de prueba"));
+        }
     }
 }
