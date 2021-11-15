@@ -8,13 +8,9 @@ use std::{
 pub mod topic_handler_error;
 use packets::{packet_reader::QoSLevel, publish::Publish};
 
-use crate::server_packets::{subscribe::TopicFilter, Subscribe};
+use crate::server_packets::{subscribe::TopicFilter, unsubscribe::Unsubscribe, Subscribe};
 
 use self::topic_handler_error::TopicHandlerError;
-
-/* DEFINICIONES TEMPORALES (la idea es después importarlas) */
-pub struct Unsubscribe;
-/************************************************************/
 
 type Subtopics = HashMap<String, Topic>;
 type Subscribers = HashMap<String, SubscriptionData>;
@@ -78,11 +74,12 @@ impl TopicHandler {
     /// Unsubscribe a client_id from a set of topics given a Unsubscribe packet
     pub fn unsubscribe(
         &self,
-        _packet: Unsubscribe,
+        packet: Unsubscribe,
         client_id: &str,
     ) -> Result<(), TopicHandlerError> {
-        let full_topic = "todo";
-        unsubscribe_rec(&self.root, full_topic, client_id)?;
+        for topic_name in packet.topic_filters() {
+            unsubscribe_rec(&self.root, topic_name, client_id)?;
+        }
         Ok(())
     }
 
@@ -226,7 +223,7 @@ fn remove_client_rec(node: &Topic, user_id: &str) -> Result<(), TopicHandlerErro
 mod tests {
     use std::{collections::HashSet, io::Cursor, sync::mpsc::channel};
 
-    use crate::server_packets::Subscribe;
+    use crate::server_packets::{unsubscribe::Unsubscribe, Subscribe};
 
     use packets::{packet_reader::QoSLevel, publish::Publish, utf8::Field};
 
@@ -249,6 +246,16 @@ mod tests {
         bytes.insert(0, bytes.len() as u8);
         let header = [0b10000010];
         Subscribe::new(&mut Cursor::new(bytes), &header).unwrap()
+    }
+
+    fn build_unsubscribe(topic: &str) -> Unsubscribe {
+        let mut bytes: Vec<u8> = Vec::new();
+        bytes.extend([0, 5]); // identifier
+        bytes.extend(Field::new_from_string(topic).unwrap().encode());
+
+        bytes.insert(0, bytes.len() as u8);
+        let header = 0b10100010;
+        Unsubscribe::read_from(&mut Cursor::new(bytes), header).unwrap()
     }
 
     #[test]
@@ -340,5 +347,48 @@ mod tests {
 
         let message = receiver.recv().unwrap();
         assert_eq!(message.packet.qos(), QoSLevel::QoSLevel0);
+    }
+
+    #[test]
+    fn test_unsubscribe_stop_sending_messages_to_client() {
+        let subscribe = build_subscribe("topic/auto/casa");
+        let unsubscribe = build_unsubscribe("topic/auto/casa");
+        let first_publish = build_publish("topic/auto/casa", "unMensaje");
+        let second_publish = build_publish("topic/auto/casa", "otroMensaje");
+        let handler = super::TopicHandler::new();
+
+        let (sender, receiver) = channel();
+
+        handler.subscribe(&subscribe, "user").unwrap();
+        handler.publish(&first_publish, sender.clone()).unwrap();
+        handler.unsubscribe(unsubscribe, "user").unwrap();
+        handler.publish(&second_publish, sender).unwrap();
+        let message = receiver.recv().unwrap();
+        assert!(message.client_id == "user");
+        assert_eq!(message.packet.topic_name(), "topic/auto/casa");
+        // El canal se cerro sin enviar el segundo mensaje
+        assert!(receiver.recv().is_err());
+    }
+
+    #[test]
+    fn test_unsubscribe_matches_topic_correctly() {
+        let subscribe = build_subscribe("topic/auto/casa");
+        let unsubscribe = build_unsubscribe("topic/no_es_auto/casa");
+        let first_publish = build_publish("topic/auto/casa", "unMensaje");
+        let second_publish = build_publish("topic/auto/casa", "otroMensaje");
+        let handler = super::TopicHandler::new();
+
+        let (sender, receiver) = channel();
+
+        handler.subscribe(&subscribe, "user").unwrap();
+        handler.publish(&first_publish, sender.clone()).unwrap();
+        handler.unsubscribe(unsubscribe, "user").unwrap();
+        handler.publish(&second_publish, sender).unwrap();
+        let first_message = receiver.recv().unwrap();
+        let second_message = receiver.recv().unwrap();
+        assert!(first_message.client_id == "user");
+        assert_eq!(first_message.packet.topic_name(), "topic/auto/casa");
+        assert!(second_message.client_id == "user");
+        assert_eq!(second_message.packet.topic_name(), "topic/auto/casa");
     }
 }

@@ -1,14 +1,16 @@
 use std::{
     collections::HashMap,
     fmt, io,
-    sync::{Mutex, MutexGuard, PoisonError, RwLockReadGuard, RwLockWriteGuard},
+    sync::{mpsc::SendError, Mutex, MutexGuard, PoisonError, RwLockReadGuard, RwLockWriteGuard},
+    thread::JoinHandle,
 };
 
 use packets::packet_reader::{ErrorKind, PacketError};
 use threadpool::{ThreadPool, ThreadPoolError};
 
 use crate::{
-    client::Client, session::Session, topic_handler::topic_handler_error::TopicHandlerError,
+    client::Client, client_thread_joiner::ClientThreadJoiner, clients_manager::ClientsManager,
+    topic_handler::topic_handler_error::TopicHandlerError,
 };
 
 #[derive(Debug)]
@@ -22,6 +24,9 @@ pub enum ServerErrorKind {
     ProtocolViolation,
     ClientDisconnected,
     ClientNotFound,
+    ClientNotInWhitelist,
+    InvalidPassword,
+    TakenID,
     Timeout,
     PoinsonedLock,
     Irrecoverable,
@@ -78,8 +83,8 @@ impl From<PoisonError<RwLockWriteGuard<'_, HashMap<String, Mutex<Client>>>>> for
     }
 }
 
-impl From<PoisonError<RwLockReadGuard<'_, Session>>> for ServerError {
-    fn from(err: PoisonError<RwLockReadGuard<Session>>) -> ServerError {
+impl From<PoisonError<RwLockReadGuard<'_, ClientsManager>>> for ServerError {
+    fn from(err: PoisonError<RwLockReadGuard<ClientsManager>>) -> ServerError {
         ServerError::new_kind(&err.to_string(), ServerErrorKind::PoinsonedLock)
     }
 }
@@ -96,9 +101,37 @@ impl From<PoisonError<MutexGuard<'_, ThreadPool>>> for ServerError {
     }
 }
 
-impl From<PoisonError<RwLockWriteGuard<'_, Session>>> for ServerError {
-    fn from(err: PoisonError<RwLockWriteGuard<'_, Session>>) -> Self {
+impl From<PoisonError<RwLockWriteGuard<'_, ClientsManager>>> for ServerError {
+    fn from(err: PoisonError<RwLockWriteGuard<'_, ClientsManager>>) -> Self {
         ServerError::new_kind(&err.to_string(), ServerErrorKind::PoinsonedLock)
+    }
+}
+
+impl From<PoisonError<MutexGuard<'_, HashMap<std::net::SocketAddr, JoinHandle<()>>>>>
+    for ServerError
+{
+    fn from(
+        err: PoisonError<MutexGuard<'_, HashMap<std::net::SocketAddr, JoinHandle<()>>>>,
+    ) -> Self {
+        ServerError::new_kind(&err.to_string(), ServerErrorKind::PoinsonedLock)
+    }
+}
+
+impl From<PoisonError<MutexGuard<'_, ClientThreadJoiner>>> for ServerError {
+    fn from(err: PoisonError<MutexGuard<'_, ClientThreadJoiner>>) -> Self {
+        ServerError::new_kind(&err.to_string(), ServerErrorKind::PoinsonedLock)
+    }
+}
+
+impl From<SendError<std::net::SocketAddr>> for ServerError {
+    fn from(err: SendError<std::net::SocketAddr>) -> Self {
+        ServerError::new_msg(&err.to_string())
+    }
+}
+
+impl From<SendError<()>> for ServerError {
+    fn from(err: SendError<()>) -> Self {
+        ServerError::new_msg(&err.to_string())
     }
 }
 
