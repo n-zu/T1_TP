@@ -8,7 +8,10 @@ use std::{
 use packets::packet_reader::{ErrorKind, PacketError};
 use threadpool::{ThreadPool, ThreadPoolError};
 
-use crate::{client::Client, client_thread_joiner::ClientThreadJoiner, clients_manager::ClientsManager, topic_handler::topic_handler_error::TopicHandlerError};
+use crate::{
+    client::Client, client_thread_joiner::ClientThreadJoiner, clients_manager::ClientsManager,
+    topic_handler::topic_handler_error::TopicHandlerError,
+};
 
 #[derive(Debug)]
 pub struct ServerError {

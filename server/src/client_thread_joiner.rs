@@ -1,9 +1,13 @@
-use std::{collections::HashMap, net::SocketAddr, sync::mpsc::{self, Receiver, Sender}, thread::JoinHandle};
+use std::{
+    collections::HashMap,
+    net::SocketAddr,
+    sync::mpsc::{self, Receiver, Sender},
+    thread::JoinHandle,
+};
 
 use tracing::{debug, error};
 
 use crate::server::ServerResult;
-
 
 pub struct ClientThreadJoiner {
     handles: Option<HashMap<SocketAddr, JoinHandle<()>>>,

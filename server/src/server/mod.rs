@@ -29,9 +29,17 @@ const ACCEPT_SLEEP_DUR: Duration = Duration::from_millis(100);
 
 use packets::publish::Publish;
 
-use crate::{client::Client, client_thread_joiner::ClientThreadJoiner, clients_manager::ClientsManager, config::Config, server::server_error::ServerErrorKind, server_packets::{
+use crate::{
+    client::Client,
+    client_thread_joiner::ClientThreadJoiner,
+    clients_manager::ClientsManager,
+    config::Config,
+    server::server_error::ServerErrorKind,
+    server_packets::{
         unsuback::Unsuback, unsubscribe::Unsubscribe, Connect, Disconnect, PingReq, Subscribe,
-    }, topic_handler::{Message, TopicHandler}};
+    },
+    topic_handler::{Message, TopicHandler},
+};
 
 use self::server_controller::ServerController;
 
@@ -172,7 +180,11 @@ impl Server {
         Ok(())
     }
 
-    fn handle_publish(self: &Arc<Self>, mut publish: Publish, id: &ClientIdArg) -> ServerResult<()> {
+    fn handle_publish(
+        self: &Arc<Self>,
+        mut publish: Publish,
+        id: &ClientIdArg,
+    ) -> ServerResult<()> {
         info!("<{}> Recibido PUBLISH", id);
         publish.set_max_qos(QoSLevel::QoSLevel1);
         let (sender, receiver) = mpsc::channel();
@@ -332,7 +344,11 @@ impl Server {
         Ok(())
     }
 
-    fn manage_client(self: &Arc<Self>, mut stream: TcpStream, addr: SocketAddr) -> ServerResult<()> {
+    fn manage_client(
+        self: &Arc<Self>,
+        mut stream: TcpStream,
+        addr: SocketAddr,
+    ) -> ServerResult<()> {
         match self.connect_client(&mut stream, addr) {
             Err(err) => match err.kind() {
                 ServerErrorKind::ClientNotInWhitelist => {
@@ -401,7 +417,8 @@ impl Server {
                 .client_thread_joiner
                 .lock()
                 .expect("Lock envenenado")
-                .finished(addr).unwrap_or_else(|err| panic!("Error irrecuperable: {}", err.to_string()));
+                .finished(addr)
+                .unwrap_or_else(|err| panic!("Error irrecuperable: {}", err.to_string()));
         });
         self.client_thread_joiner.lock()?.add(addr, handle);
         Ok(())

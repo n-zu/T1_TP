@@ -5,7 +5,11 @@ use std::{collections::HashMap, sync::Mutex};
 use packets::publish::Publish;
 use tracing::{debug, warn};
 
-use crate::{client::Client, server::{ClientId, ClientIdArg, ServerError, ServerResult, server_error::ServerErrorKind}, server_packets::{connack::ConnackReturnCode, Connack}};
+use crate::{
+    client::Client,
+    server::{server_error::ServerErrorKind, ClientId, ClientIdArg, ServerError, ServerResult},
+    server_packets::{connack::ConnackReturnCode, Connack},
+};
 
 type Username = String;
 
@@ -104,7 +108,7 @@ impl ClientsManager {
     fn check_credentials(&mut self, client: &Client) -> ServerResult<()> {
         if let Some(user_name) = client.user_name() {
             let password = login::search_password(&self.accounts_path, user_name)?;
-            if password == *client.password().expect("Se esperaba una contraseña") {
+            if password == *client.password().unwrap_or(&String::new()) {
                 self.check_taken_ids(client.id(), user_name)
             } else {
                 Err(ServerError::new_kind(
@@ -164,6 +168,11 @@ impl ClientsManager {
                     false,
                     ConnackReturnCode::BadUserNameOrPassword,
                 ))?;
+                Err(err)
+            }
+            Err(err) if err.kind() == ServerErrorKind::TakenID => {
+                warn!("<{}>: La ID ya se encuentra en uso en el servidor", client.id());
+                client.send_connack(Connack::new(false, ConnackReturnCode::IdentifierRejected))?;
                 Err(err)
             }
             Err(err) => Err(err),

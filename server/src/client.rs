@@ -4,10 +4,13 @@ use std::{
     vec,
 };
 
-use packets::{packet_reader::QoSLevel, puback::Puback, publish::Publish, suback::Suback, traits::MQTTEncoding};
+use packets::{packet_reader::QoSLevel, puback::Puback, publish::Publish, suback::Suback};
 use tracing::{debug, error, info};
 
-use crate::{server::{ClientId, ServerError, ServerResult}, server_packets::{unsuback::Unsuback, Connack, Connect, PingResp}};
+use crate::{
+    server::{ClientId, ServerError, ServerResult},
+    server_packets::{unsuback::Unsuback, Connack, Connect, PingResp},
+};
 
 #[derive(PartialEq)]
 pub enum ClientStatus {
@@ -63,6 +66,7 @@ impl Client {
     }
 
     pub fn send_pingresp(&mut self) -> ServerResult<()> {
+        debug!("<{}> Enviando PINGRESP", self.id);
         self.write_all(&PingResp::new().encode())?;
         Ok(())
     }
@@ -102,6 +106,7 @@ impl Client {
             info!("Reconectado <{}>", self.id);
             self.stream = new_client.stream;
             self.status = ClientStatus::Connected;
+            self.connect = new_client.connect;
             Ok(())
         }
     }
