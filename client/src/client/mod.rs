@@ -12,12 +12,12 @@ use crate::client_packets::{Connect, PingReq, Subscribe};
 use client_listener::ClientListener;
 use client_sender::ClientSender;
 
-use crate::observer::{Message, Observer};
+use crate::observer::Observer;
 pub use client_error::ClientError;
 use packets::publish::Publish;
 use threadpool::ThreadPool;
 
-use self::client_listener::Stream;
+use self::client_listener::ReadTimeout;
 
 /// Enum for Pending Acknowledgments of sent packets
 /// Common interface for the listener and the sender
@@ -38,7 +38,7 @@ pub struct Client<T: Observer> {
     sender: Arc<ClientSender<T, TcpStream>>,
 }
 
-impl Stream for TcpStream {
+impl ReadTimeout for TcpStream {
     fn set_read_timeout(&self, dur: Option<Duration>) -> io::Result<()> {
         self.set_read_timeout(dur)
     }
@@ -67,16 +67,44 @@ impl<T: Observer> Client<T> {
         }
 
         let mut ret = Client {
-            thread_pool: ThreadPool::new(threads), // Me aseguro que solo este el listener y 1 sender
+            thread_pool: ThreadPool::new(threads),
             stop: Arc::new(AtomicBool::new(false)),
-            sender: Arc::new(ClientSender::new(stream, observer)),
+            sender: Arc::new(ClientSender::new(stream.try_clone()?, observer.clone())),
         };
 
-        ret.connect(connect)?;
+        ret.connect(connect, stream, observer)?;
 
         ret.setup_keep_alive(keep_alive)?;
 
         Ok(ret)
+    }
+
+    #[doc(hidden)]
+    fn connect(
+        &mut self,
+        connect: Connect,
+        read_stream: impl ReadTimeout,
+        observer: T,
+    ) -> Result<(), ClientError> {
+        let mut listener = ClientListener::new(
+            read_stream,
+            self.sender.pending_ack(),
+            observer,
+            self.stop.clone(),
+            self.sender.clone(),
+        )?;
+
+        let sender = self.sender.clone();
+        let stop = self.stop.clone();
+        self.thread_pool.spawn(move || {
+            sender.send_connect(connect, stop);
+        })?;
+
+        self.thread_pool.spawn(move || {
+            listener.wait_for_packets();
+        })?;
+
+        Ok(())
     }
 
     #[doc(hidden)]
@@ -113,29 +141,6 @@ impl<T: Observer> Client<T> {
                 sender.send_pingreq();
             }
         }
-    }
-
-    #[doc(hidden)]
-    fn connect(&mut self, connect: Connect) -> Result<(), ClientError> {
-        let read_stream = self.sender.stream().lock()?.try_clone()?;
-        let mut listener = ClientListener::new(
-            read_stream,
-            self.sender.pending_ack(),
-            self.sender.observer(),
-            self.stop.clone(),
-        )?;
-
-        let sender = self.sender.clone();
-        let stop = self.stop.clone();
-        self.thread_pool.spawn(move || {
-            sender.send_connect(connect, stop);
-        })?;
-
-        self.thread_pool.spawn(move || {
-            listener.wait_for_packets();
-        })?;
-
-        Ok(())
     }
 
     /// Sends the given SUBSCRIBE packet to the server. The Client then either returns
@@ -191,8 +196,8 @@ impl<T: Observer> Drop for Client<T> {
             sender.send_disconnect();
         }) {
             let msg = "Error enviándo paquete disconnect, se desconectará de manera forzosa";
-            let error = ClientError::new(&format!("{}\n{}", msg, err));
-            self.sender.observer().update(Message::InternalError(error));
+            self.sender
+                .send_error(ClientError::new(&format!("{}\n{}", msg, err)));
         }
     }
 }
