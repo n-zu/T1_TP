@@ -139,6 +139,11 @@ impl Client {
         Ok(())
     }
 
+    pub fn send_suback(&mut self, suback: &mut Suback) -> ServerResult<()> {
+        self.write_all(&suback.encode()?)?;
+        Ok(())
+    }
+
     pub fn send_unacknowledged(&mut self) {
         for publish in self.unacknowledged.iter() {
             debug!(

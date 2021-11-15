@@ -1,5 +1,5 @@
 use std::{
-    io::{self, Read, Write},
+    io::{self, Read},
     sync::{
         atomic::{AtomicBool, Ordering},
         Arc, Mutex,
@@ -24,20 +24,20 @@ use crate::observer::Message;
 
 use super::{ClientError, STOP_TIMEOUT};
 
-/// Stream trait from which the listener reads the packets
-/// and writes the acknowledgements.
-pub(crate) trait Stream: Read + Write {
+/// ReadTimeout trait from which the listener reads the packets
+pub(crate) trait ReadTimeout: Read + Send + Sync + 'static {
     fn set_read_timeout(&self, dur: Option<Duration>) -> io::Result<()>;
 }
 
 /// The packet listener of the client. It is responsible
 /// for receiving all packets from the server, and
 /// acknowledging the ones in which it is required.
-pub(crate) struct ClientListener<T: Observer, S: Stream> {
-    stream: S,
+pub(crate) struct ClientListener<T: Observer, R: ReadTimeout, A: AckSender> {
+    stream: R,
     pending_ack: Arc<Mutex<Option<PendingAck>>>,
-    observer: Arc<T>,
+    observer: T,
     stop: Arc<AtomicBool>,
+    ack_sender: Arc<A>,
 }
 
 enum PacketType {
@@ -63,15 +63,23 @@ const CONNECT_USER_ERRORS: [ErrorKind; 3] = [
     ErrorKind::IdentifierRejected,
 ];
 
-impl<T: Observer, S: Stream> ClientListener<T, S> {
+// Acknowledge sender for the listener. Every time a packet
+// which requires an acknowledgement is received, the listener
+// will it through this sender.
+pub(crate) trait AckSender {
+    fn send_puback(&self, packet: Puback);
+}
+
+impl<T: Observer, R: ReadTimeout, A: AckSender> ClientListener<T, R, A> {
     /// Creates a new listener from the given stream, observer
     /// and pending_ack lock. It also receives a stop boolean
     /// to stop the listener when it is required.
     pub fn new(
-        stream: S,
+        stream: R,
         pending_ack: Arc<Mutex<Option<PendingAck>>>,
-        observer: Arc<T>,
+        observer: T,
         stop: Arc<AtomicBool>,
+        ack_sender: Arc<A>,
     ) -> Result<Self, ClientError> {
         stream.set_read_timeout(Some(STOP_TIMEOUT))?;
 
@@ -80,6 +88,7 @@ impl<T: Observer, S: Stream> ClientListener<T, S> {
             pending_ack,
             observer,
             stop,
+            ack_sender,
         })
     }
 
@@ -181,7 +190,7 @@ impl<T: Observer, S: Stream> ClientListener<T, S> {
 
         // Si tiene id no es QoS 0
         if let Some(id) = id_opt {
-            self.stream.write_all(&Puback::new(id)?.encode())?;
+            self.ack_sender.send_puback(Puback::new(id)?);
         }
 
         Ok(())
@@ -216,12 +225,13 @@ impl<T: Observer, S: Stream> ClientListener<T, S> {
 
     #[doc(hidden)]
     fn handle_suback(&mut self, header: u8) -> Result<(), ClientError> {
-        let suback = Suback::read_from(&mut self.stream, header)?;
+        let mut suback = Suback::read_from(&mut self.stream, header)?;
 
         let mut lock = self.pending_ack.lock()?;
 
         if let Some(PendingAck::Subscribe(subscribe)) = lock.as_ref() {
             if subscribe.packet_identifier() == suback.packet_id() {
+                suback.set_topics(subscribe.topics());
                 lock.take();
                 self.observer.update(Message::Subscribed(Ok(suback)));
             }
@@ -305,18 +315,20 @@ fn get_code_type(code: u8) -> Result<PacketType, PacketError> {
 #[cfg(test)]
 mod tests {
 
-    use std::io::{Cursor as IoCursor, Read, Write};
+    use std::io::{self, Cursor};
     use std::sync::atomic::AtomicBool;
     use std::sync::{Arc, Mutex};
+    use std::time::Duration;
 
     use crate::client::PendingAck;
-    use crate::client_packets::{ConnectBuilder, PingReq, Subscribe, Topic, Unsubscribe};
+    use crate::client_packets::{ConnectBuilder, PingReq, Subscribe, Unsubscribe};
     use crate::observer::Message;
     use packets::packet_reader::QoSLevel::*;
     use packets::puback::Puback;
     use packets::publish::Publish;
+    use packets::topic::Topic;
 
-    use super::{ClientListener, Stream};
+    use super::{AckSender, ClientListener, ReadTimeout};
 
     #[derive(Clone)]
     struct ObserverMock {
@@ -337,57 +349,46 @@ mod tests {
         }
     }
 
-    #[derive(Clone)]
-    struct Cursor {
-        read: Arc<Mutex<IoCursor<Vec<u8>>>>,
-        write: Arc<Mutex<IoCursor<Vec<u8>>>>,
-    }
-
-    impl Cursor {
-        fn new(data: Vec<u8>) -> Self {
-            Self {
-                read: Arc::new(Mutex::new(IoCursor::new(data))),
-                write: Arc::new(Mutex::new(IoCursor::new(Vec::new()))),
-            }
-        }
-
-        fn content(&self) -> Vec<u8> {
-            self.write.lock().unwrap().clone().into_inner()
-        }
-    }
-
-    impl Write for Cursor {
-        fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
-            self.write.lock().unwrap().write(buf)
-        }
-
-        fn flush(&mut self) -> std::io::Result<()> {
-            self.write.lock().unwrap().flush()
-        }
-    }
-
-    impl Read for Cursor {
-        fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
-            self.read.lock().unwrap().read(buf)
-        }
-    }
-
-    impl Stream for Cursor {
-        fn set_read_timeout(&self, _dur: Option<std::time::Duration>) -> std::io::Result<()> {
+    impl<T: AsRef<[u8]> + Send + Sync + 'static> ReadTimeout for Cursor<T> {
+        fn set_read_timeout(&self, _: Option<Duration>) -> io::Result<()> {
             Ok(())
+        }
+    }
+
+    struct SenderMock {
+        pub times_called: Mutex<u8>,
+    }
+
+    impl AckSender for SenderMock {
+        fn send_puback(&self, _: Puback) {
+            *self.times_called.lock().unwrap() += 1;
+        }
+    }
+
+    impl SenderMock {
+        fn new() -> Arc<Self> {
+            Arc::new(Self {
+                times_called: Mutex::new(0),
+            })
         }
     }
 
     #[test]
     fn test_unsuback() {
-        let observer = Arc::new(ObserverMock::new());
+        let observer = ObserverMock::new();
         let pending_ack = Arc::new(Mutex::new(Some(PendingAck::Unsubscribe(
             Unsubscribe::new(123, vec!["topic".to_string()]).unwrap(),
         ))));
         let stop = Arc::new(AtomicBool::new(false));
         let stream = Cursor::new(vec![0b10110000, 2, 0, 123]);
-        let mut listener =
-            ClientListener::new(stream, pending_ack.clone(), observer.clone(), stop).unwrap();
+        let mut listener = ClientListener::new(
+            stream,
+            pending_ack.clone(),
+            observer.clone(),
+            stop,
+            SenderMock::new(),
+        )
+        .unwrap();
         listener.wait_for_packets();
 
         assert!(pending_ack.lock().unwrap().is_none());
@@ -400,14 +401,20 @@ mod tests {
 
     #[test]
     fn test_unsuback_different_id() {
-        let observer = Arc::new(ObserverMock::new());
+        let observer = ObserverMock::new();
         let pending_ack = Arc::new(Mutex::new(Some(PendingAck::Unsubscribe(
             Unsubscribe::new(25, vec!["topic".to_string()]).unwrap(),
         ))));
         let stop = Arc::new(AtomicBool::new(false));
         let stream = Cursor::new(vec![0b10110000, 2, 0, 123]);
-        let mut listener =
-            ClientListener::new(stream, pending_ack.clone(), observer.clone(), stop).unwrap();
+        let mut listener = ClientListener::new(
+            stream,
+            pending_ack.clone(),
+            observer.clone(),
+            stop,
+            SenderMock::new(),
+        )
+        .unwrap();
         listener.wait_for_packets();
 
         assert!(pending_ack.lock().unwrap().is_some());
@@ -420,12 +427,18 @@ mod tests {
 
     #[test]
     fn test_unsuback_unexpected() {
-        let observer = Arc::new(ObserverMock::new());
+        let observer = ObserverMock::new();
         let pending_ack = Arc::new(Mutex::new(Some(PendingAck::PingReq(PingReq::new()))));
         let stop = Arc::new(AtomicBool::new(false));
         let stream = Cursor::new(vec![0b10110000, 2, 0, 123]);
-        let mut listener =
-            ClientListener::new(stream, pending_ack.clone(), observer.clone(), stop).unwrap();
+        let mut listener = ClientListener::new(
+            stream,
+            pending_ack.clone(),
+            observer.clone(),
+            stop,
+            SenderMock::new(),
+        )
+        .unwrap();
         listener.wait_for_packets();
 
         assert!(matches!(
@@ -441,7 +454,7 @@ mod tests {
 
     #[test]
     fn test_suback() {
-        let observer = Arc::new(ObserverMock::new());
+        let observer = ObserverMock::new();
         let topic = Topic::new("topic", QoSLevel1).unwrap();
         let pending_ack = Arc::new(Mutex::new(Some(PendingAck::Subscribe(Subscribe::new(
             vec![topic],
@@ -449,8 +462,14 @@ mod tests {
         )))));
         let stop = Arc::new(AtomicBool::new(false));
         let stream = Cursor::new(vec![0b10010000, 3, 0, 123, 0]);
-        let mut listener =
-            ClientListener::new(stream, pending_ack.clone(), observer.clone(), stop).unwrap();
+        let mut listener = ClientListener::new(
+            stream,
+            pending_ack.clone(),
+            observer.clone(),
+            stop,
+            SenderMock::new(),
+        )
+        .unwrap();
         listener.wait_for_packets();
 
         assert!(pending_ack.lock().unwrap().is_none());
@@ -463,7 +482,7 @@ mod tests {
 
     #[test]
     fn test_suback_different_id() {
-        let observer = Arc::new(ObserverMock::new());
+        let observer = ObserverMock::new();
         let topic = Topic::new("topic", QoSLevel1).unwrap();
         let pending_ack = Arc::new(Mutex::new(Some(PendingAck::Subscribe(Subscribe::new(
             vec![topic],
@@ -471,8 +490,14 @@ mod tests {
         )))));
         let stop = Arc::new(AtomicBool::new(false));
         let stream = Cursor::new(vec![0b10010000, 3, 0, 123, 0]);
-        let mut listener =
-            ClientListener::new(stream, pending_ack.clone(), observer.clone(), stop).unwrap();
+        let mut listener = ClientListener::new(
+            stream,
+            pending_ack.clone(),
+            observer.clone(),
+            stop,
+            SenderMock::new(),
+        )
+        .unwrap();
         listener.wait_for_packets();
 
         assert!(pending_ack.lock().unwrap().is_some());
@@ -485,12 +510,18 @@ mod tests {
 
     #[test]
     fn test_suback_unexpected() {
-        let observer = Arc::new(ObserverMock::new());
+        let observer = ObserverMock::new();
         let pending_ack = Arc::new(Mutex::new(Some(PendingAck::PingReq(PingReq::new()))));
         let stop = Arc::new(AtomicBool::new(false));
         let stream = Cursor::new(vec![0b10010000, 3, 0, 123, 0]);
-        let mut listener =
-            ClientListener::new(stream, pending_ack.clone(), observer.clone(), stop).unwrap();
+        let mut listener = ClientListener::new(
+            stream,
+            pending_ack.clone(),
+            observer.clone(),
+            stop,
+            SenderMock::new(),
+        )
+        .unwrap();
         listener.wait_for_packets();
 
         assert!(matches!(
@@ -506,14 +537,20 @@ mod tests {
 
     #[test]
     fn test_puback() {
-        let observer = Arc::new(ObserverMock::new());
+        let observer = ObserverMock::new();
         let pending_ack = Arc::new(Mutex::new(Some(PendingAck::Publish(
             Publish::new(false, QoSLevel1, false, "topic", "msg", Some(123)).unwrap(),
         ))));
         let stop = Arc::new(AtomicBool::new(false));
         let stream = Cursor::new(Puback::new(123).unwrap().encode());
-        let mut listener =
-            ClientListener::new(stream, pending_ack.clone(), observer.clone(), stop).unwrap();
+        let mut listener = ClientListener::new(
+            stream,
+            pending_ack.clone(),
+            observer.clone(),
+            stop,
+            SenderMock::new(),
+        )
+        .unwrap();
         listener.wait_for_packets();
 
         assert!(pending_ack.lock().unwrap().is_none());
@@ -526,14 +563,20 @@ mod tests {
 
     #[test]
     fn test_puback_different_id() {
-        let observer = Arc::new(ObserverMock::new());
+        let observer = ObserverMock::new();
         let pending_ack = Arc::new(Mutex::new(Some(PendingAck::Publish(
             Publish::new(false, QoSLevel1, false, "topic", "msg", Some(97)).unwrap(),
         ))));
         let stop = Arc::new(AtomicBool::new(false));
         let stream = Cursor::new(Puback::new(123).unwrap().encode());
-        let mut listener =
-            ClientListener::new(stream, pending_ack.clone(), observer.clone(), stop).unwrap();
+        let mut listener = ClientListener::new(
+            stream,
+            pending_ack.clone(),
+            observer.clone(),
+            stop,
+            SenderMock::new(),
+        )
+        .unwrap();
         listener.wait_for_packets();
 
         assert!(pending_ack.lock().unwrap().is_some());
@@ -546,12 +589,18 @@ mod tests {
 
     #[test]
     fn test_puback_unexpected() {
-        let observer = Arc::new(ObserverMock::new());
+        let observer = ObserverMock::new();
         let pending_ack = Arc::new(Mutex::new(Some(PendingAck::PingReq(PingReq::new()))));
         let stop = Arc::new(AtomicBool::new(false));
         let stream = Cursor::new(Puback::new(123).unwrap().encode());
-        let mut listener =
-            ClientListener::new(stream, pending_ack.clone(), observer.clone(), stop).unwrap();
+        let mut listener = ClientListener::new(
+            stream,
+            pending_ack.clone(),
+            observer.clone(),
+            stop,
+            SenderMock::new(),
+        )
+        .unwrap();
         listener.wait_for_packets();
 
         assert!(matches!(
@@ -567,14 +616,20 @@ mod tests {
 
     #[test]
     fn test_puback_no_id_pending() {
-        let observer = Arc::new(ObserverMock::new());
+        let observer = ObserverMock::new();
         let pending_ack = Arc::new(Mutex::new(Some(PendingAck::Publish(
             Publish::new(false, QoSLevel0, false, "topic", "msg", None).unwrap(),
         ))));
         let stop = Arc::new(AtomicBool::new(false));
         let stream = Cursor::new(Puback::new(123).unwrap().encode());
-        let mut listener =
-            ClientListener::new(stream, pending_ack.clone(), observer.clone(), stop).unwrap();
+        let mut listener = ClientListener::new(
+            stream,
+            pending_ack.clone(),
+            observer.clone(),
+            stop,
+            SenderMock::new(),
+        )
+        .unwrap();
         listener.wait_for_packets();
 
         assert!(pending_ack.lock().unwrap().is_some());
@@ -588,12 +643,18 @@ mod tests {
 
     #[test]
     fn test_pingresp() {
-        let observer = Arc::new(ObserverMock::new());
+        let observer = ObserverMock::new();
         let pending_ack = Arc::new(Mutex::new(Some(PendingAck::PingReq(PingReq::new()))));
         let stop = Arc::new(AtomicBool::new(false));
         let stream = Cursor::new(vec![0b11010000, 0b00000000]);
-        let mut listener =
-            ClientListener::new(stream, pending_ack.clone(), observer.clone(), stop).unwrap();
+        let mut listener = ClientListener::new(
+            stream,
+            pending_ack.clone(),
+            observer.clone(),
+            stop,
+            SenderMock::new(),
+        )
+        .unwrap();
         listener.wait_for_packets();
 
         assert!(pending_ack.lock().unwrap().is_none());
@@ -601,14 +662,20 @@ mod tests {
 
     #[test]
     fn test_pingresp_unexpected() {
-        let observer = Arc::new(ObserverMock::new());
+        let observer = ObserverMock::new();
         let pending_ack = Arc::new(Mutex::new(Some(PendingAck::Unsubscribe(
             Unsubscribe::new(25, vec!["topic".to_string()]).unwrap(),
         ))));
         let stop = Arc::new(AtomicBool::new(false));
         let stream = Cursor::new(vec![0b11010000, 0b00000000]);
-        let mut listener =
-            ClientListener::new(stream, pending_ack.clone(), observer.clone(), stop).unwrap();
+        let mut listener = ClientListener::new(
+            stream,
+            pending_ack.clone(),
+            observer.clone(),
+            stop,
+            SenderMock::new(),
+        )
+        .unwrap();
         listener.wait_for_packets();
 
         assert!(matches!(
@@ -619,14 +686,20 @@ mod tests {
 
     #[test]
     fn test_publish_qos0() {
-        let observer = Arc::new(ObserverMock::new());
+        let observer = ObserverMock::new();
         let pending_ack = Arc::new(Mutex::new(Some(PendingAck::PingReq(PingReq::new()))));
         let stop = Arc::new(AtomicBool::new(false));
         let publish = Publish::new(false, QoSLevel0, false, "topic", "msg", None).unwrap();
         let stream = Cursor::new(publish.encode().unwrap());
-        let mut listener =
-            ClientListener::new(stream.clone(), pending_ack.clone(), observer.clone(), stop)
-                .unwrap();
+        let sender = SenderMock::new();
+        let mut listener = ClientListener::new(
+            stream.clone(),
+            pending_ack.clone(),
+            observer.clone(),
+            stop,
+            sender.clone(),
+        )
+        .unwrap();
         listener.wait_for_packets();
 
         assert!(matches!(
@@ -640,19 +713,25 @@ mod tests {
             assert_eq!(publish.topic_name(), "topic");
             assert_eq!(publish.payload(), Some(&"msg".to_string()));
         }
-        assert!(stream.content().is_empty());
+        assert_eq!(*sender.times_called.lock().unwrap(), 0);
     }
 
     #[test]
     fn test_publish_qos1() {
-        let observer = Arc::new(ObserverMock::new());
+        let observer = ObserverMock::new();
         let pending_ack = Arc::new(Mutex::new(Some(PendingAck::PingReq(PingReq::new()))));
         let stop = Arc::new(AtomicBool::new(false));
         let publish = Publish::new(false, QoSLevel1, false, "topic", "msg", Some(123)).unwrap();
         let stream = Cursor::new(publish.encode().unwrap());
-        let mut listener =
-            ClientListener::new(stream.clone(), pending_ack.clone(), observer.clone(), stop)
-                .unwrap();
+        let sender = SenderMock::new();
+        let mut listener = ClientListener::new(
+            stream.clone(),
+            pending_ack.clone(),
+            observer.clone(),
+            stop,
+            sender.clone(),
+        )
+        .unwrap();
         listener.wait_for_packets();
 
         assert!(matches!(
@@ -666,12 +745,12 @@ mod tests {
             assert_eq!(publish.topic_name(), "topic");
             assert_eq!(publish.payload(), Some(&"msg".to_string()));
         }
-        assert_eq!(stream.content(), Puback::new(123).unwrap().encode());
+        assert_eq!(*sender.times_called.lock().unwrap(), 1);
     }
 
     #[test]
     fn test_connack() {
-        let observer = Arc::new(ObserverMock::new());
+        let observer = ObserverMock::new();
         let pending_ack = Arc::new(Mutex::new(Some(PendingAck::Connect(
             ConnectBuilder::new("123", 0, true)
                 .unwrap()
@@ -680,8 +759,14 @@ mod tests {
         ))));
         let stop = Arc::new(AtomicBool::new(false));
         let stream = Cursor::new(vec![32, 2, 1, 0]);
-        let mut listener =
-            ClientListener::new(stream, pending_ack.clone(), observer.clone(), stop).unwrap();
+        let mut listener = ClientListener::new(
+            stream,
+            pending_ack.clone(),
+            observer.clone(),
+            stop,
+            SenderMock::new(),
+        )
+        .unwrap();
         listener.wait_for_packets();
 
         assert!(pending_ack.lock().unwrap().is_none());
@@ -691,12 +776,18 @@ mod tests {
 
     #[test]
     fn test_connack_unexpected() {
-        let observer = Arc::new(ObserverMock::new());
+        let observer = ObserverMock::new();
         let pending_ack = Arc::new(Mutex::new(Some(PendingAck::PingReq(PingReq::new()))));
         let stop = Arc::new(AtomicBool::new(false));
         let stream = Cursor::new(vec![32, 2, 1, 0]);
-        let mut listener =
-            ClientListener::new(stream, pending_ack.clone(), observer.clone(), stop).unwrap();
+        let mut listener = ClientListener::new(
+            stream,
+            pending_ack.clone(),
+            observer.clone(),
+            stop,
+            SenderMock::new(),
+        )
+        .unwrap();
         listener.wait_for_packets();
 
         assert!(matches!(
@@ -712,7 +803,7 @@ mod tests {
 
     #[test]
     fn test_connack_user_error() {
-        let observer = Arc::new(ObserverMock::new());
+        let observer = ObserverMock::new();
         let pending_ack = Arc::new(Mutex::new(Some(PendingAck::Connect(
             ConnectBuilder::new("123", 0, true)
                 .unwrap()
@@ -721,8 +812,14 @@ mod tests {
         ))));
         let stop = Arc::new(AtomicBool::new(false));
         let stream = Cursor::new(vec![32, 2, 1, 5]); // no autorizado
-        let mut listener =
-            ClientListener::new(stream, pending_ack.clone(), observer.clone(), stop).unwrap();
+        let mut listener = ClientListener::new(
+            stream,
+            pending_ack.clone(),
+            observer.clone(),
+            stop,
+            SenderMock::new(),
+        )
+        .unwrap();
         listener.wait_for_packets();
 
         assert!(pending_ack.lock().unwrap().is_none());
@@ -732,7 +829,7 @@ mod tests {
 
     #[test]
     fn test_connack_another_error() {
-        let observer = Arc::new(ObserverMock::new());
+        let observer = ObserverMock::new();
         let pending_ack = Arc::new(Mutex::new(Some(PendingAck::Connect(
             ConnectBuilder::new("123", 0, true)
                 .unwrap()
@@ -741,8 +838,14 @@ mod tests {
         ))));
         let stop = Arc::new(AtomicBool::new(false));
         let stream = Cursor::new(vec![33, 2, 1, 0]); // mal los bits reservados
-        let mut listener =
-            ClientListener::new(stream, pending_ack.clone(), observer.clone(), stop).unwrap();
+        let mut listener = ClientListener::new(
+            stream,
+            pending_ack.clone(),
+            observer.clone(),
+            stop,
+            SenderMock::new(),
+        )
+        .unwrap();
         listener.wait_for_packets();
 
         assert!(matches!(
@@ -755,12 +858,18 @@ mod tests {
 
     #[test]
     fn test_invalid_packet() {
-        let observer = Arc::new(ObserverMock::new());
+        let observer = ObserverMock::new();
         let pending_ack = Arc::new(Mutex::new(None));
         let stop = Arc::new(AtomicBool::new(false));
         let stream = Cursor::new(vec![224, 2, 1, 5]); // header de disconnect
-        let mut listener =
-            ClientListener::new(stream, pending_ack.clone(), observer.clone(), stop).unwrap();
+        let mut listener = ClientListener::new(
+            stream,
+            pending_ack.clone(),
+            observer.clone(),
+            stop,
+            SenderMock::new(),
+        )
+        .unwrap();
         listener.wait_for_packets();
 
         let msgs = observer.messages.lock().unwrap();
