@@ -235,19 +235,23 @@ impl Controller {
         let topic_entry: Entry = self.builder.object("pub_top").unwrap();
         let qos_entry: Entry = self.builder.object("pub_qos_entry").unwrap();
         let retain_switch: Switch = self.builder.object("pub_ret").unwrap();
-        let qos = qos_entry.text().to_string().parse::<u8>().unwrap_or(0);
+        let qos = QoSLevel::try_from(qos_entry.text().to_string().parse::<u8>().unwrap_or(0))?;
+        let mut id = None;
+        if qos != QoSLevel::QoSLevel0 {
+            id = Some(rand::random());
+        }
 
         let retain = retain_switch.is_active();
         let msg: TextBuffer = self.builder.object("pub_mg_txtbuffer").unwrap();
 
         let packet = Publish::new(
-            false, // TODO
-            QoSLevel::try_from(qos)?,
+            false,
+            qos,
             retain,
             &topic_entry.text().to_string(),
             &msg.text(&msg.start_iter(), &msg.end_iter(), false)
                 .ok_or_else(|| ClientError::new("Se debe completar el campo de mensaje"))?,
-            None, // TODO
+            id,
         )?;
 
         if let Some(client) = self.client.lock()?.as_mut() {

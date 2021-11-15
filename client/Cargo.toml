@@ -9,3 +9,4 @@ edition = "2018"
 packets = { path = "../common/packets" }
 gtk = "0.14.3"
 threadpool = { path = "../common/threadpool" }
+rand = "0.8.4"
