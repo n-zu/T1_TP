@@ -66,13 +66,15 @@ impl<T: Observer, W: Write> ClientSender<T, W> {
 
     #[doc(hidden)]
     fn _connect(&self, connect: Connect) -> Result<(), ClientError> {
+        let mut lock = self.stream.lock()?;
         let bytes = connect.encode();
         self.pending_ack
             .lock()?
             .replace(PendingAck::Connect(connect));
-        self.stream.lock()?.write_all(&bytes)?;
 
-        if !self.wait_for_ack()? {
+        lock.write_all(&bytes)?;
+
+        if !self.wait_for_ack(&mut lock, &bytes)? {
             return Err(ClientError::new("No se pudo establecer la conexión"));
         }
 
@@ -95,12 +97,16 @@ impl<T: Observer, W: Write> ClientSender<T, W> {
 
     #[doc(hidden)]
     fn _subscribe(&self, subscribe: Subscribe) -> Result<(), ClientError> {
+        let mut lock = self.stream.lock()?;
+
         let bytes = subscribe.encode()?;
         self.pending_ack
             .lock()?
             .replace(PendingAck::Subscribe(subscribe));
-        self.stream.lock()?.write_all(&bytes)?;
-        if !self.wait_for_ack()? {
+
+        lock.write_all(&bytes)?;
+
+        if !self.wait_for_ack(&mut lock, &bytes)? {
             return Err(ClientError::new("No se recibió paquete suback"));
         }
 
@@ -120,17 +126,22 @@ impl<T: Observer, W: Write> ClientSender<T, W> {
         }
     }
 
-    pub fn _publish(&self, publish: Publish) -> Result<(), ClientError> {
+    pub fn _publish(&self, mut publish: Publish) -> Result<(), ClientError> {
+        let mut lock = self.stream.lock()?;
         let bytes = publish.encode()?;
         let qos = publish.qos();
+
         if qos == QoSLevel::QoSLevel1 {
-            *self.pending_ack.lock()? = Some(PendingAck::Publish(publish));
+            *self.pending_ack.lock()? = Some(PendingAck::Publish(publish.clone()));
         }
 
-        self.stream.lock()?.write_all(&bytes)?;
+        lock.write_all(&bytes)?;
+
+        publish.set_dup(true);
+        let resend_bytes = publish.encode()?;
 
         if qos == QoSLevel::QoSLevel1 {
-            if !self.wait_for_ack()? {
+            if !self.wait_for_ack(&mut lock, &resend_bytes)? {
                 return Err(ClientError::new("No se recibió paquete puback (QoS 1)"));
             }
         } else {
@@ -164,12 +175,14 @@ impl<T: Observer, W: Write> ClientSender<T, W> {
 
     #[doc(hidden)]
     fn _pingreq(&self, pingreq: PingReq) -> Result<(), ClientError> {
+        let mut lock = self.stream.lock()?;
         let bytes = pingreq.encode();
         self.pending_ack
             .lock()?
             .replace(PendingAck::PingReq(pingreq));
-        self.stream.lock()?.write_all(&bytes)?;
-        if !self.wait_for_ack()? {
+
+        lock.write_all(&bytes)?;
+        if !self.wait_for_ack(&mut lock, &bytes)? {
             return Err(ClientError::new(
                 "El servidor no respondió al pingreq, ¿esta en línea?",
             ));
@@ -209,12 +222,14 @@ impl<T: Observer, W: Write> ClientSender<T, W> {
 
     #[doc(hidden)]
     fn _unsubscribe(&self, unsubscribe: Unsubscribe) -> Result<(), ClientError> {
+        let mut lock = self.stream.lock()?;
         let bytes = unsubscribe.encode()?;
         self.pending_ack
             .lock()?
             .replace(PendingAck::Unsubscribe(unsubscribe));
-        self.stream.lock()?.write_all(&bytes)?;
-        if !self.wait_for_ack()? {
+        lock.write_all(&bytes)?;
+
+        if !self.wait_for_ack(&mut lock, &bytes)? {
             return Err(ClientError::new("No se recibió paquete unsuback"));
         }
 
@@ -235,51 +250,31 @@ impl<T: Observer, W: Write> ClientSender<T, W> {
     }
 
     #[doc(hidden)]
-    fn resend_pending(stream: &mut W, pending_ack: &mut PendingAck) -> Result<(), ClientError> {
-        // TODO: realmente deberiamos hacer de una vez el trait de encode asi evitamos esto
-        match pending_ack {
-            PendingAck::Subscribe(subscribe) => {
-                stream.write_all(&subscribe.encode()?)?;
-            }
-            PendingAck::PingReq(ping_req) => {
-                stream.write_all(&ping_req.encode())?;
-            }
-            PendingAck::Publish(publish) => {
-                publish.set_dup(true);
-                stream.write_all(&publish.encode()?)?;
-            }
-            PendingAck::Connect(connect) => {
-                stream.write_all(&connect.encode())?;
-            }
-            PendingAck::Unsubscribe(unsubscribe) => {
-                stream.write_all(&unsubscribe.encode()?)?;
-            }
-        }
-        Ok(())
-    }
-
-    #[doc(hidden)]
     // Devuelve verdadero si se pudo mandar, falso si no se recibió el ack
-    fn wait_for_ack(&self) -> Result<bool, ClientError> {
+    fn wait_for_ack(
+        &self,
+        unlocked_stream: &mut W,
+        resend_bytes: &[u8],
+    ) -> Result<bool, ClientError> {
         let mut retries = 0;
-        let mut stream = self.stream.lock()?;
         let mut last = time::Instant::now();
 
+        thread::sleep(ACK_CHECK);
         while retries < MAX_RETRIES {
-            thread::sleep(ACK_CHECK);
             match self.pending_ack.lock()?.as_mut() {
                 None => {
                     return Ok(true);
                 }
-                Some(pending_ack) => {
+                Some(_) => {
                     let now = time::Instant::now();
                     if last + RESEND_TIMEOUT < now {
-                        Self::resend_pending(&mut stream, pending_ack)?;
+                        unlocked_stream.write_all(resend_bytes)?;
                         last = time::Instant::now();
                         retries += 1;
                     }
                 }
             }
+            thread::sleep(ACK_CHECK);
         }
 
         self.pending_ack.lock()?.take();
