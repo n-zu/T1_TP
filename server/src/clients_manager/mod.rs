@@ -171,7 +171,10 @@ impl ClientsManager {
                 Err(err)
             }
             Err(err) if err.kind() == ServerErrorKind::TakenID => {
-                warn!("<{}>: La ID ya se encuentra en uso en el servidor", client.id());
+                warn!(
+                    "<{}>: La ID ya se encuentra en uso en el servidor",
+                    client.id()
+                );
                 client.send_connack(Connack::new(false, ConnackReturnCode::IdentifierRejected))?;
                 Err(err)
             }
