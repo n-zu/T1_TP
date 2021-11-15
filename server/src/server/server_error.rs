@@ -8,10 +8,7 @@ use std::{
 use packets::packet_reader::{ErrorKind, PacketError};
 use threadpool::{ThreadPool, ThreadPoolError};
 
-use crate::{
-    client::Client, clients_manager::ClientsManager,
-    topic_handler::topic_handler_error::TopicHandlerError,
-};
+use crate::{client::Client, client_thread_joiner::ClientThreadJoiner, clients_manager::ClientsManager, topic_handler::topic_handler_error::TopicHandlerError};
 
 #[derive(Debug)]
 pub struct ServerError {
@@ -113,6 +110,12 @@ impl From<PoisonError<MutexGuard<'_, HashMap<std::net::SocketAddr, JoinHandle<()
     fn from(
         err: PoisonError<MutexGuard<'_, HashMap<std::net::SocketAddr, JoinHandle<()>>>>,
     ) -> Self {
+        ServerError::new_kind(&err.to_string(), ServerErrorKind::PoinsonedLock)
+    }
+}
+
+impl From<PoisonError<MutexGuard<'_, ClientThreadJoiner>>> for ServerError {
+    fn from(err: PoisonError<MutexGuard<'_, ClientThreadJoiner>>) -> Self {
         ServerError::new_kind(&err.to_string(), ServerErrorKind::PoinsonedLock)
     }
 }

@@ -3,18 +3,16 @@ mod login;
 use std::{collections::HashMap, sync::Mutex};
 
 use packets::publish::Publish;
-use tracing::debug;
+use tracing::{debug, warn};
 
-use crate::{
-    client::Client,
-    server::{server_error::ServerErrorKind, ServerError, ServerResult},
-    server_packets::{connack::ConnackReturnCode, Connack},
-};
+use crate::{client::Client, server::{ClientId, ClientIdArg, ServerError, ServerResult, server_error::ServerErrorKind}, server_packets::{connack::ConnackReturnCode, Connack}};
+
+type Username = String;
 
 pub struct ClientsManager {
     clients: HashMap<String, Mutex<Client>>,
     /// client_id - username
-    taken_ids: HashMap<String, String>,
+    taken_ids: HashMap<ClientId, Username>,
     accounts_path: String,
 }
 
@@ -27,7 +25,7 @@ impl ClientsManager {
         }
     }
 
-    pub fn client_do<F>(&self, id: &str, action: F) -> ServerResult<()>
+    pub fn client_do<F>(&self, id: &ClientIdArg, action: F) -> ServerResult<()>
     where
         F: FnOnce(std::sync::MutexGuard<'_, Client>) -> ServerResult<()>,
     {
@@ -43,7 +41,7 @@ impl ClientsManager {
         }
     }
 
-    pub fn finish_session(&mut self, id: &str, gracefully: bool) -> ServerResult<()> {
+    pub fn finish_session(&mut self, id: &ClientIdArg, gracefully: bool) -> ServerResult<()> {
         self.client_do(id, |mut client| {
             client.disconnect(gracefully);
             Ok(())
@@ -69,25 +67,25 @@ impl ClientsManager {
             .insert(client.id().to_owned(), Mutex::new(client))
     }
 
-    pub fn send_unacknowledged(&self, id: &str) -> ServerResult<()> {
+    pub fn send_unacknowledged(&self, id: &ClientIdArg) -> ServerResult<()> {
         self.client_do(id, |mut client| {
             client.send_unacknowledged();
             Ok(())
         })
     }
 
-    pub fn send_publish(&self, id: &str, publish: Publish) -> ServerResult<()> {
+    pub fn send_publish(&self, id: &ClientIdArg, publish: Publish) -> ServerResult<()> {
         self.client_do(id, |mut client| {
             client.send_publish(publish);
             Ok(())
         })
     }
 
-    fn exists(&self, id: &str) -> ServerResult<bool> {
+    fn exists(&self, id: &ClientIdArg) -> ServerResult<bool> {
         Ok(self.clients.contains_key(id))
     }
 
-    fn check_taken_ids(&mut self, id: &str, user_name: &str) -> ServerResult<()> {
+    fn check_taken_ids(&mut self, id: &ClientIdArg, user_name: &str) -> ServerResult<()> {
         if let Some(old_user_name) = self.taken_ids.get(id) {
             if user_name != old_user_name {
                 return Err(ServerError::new_kind(
@@ -156,10 +154,12 @@ impl ClientsManager {
         match self.check_credentials(&client) {
             Ok(()) => self.new_session_unchecked(client),
             Err(err) if err.kind() == ServerErrorKind::ClientNotInWhitelist => {
+                warn!("<{}>: Usuario invalido", client.id());
                 client.send_connack(Connack::new(false, ConnackReturnCode::NotAuthorized))?;
                 Err(err)
             }
             Err(err) if err.kind() == ServerErrorKind::InvalidPassword => {
+                warn!("<{}>: Contraseña invalida", client.id());
                 client.send_connack(Connack::new(
                     false,
                     ConnackReturnCode::BadUserNameOrPassword,
@@ -170,7 +170,7 @@ impl ClientsManager {
         }
     }
 
-    pub fn is_connected(&self, id: &str) -> ServerResult<bool> {
+    pub fn is_connected(&self, id: &ClientIdArg) -> ServerResult<bool> {
         let mut alive = false;
         match self.client_do(id, |client| {
             alive = client.connected();
@@ -194,7 +194,7 @@ impl ClientsManager {
         Ok(())
     }
 
-    pub fn keep_alive(&self, id: &str) -> ServerResult<u16> {
+    pub fn keep_alive(&self, id: &ClientIdArg) -> ServerResult<u16> {
         let mut keep_alive = 0;
         self.client_do(id, |client| {
             keep_alive = client.keep_alive();

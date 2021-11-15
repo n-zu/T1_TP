@@ -4,13 +4,10 @@ use std::{
     vec,
 };
 
-use packets::{packet_reader::QoSLevel, puback::Puback, publish::Publish, suback::Suback};
+use packets::{packet_reader::QoSLevel, puback::Puback, publish::Publish, suback::Suback, traits::MQTTEncoding};
 use tracing::{debug, error, info};
 
-use crate::{
-    server::{Packet, ServerError, ServerResult},
-    server_packets::{Connack, Connect, PingResp},
-};
+use crate::{server::{ClientId, ServerError, ServerResult}, server_packets::{unsuback::Unsuback, Connack, Connect, PingResp}};
 
 #[derive(PartialEq)]
 pub enum ClientStatus {
@@ -22,7 +19,7 @@ pub enum ClientStatus {
 /// Represents the state of a client on the server
 pub struct Client {
     /// Id of the client
-    id: String,
+    id: ClientId,
     /// TCP connection to send packets to the client
     stream: TcpStream,
     /// Indicates if the client is currently connected
@@ -65,22 +62,9 @@ impl Client {
         }
     }
 
-    fn send_pingresp(&mut self) -> ServerResult<()> {
+    pub fn send_pingresp(&mut self) -> ServerResult<()> {
         self.write_all(&PingResp::new().encode())?;
         Ok(())
-    }
-
-    pub fn handle_packet(&mut self, packet: Packet) -> ServerResult<()> {
-        match packet {
-            Packet::PubackType(puback) => self.acknowledge(puback),
-            Packet::PingReqType(_) => {
-                debug!("<{}>: Recibido PINGREQ", self.id);
-                self.send_pingresp()
-            }
-            Packet::DisconnectType(_) => unreachable!(),
-            Packet::PublishTypee(_) => unreachable!(),
-            Packet::SubscribeType(_) => unreachable!(),
-        }
     }
 
     fn write_all(&mut self, buf: &[u8]) -> io::Result<()> {
@@ -98,6 +82,11 @@ impl Client {
 
     pub fn send_puback(&mut self, puback: Puback) -> ServerResult<()> {
         self.write_all(&puback.encode())?;
+        Ok(())
+    }
+
+    pub fn send_unsuback(&mut self, unsuback: Unsuback) -> ServerResult<()> {
+        self.write_all(&unsuback.encode())?;
         Ok(())
     }
 
@@ -150,7 +139,9 @@ impl Client {
             debug!(
                 "<{}>: Reenviando paquete con id <{}>",
                 self.id,
-                publish.packet_id().unwrap()
+                publish
+                    .packet_id()
+                    .expect("Se esperaba un paquete con identificador (QoS > 0)")
             );
             self.stream.write_all(&publish.encode().unwrap()).unwrap();
         }
