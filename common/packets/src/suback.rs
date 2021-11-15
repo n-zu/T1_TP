@@ -1,6 +1,8 @@
 #![allow(unused)]
-use crate::packet_reader::{self, QoSLevel};
-use crate::packet_reader::{ErrorKind, PacketError, RemainingLength};
+use crate::packet_error::{ErrorKind, PacketError};
+use crate::packet_reader::RemainingLength;
+use crate::packet_reader::{self};
+use crate::qos::QoSLevel;
 use crate::topic::Topic;
 use std::io::Read;
 
@@ -100,7 +102,7 @@ impl Suback {
     pub fn read_from(bytes: &mut impl Read, control_byte: u8) -> Result<Suback, PacketError> {
         Self::verify_control_packet_type(&control_byte)?;
         Self::verify_reserved_bits(&control_byte)?;
-        let mut remaining_bytes = packet_reader::read_packet_bytes(bytes)?;
+        let mut remaining_bytes = packet_reader::read_remaining_bytes(bytes)?;
         let subscribe_packet_id = Self::read_packet_id(&mut remaining_bytes);
         let return_codes = Self::read_return_codes(&mut remaining_bytes)?;
         Self::verify_return_codes_from_vec(&return_codes)?;
@@ -209,7 +211,7 @@ impl Suback {
 
 #[cfg(test)]
 mod tests {
-    use crate::packet_reader::{ErrorKind, PacketError};
+    use crate::packet_error::{ErrorKind, PacketError};
     use crate::suback::{
         Suback, CONTROL_BYTE_SUBACK, MSG_INVALID_RETURN_CODE, MSG_PACKET_TYPE_SUBACK,
     };

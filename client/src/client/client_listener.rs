@@ -7,12 +7,8 @@ use std::{
     time::Duration,
 };
 
-use packets::{
-    packet_reader::{ErrorKind, PacketError},
-    puback::Puback,
-    publish::Publish,
-    suback::Suback,
-};
+use packets::packet_error::{ErrorKind, PacketError};
+use packets::{puback::Puback, publish::Publish, suback::Suback};
 
 use crate::{
     client::PendingAck,
@@ -323,9 +319,9 @@ mod tests {
     use crate::client::PendingAck;
     use crate::client_packets::{ConnectBuilder, PingReq, Subscribe, Unsubscribe};
     use crate::observer::Message;
-    use packets::packet_reader::QoSLevel::*;
     use packets::puback::Puback;
     use packets::publish::Publish;
+    use packets::qos::QoSLevel::*;
     use packets::topic::Topic;
 
     use super::{AckSender, ClientListener, ReadTimeout};

@@ -1,154 +1,30 @@
-use std::{
-    convert::TryFrom,
-    error::Error,
-    fmt,
-    io::{self, Cursor, Read},
-};
+use crate::packet_error::PacketError;
+use std::io::{Cursor, Read};
 
-#[derive(Debug, PartialEq, Eq, Clone, Copy)]
-pub enum QoSLevel {
-    QoSLevel0,
-    QoSLevel1,
-    QoSLevel2,
-}
+const MAX_MULTIPLIER: usize = 128 * 128 * 128;
+const MAX_VARIABLE_LENGTH: usize = 268_435_455;
 
-impl From<QoSLevel> for u8 {
-    fn from(qos: QoSLevel) -> u8 {
-        match qos {
-            QoSLevel::QoSLevel0 => 0,
-            QoSLevel::QoSLevel1 => 1,
-            QoSLevel::QoSLevel2 => 2,
-        }
-    }
-}
-
-impl TryFrom<u8> for QoSLevel {
-    type Error = PacketError;
-    fn try_from(value: u8) -> Result<Self, Self::Error> {
-        match value {
-            0 => Ok(QoSLevel::QoSLevel0),
-            1 => Ok(QoSLevel::QoSLevel1),
-            2 => Ok(QoSLevel::QoSLevel2),
-            _ => Err(PacketError::new_kind(
-                "Invalid QoS level",
-                ErrorKind::InvalidQoSLevel,
-            )),
-        }
-    }
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum ErrorKind {
-    InvalidProtocol,
-    InvalidProtocolLevel,
-    InvalidFlags,
-    InvalidReservedBits,
-    ClientDisconnected,
-    InvalidQoSLevel,
-    InvalidDupFlag,
-    InvalidControlPacketType,
-    ErrorAtReadingPacket,
-    TopicNameMustBeAtLeastOneCharacterLong,
-    TopicNameMustNotHaveWildcards,
-    InvalidReturnCode,
-    WouldBlock,
-    UnexpectedEof,
-    UnacceptableProtocolVersion,
-    IdentifierRejected,
-    ServerUnavailable,
-    BadUserNameOrPassword,
-    NotAuthorized,
-    Other,
-}
-
-#[derive(Debug, PartialEq)]
-pub struct PacketError {
-    msg: String,
-    kind: ErrorKind,
-}
-
-impl Default for PacketError {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
-const DEFAULT_MSG: &str = "Invalid packet encoding";
-
-impl PacketError {
-    pub fn new() -> PacketError {
-        PacketError {
-            msg: DEFAULT_MSG.to_string(),
-            kind: ErrorKind::Other,
-        }
-    }
-
-    pub fn new_msg(msg: &str) -> PacketError {
-        PacketError {
-            msg: msg.to_string(),
-            kind: ErrorKind::Other,
-        }
-    }
-
-    pub fn new_kind(msg: &str, kind: ErrorKind) -> PacketError {
-        PacketError {
-            msg: msg.to_string(),
-            kind,
-        }
-    }
-
-    pub fn kind(&self) -> ErrorKind {
-        self.kind
-    }
-}
-
-impl fmt::Display for PacketError {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{}", self.msg)
-    }
-}
-
-impl Error for PacketError {
-    fn description(&self) -> &str {
-        &self.msg
-    }
-}
-
-impl From<io::Error> for PacketError {
-    fn from(error: io::Error) -> Self {
-        match error.kind() {
-            io::ErrorKind::UnexpectedEof => {
-                PacketError::new_kind(&error.to_string(), ErrorKind::UnexpectedEof)
-            }
-            io::ErrorKind::WouldBlock => {
-                PacketError::new_kind(&error.to_string(), ErrorKind::WouldBlock)
-            }
-            _ => PacketError::new_msg(&error.to_string()),
-        }
-    }
-}
-
-impl From<PacketError> for String {
-    fn from(error: PacketError) -> Self {
-        error.to_string()
-    }
-}
-
-pub fn read_packet_bytes(stream: &mut impl Read) -> Result<Cursor<Vec<u8>>, PacketError> {
+/// Reads the number of bytes remaining within a stream, including data in the variable header and the payload.
+pub fn read_remaining_bytes(stream: &mut impl Read) -> Result<Cursor<Vec<u8>>, PacketError> {
     let remaining_len = RemainingLength::from_encoded(stream)?.decode();
     let mut vec = vec![0u8; remaining_len as usize];
     stream.read_exact(&mut vec)?;
     Ok(Cursor::new(vec))
 }
 
-const MAX_MULTIPLIER: usize = 128 * 128 * 128;
-const MAX_VARIABLE_LENGTH: usize = 268_435_455;
-
+/// The Remaining Length is the number of bytes remaining within a stream.
+///
+/// The Remaining Length does not include the bytes used to encode the Remaining Length.
 pub struct RemainingLength {
     length: u32,
 }
 
 impl RemainingLength {
+    /// Creates a new remaining length struct from a given length
+    ///
+    /// # Errors
+    ///
+    /// This function will return a PacketError if the given length is greater than 256 MB
     pub fn from_uncoded(length: usize) -> Result<Self, PacketError> {
         if length > MAX_VARIABLE_LENGTH {
             return Err(PacketError::new_msg("Exceeded max variable length size"));
@@ -158,6 +34,7 @@ impl RemainingLength {
         })
     }
 
+    /// Returns the encoded remaining length from a given stream    
     pub fn from_encoded(stream: &mut impl Read) -> Result<Self, PacketError> {
         let mut multiplier: u32 = 1;
         let mut length: u32 = 0;
@@ -177,6 +54,9 @@ impl RemainingLength {
         Ok(Self { length })
     }
 
+    /// Encodes a length following the MQTT v3.1.1 length encoding scheme
+    ///
+    /// Returns a Vec<u8> which contains up to 4 bytes representing the remaining length
     pub fn encode(&self) -> Vec<u8> {
         let mut length = self.length;
         let mut encoded_len = vec![];
@@ -194,6 +74,7 @@ impl RemainingLength {
         encoded_len
     }
 
+    /// Returns stored remaining length
     pub fn decode(&self) -> u32 {
         self.length
     }

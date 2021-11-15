@@ -1,6 +1,7 @@
 #![allow(dead_code)]
 
-use packets::packet_reader::{PacketError, QoSLevel};
+use packets::packet_error::PacketError;
+use packets::qos::QoSLevel;
 use packets::utf8::Field;
 
 #[doc(hidden)]

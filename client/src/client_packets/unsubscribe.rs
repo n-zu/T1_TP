@@ -1,5 +1,7 @@
 #![allow(unused)]
-use packets::packet_reader::{ErrorKind, PacketError, RemainingLength};
+
+use packets::packet_error::{ErrorKind, PacketError};
+use packets::packet_reader::RemainingLength;
 use packets::utf8::Field;
 
 #[doc(hidden)]
@@ -98,7 +100,7 @@ mod tests {
     use crate::client_packets::unsubscribe::{
         Unsubscribe, CONTROL_TYPE_UNSUBSCRIBE, MSG_INVALID_PACKET_ID,
     };
-    use packets::packet_reader::{ErrorKind, PacketError};
+    use packets::packet_error::{ErrorKind, PacketError};
     use packets::utf8::Field;
 
     #[test]

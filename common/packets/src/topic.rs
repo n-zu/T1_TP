@@ -1,7 +1,6 @@
-use crate::{
-    packet_reader::{PacketError, QoSLevel},
-    utf8::Field,
-};
+use crate::packet_error::PacketError;
+use crate::qos::QoSLevel;
+use crate::utf8::Field;
 
 #[derive(Debug, Clone)]
 pub struct Topic {

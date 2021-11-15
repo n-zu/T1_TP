@@ -1,5 +1,6 @@
 #![allow(unused)]
-use packets::packet_reader::{ErrorKind, PacketError};
+
+use packets::packet_error::{ErrorKind, PacketError};
 use std::io::Read;
 use std::result::Result;
 

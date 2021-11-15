@@ -14,13 +14,12 @@ use std::{
 use threadpool::ThreadPool;
 use tracing::{debug, error, info, warn};
 
-use packets::{
-    packet_reader::{ErrorKind, PacketError, QoSLevel},
-    puback::Puback,
-};
+use packets::packet_error::{ErrorKind, PacketError};
+use packets::puback::Puback;
 
 mod server_controller;
 pub mod server_error;
+
 pub use server_error::ServerError;
 
 const CONNECTION_WAIT_TIMEOUT: Duration = Duration::from_secs(180);
@@ -28,6 +27,7 @@ const CLIENT_READ_TIMEOUT: Duration = Duration::from_secs(1);
 const ACCEPT_SLEEP_DUR: Duration = Duration::from_millis(100);
 
 use packets::publish::Publish;
+use packets::qos::QoSLevel;
 
 use crate::{
     client::Client,

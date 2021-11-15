@@ -5,7 +5,7 @@ use std::{
     sync::{MutexGuard, PoisonError},
 };
 
-use packets::packet_reader::PacketError;
+use packets::packet_error::PacketError;
 use threadpool::ThreadPoolError;
 
 #[derive(Debug)]

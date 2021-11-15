@@ -1,8 +1,9 @@
 #![allow(dead_code)]
 
+use packets::packet_error::{ErrorKind, PacketError};
 use std::io::{self, Read};
 
-use packets::packet_reader::{self, ErrorKind, PacketError};
+use packets::packet_reader::{self};
 
 #[doc(hidden)]
 const DISCONNECT_PACKET_TYPE: u8 = 0b11100000;
@@ -64,7 +65,7 @@ impl Disconnect {
     pub fn read_from(control_byte: u8, stream: &mut impl Read) -> Result<Disconnect, PacketError> {
         Disconnect::check_packet_type_is_disconnect(control_byte)?;
         Disconnect::check_reserved_bytes(control_byte)?;
-        let mut packet_bytes = packet_reader::read_packet_bytes(stream)?;
+        let mut packet_bytes = packet_reader::read_remaining_bytes(stream)?;
         Disconnect::check_packet_end(&mut packet_bytes)?;
         Ok(Self {})
     }

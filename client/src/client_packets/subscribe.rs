@@ -1,9 +1,7 @@
 #![allow(dead_code)]
 
-use packets::{
-    packet_reader::{PacketError, RemainingLength},
-    topic::Topic,
-};
+use packets::packet_error::PacketError;
+use packets::{packet_reader::RemainingLength, topic::Topic};
 
 const SUBSCRIBE_PACKET_TYPE: u8 = 0x80;
 const FIXED_FLAGS: u8 = 2;
@@ -71,7 +69,7 @@ impl Subscribe {
 
 #[cfg(test)]
 mod tests {
-    use packets::packet_reader::QoSLevel;
+    use packets::qos::QoSLevel;
 
     use super::*;
 

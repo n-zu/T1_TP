@@ -6,7 +6,9 @@ use std::{
 };
 
 pub mod topic_handler_error;
-use packets::{packet_reader::QoSLevel, publish::Publish};
+
+use packets::publish::Publish;
+use packets::qos::QoSLevel;
 
 use crate::server_packets::{subscribe::TopicFilter, unsubscribe::Unsubscribe, Subscribe};
 
@@ -14,6 +16,7 @@ use self::topic_handler_error::TopicHandlerError;
 
 type Subtopics = HashMap<String, Topic>;
 type Subscribers = HashMap<String, SubscriptionData>;
+
 pub struct Message {
     pub client_id: String,
     pub packet: Publish,
@@ -225,7 +228,8 @@ mod tests {
 
     use crate::server_packets::{unsubscribe::Unsubscribe, Subscribe};
 
-    use packets::{packet_reader::QoSLevel, publish::Publish, utf8::Field};
+    use packets::qos::QoSLevel;
+    use packets::{publish::Publish, utf8::Field};
 
     fn build_publish(topic: &str, message: &str) -> Publish {
         let mut bytes = Vec::new();

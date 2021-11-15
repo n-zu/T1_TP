@@ -1,7 +1,7 @@
 #![allow(unused)]
 
+use crate::packet_error::{ErrorKind, PacketError};
 use crate::packet_reader;
-use crate::packet_reader::{ErrorKind, PacketError};
 use std::io;
 use std::io::Read;
 
@@ -58,7 +58,7 @@ impl Puback {
     pub fn read_from(bytes: &mut impl Read, control_byte: u8) -> Result<Self, PacketError> {
         Self::verify_reserved_bits(&control_byte)?;
         Self::verify_control_packet_type(&control_byte)?;
-        let mut remaining_bytes = packet_reader::read_packet_bytes(bytes)?;
+        let mut remaining_bytes = packet_reader::read_remaining_bytes(bytes)?;
         let packet_id = Self::read_packet_id(&mut remaining_bytes);
         Self::verify_packet_end(&mut remaining_bytes)?;
         Ok(Self { packet_id })
@@ -159,7 +159,7 @@ impl Puback {
 
 #[cfg(test)]
 mod tests {
-    use crate::packet_reader::{ErrorKind, PacketError};
+    use crate::packet_error::{ErrorKind, PacketError};
     use crate::puback::{
         Puback, MSG_INVALID_PACKET_ID, MSG_INVALID_RESERVED_BITS,
         MSG_PACKET_MORE_BYTES_THAN_EXPECTED, MSG_PACKET_TYPE_PUBACK,

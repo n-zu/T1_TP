@@ -2,9 +2,11 @@
 
 use std::{convert::TryFrom, io::Read};
 
+use packets::packet_error::{ErrorKind, PacketError};
+use packets::qos::QoSLevel;
 use packets::suback::Suback;
 use packets::{
-    packet_reader::{self, ErrorKind, PacketError, QoSLevel},
+    packet_reader::{self},
     utf8::Field,
 };
 
@@ -52,7 +54,7 @@ impl Subscribe {
         first_byte_buffer: &[u8; 1],
     ) -> Result<Subscribe, PacketError> {
         Self::verify_reserved_bits(first_byte_buffer)?;
-        let mut bytes = packet_reader::read_packet_bytes(stream)?;
+        let mut bytes = packet_reader::read_remaining_bytes(stream)?;
 
         let identifier = Self::get_identifier(&mut bytes)?;
         let mut topic_filters = Vec::new();
@@ -117,8 +119,7 @@ impl Subscribe {
 
 #[cfg(test)]
 mod tests {
-
-    use packets::packet_reader::QoSLevel;
+    use packets::qos::QoSLevel;
 
     use super::Field;
     use super::Subscribe;

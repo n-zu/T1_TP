@@ -1,8 +1,9 @@
 #![allow(dead_code)]
 
+use packets::packet_error::{ErrorKind, PacketError};
 use std::io::{self, Read};
 
-use packets::packet_reader::{self, ErrorKind, PacketError};
+use packets::packet_reader::{self};
 
 #[doc(hidden)]
 const PINGREQ_PACKET_TYPE: u8 = 0b11000000;
@@ -36,7 +37,7 @@ impl PingResp {
     pub fn read_from(stream: &mut impl Read, control_byte: u8) -> Result<PingResp, PacketError> {
         PingResp::check_packet_type(control_byte)?;
         PingResp::check_reserved_bytes(control_byte)?;
-        let mut bytes = packet_reader::read_packet_bytes(stream)?;
+        let mut bytes = packet_reader::read_remaining_bytes(stream)?;
         let mut buff = [0];
         match bytes.read_exact(&mut buff) {
             Ok(_) => Err(PacketError::new_msg(
@@ -78,7 +79,7 @@ impl PingResp {
 mod tests {
     use std::io::Cursor;
 
-    use packets::packet_reader::ErrorKind;
+    use packets::packet_error::ErrorKind;
 
     use crate::client_packets::PingResp;
 

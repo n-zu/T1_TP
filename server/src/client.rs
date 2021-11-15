@@ -4,7 +4,8 @@ use std::{
     vec,
 };
 
-use packets::{packet_reader::QoSLevel, puback::Puback, publish::Publish, suback::Suback};
+use packets::qos::QoSLevel;
+use packets::{puback::Puback, publish::Publish, suback::Suback};
 use tracing::{debug, error, info};
 
 use crate::{

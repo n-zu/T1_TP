@@ -1,6 +1,6 @@
 #![allow(unused)]
+use packets::packet_error::{ErrorKind, PacketError};
 use packets::packet_reader;
-use packets::packet_reader::{ErrorKind, PacketError};
 use std::io::Read;
 
 #[doc(hidden)]
@@ -26,7 +26,7 @@ impl Unsuback {
     pub fn read_from(bytes: &mut impl Read, control_byte: u8) -> Result<Self, PacketError> {
         Self::verify_reserved_bits(&control_byte)?;
         Self::verify_control_packet_type(&control_byte)?;
-        let mut remaining_bytes = packet_reader::read_packet_bytes(bytes)?;
+        let mut remaining_bytes = packet_reader::read_remaining_bytes(bytes)?;
         let packet_id = Self::read_packet_id(&mut remaining_bytes);
         Self::verify_packet_id(&packet_id)?;
         Ok(Self { packet_id })
@@ -85,7 +85,7 @@ mod tests {
     use crate::client_packets::unsuback::{
         Unsuback, MSG_INVALID_PACKET_ID, MSG_INVALID_RESERVED_BITS, MSG_PACKET_TYPE_UNSUBACK,
     };
-    use packets::packet_reader::{ErrorKind, PacketError};
+    use packets::packet_error::{ErrorKind, PacketError};
     use std::io::Cursor;
 
     #[test]

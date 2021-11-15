@@ -1,5 +1,6 @@
-use crate::packet_reader::{self, QoSLevel, RemainingLength};
-use crate::packet_reader::{ErrorKind, PacketError};
+use crate::packet_error::{ErrorKind, PacketError};
+use crate::packet_reader::{self, RemainingLength};
+use crate::qos::QoSLevel;
 use crate::utf8::Field;
 use std::convert::TryInto;
 use std::io::Read;
@@ -129,7 +130,7 @@ impl Publish {
     ///
     /// ```
     /// use std::io::Cursor;
-    /// use packets::packet_reader::QoSLevel;
+    /// use packets::qos::QoSLevel;
     /// use packets::publish::{DupFlag, RetainFlag, Publish};
     /// use packets::utf8::Field;
     ///
@@ -161,7 +162,7 @@ impl Publish {
         let qos_level = Self::verify_qos_level_flag(&control_byte)?;
         let dup_flag = Self::verify_dup_flag(&control_byte, qos_level)?;
         Self::verify_control_packet_type(&control_byte)?;
-        let mut remaining_bytes = packet_reader::read_packet_bytes(stream)?;
+        let mut remaining_bytes = packet_reader::read_remaining_bytes(stream)?;
         let topic_name = Self::verify_topic_name(&mut remaining_bytes)?;
         let packet_id = Self::verify_packet_id(&mut remaining_bytes, &qos_level)?;
         let payload = Self::read_payload(&mut remaining_bytes);
@@ -368,11 +369,12 @@ impl Publish {
 
 #[cfg(test)]
 mod tests {
-    use crate::packet_reader::{ErrorKind, PacketError, QoSLevel};
+    use crate::packet_error::{ErrorKind, PacketError};
     use crate::publish::{
         DupFlag, Publish, RetainFlag, MSG_DUP_FLAG_1_WITH_QOS_LEVEL_0, MSG_INVALID_PACKET_ID,
         MSG_PACKET_TYPE_PUBLISH, MSG_TOPIC_NAME_ONE_CHAR, MSG_TOPIC_WILDCARDS,
     };
+    use crate::qos::QoSLevel;
     use crate::utf8::Field;
     use std::io::Cursor;
 

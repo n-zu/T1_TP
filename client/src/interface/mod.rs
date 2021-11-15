@@ -20,7 +20,8 @@ use packets::topic::Topic;
 use packets::utf8::Field;
 
 use crate::client_packets::{Connect, LastWill};
-use packets::{packet_reader::QoSLevel, publish::Publish};
+use packets::publish::Publish;
+use packets::qos::QoSLevel;
 
 use self::utils::{Icon, InterfaceUtils};
 

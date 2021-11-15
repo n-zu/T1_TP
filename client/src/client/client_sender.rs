@@ -4,8 +4,8 @@ use std::sync::{Arc, Mutex};
 use std::time::Duration;
 use std::{thread, time};
 
-use packets::packet_reader::QoSLevel;
 use packets::puback::Puback;
+use packets::qos::QoSLevel;
 
 use crate::client_packets::unsubscribe::Unsubscribe;
 use crate::client_packets::{Connect, Disconnect, PingReq, Subscribe};
@@ -309,7 +309,8 @@ mod tests {
         },
         observer::Message,
     };
-    use packets::{packet_reader::QoSLevel, puback::Puback, publish::Publish, topic::Topic};
+    use packets::qos::QoSLevel;
+    use packets::{puback::Puback, publish::Publish, topic::Topic};
 
     use super::ClientSender;
 

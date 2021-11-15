@@ -5,7 +5,7 @@ use std::{
     thread::JoinHandle,
 };
 
-use packets::packet_reader::{ErrorKind, PacketError};
+use packets::packet_error::{ErrorKind, PacketError};
 use threadpool::{ThreadPool, ThreadPoolError};
 
 use crate::{

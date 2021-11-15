@@ -3,7 +3,8 @@ use gtk::{
     prelude::{BuilderExtManual, ButtonExt, ContainerExt, WidgetExt},
     Box, Builder, Button, Label, ListBox, ListBoxRow, Orientation,
 };
-use packets::{packet_reader::QoSLevel, puback::Puback, publish::Publish, suback::Suback};
+use packets::qos::QoSLevel;
+use packets::{puback::Puback, publish::Publish, suback::Suback};
 
 use crate::{
     client::ClientError,

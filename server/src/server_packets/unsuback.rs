@@ -1,5 +1,6 @@
 #![allow(unused)]
-use packets::packet_reader::{ErrorKind, PacketError};
+
+use packets::packet_error::{ErrorKind, PacketError};
 
 #[doc(hidden)]
 const MSG_INVALID_PACKET_ID: &str = "Packet identifier must be greater than zero";
@@ -72,7 +73,7 @@ mod tests {
     use crate::server_packets::unsuback::{
         Unsuback, CONTROL_BYTE, FIXED_REMAINING_LENGTH, MSG_INVALID_PACKET_ID,
     };
-    use packets::packet_reader::{ErrorKind, PacketError};
+    use packets::packet_error::{ErrorKind, PacketError};
 
     #[test]
     fn test_unsuback_with_packet_id_0_should_raise_invalid_protocol_error() {

@@ -5,8 +5,10 @@ use std::{
     io::{self, Read},
 };
 
+use packets::packet_error::{ErrorKind, PacketError};
+use packets::qos::QoSLevel;
 use packets::{
-    packet_reader::{self, ErrorKind, PacketError, QoSLevel},
+    packet_reader::{self},
     utf8::Field,
 };
 
@@ -156,7 +158,7 @@ impl Connect {
     }
 
     pub fn new(stream: &mut impl Read) -> Result<Connect, PacketError> {
-        let mut bytes = packet_reader::read_packet_bytes(stream)?;
+        let mut bytes = packet_reader::read_remaining_bytes(stream)?;
         Connect::verify_protocol(&mut bytes)?;
         Connect::verify_protocol_level(&mut bytes)?;
         let mut ret = Connect::get_flags(&mut bytes)?;
@@ -230,15 +232,14 @@ impl Connect {
 
 #[cfg(test)]
 mod tests {
+    use packets::qos::QoSLevel;
 
-    use packets::packet_reader::QoSLevel;
-
-    use super::ErrorKind;
     use super::Field;
     use crate::server_packets::connect::WILL_QOS_SHIFT;
     use crate::server_packets::connect::{
         Connect, CLEAN_SESSION, PASSWORD_FLAG, RESERVED, USERNAME_FLAG, WILL_FLAG, WILL_RETAIN,
     };
+    use packets::packet_error::ErrorKind;
     use std::io::Cursor;
 
     const HEADER_1: u8 = 0b00010000;

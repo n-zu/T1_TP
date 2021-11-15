@@ -1,6 +1,6 @@
 #![allow(unused)]
+use packets::packet_error::{ErrorKind, PacketError};
 use packets::packet_reader;
-use packets::packet_reader::{ErrorKind, PacketError};
 use packets::utf8::Field;
 use std::io::Read;
 
@@ -42,7 +42,7 @@ impl Unsubscribe {
     pub fn read_from(bytes: &mut impl Read, control_byte: u8) -> Result<Unsubscribe, PacketError> {
         Self::verify_control_packet_type(&control_byte)?;
         Self::verify_reserved_bits(&control_byte)?;
-        let mut remaining_bytes = packet_reader::read_packet_bytes(bytes)?;
+        let mut remaining_bytes = packet_reader::read_remaining_bytes(bytes)?;
         let packet_id = Self::read_packet_id(&mut remaining_bytes);
         let mut topic_filters: Vec<String> = Vec::new();
         Self::read_topic_filters(&mut remaining_bytes, &mut topic_filters)?;
@@ -132,7 +132,7 @@ mod tests {
         Unsubscribe, MSG_AT_LEAST_ONE_CHAR_LONG_TOPIC_FILTER, MSG_AT_LEAST_ONE_TOPIC_FILTER,
         MSG_INVALID_RESERVED_BITS, MSG_PACKET_TYPE_UNSUBSCRIBE,
     };
-    use packets::packet_reader::{ErrorKind, PacketError};
+    use packets::packet_error::{ErrorKind, PacketError};
     use packets::utf8::Field;
     use std::io::Cursor;
 
