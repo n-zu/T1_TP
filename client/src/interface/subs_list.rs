@@ -1,13 +1,15 @@
 use std::{cell::RefCell, collections::HashMap};
 
-use gtk::{Box, Button, Entry, IconSize, Label, ListBox, Orientation, Widget, prelude::{ButtonExt, ContainerExt, EntryExt, WidgetExt}};
+use gtk::{
+    prelude::{ButtonExt, ContainerExt, EntryExt, WidgetExt},
+    Box, Button, Entry, IconSize, Label, ListBox, Orientation, Widget,
+};
 use packets::{qos::QoSLevel, topic::Topic};
-
 
 pub struct SubsList {
     list: ListBox,
     unsub_entry: Entry,
-    subs: RefCell<HashMap<String, Box>> // Como esto se ejecuta solo en el thread main de gtk, no haria falta un lock
+    subs: RefCell<HashMap<String, Box>>, // Como esto se ejecuta solo en el thread main de gtk, no haria falta un lock
 }
 
 impl SubsList {
@@ -15,7 +17,7 @@ impl SubsList {
         Self {
             list,
             unsub_entry,
-            subs: RefCell::new(HashMap::new())
+            subs: RefCell::new(HashMap::new()),
         }
     }
 
@@ -27,7 +29,7 @@ impl SubsList {
         }
     }
 
-    pub fn add_subs(&self, topics : &Vec<Topic>) {
+    pub fn add_subs(&self, topics: &[Topic]) {
         for topic in topics {
             self.add_sub(topic.name(), topic.qos());
         }
@@ -41,7 +43,7 @@ impl SubsList {
         self.subs.borrow_mut().insert(topic.to_string(), box_);
     }
 
-    pub fn remove_subs(&self, topics: &Vec<String>) {
+    pub fn remove_subs(&self, topics: &[String]) {
         for topic in topics {
             self.remove_sub(topic);
         }
@@ -52,7 +54,7 @@ impl SubsList {
         let outer_box = Box::new(Orientation::Horizontal, 5);
         outer_box.add(&Label::new(Some(&format!("[QoS {}]", qos as u8))));
         outer_box.add(&Label::new(Some(topic)));
-    
+
         // ADD UNSUB BUTTON
         let _topic = topic.to_string();
         let button = Button::from_icon_name(Some("gtk-copy"), IconSize::Button);
@@ -62,10 +64,7 @@ impl SubsList {
         });
 
         outer_box.add(&button);
-    
+
         outer_box
     }
-    
 }
-
-

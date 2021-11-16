@@ -2,8 +2,8 @@ use std::convert::TryFrom;
 use std::{rc::Rc, sync::Mutex};
 
 mod client_observer;
-mod utils;
 mod subs_list;
+mod utils;
 
 use crate::{
     client::ClientError,
@@ -13,8 +13,8 @@ use crate::{
 
 use crate::client::Client;
 
-use gtk::ListBox;
 use gtk::prelude::SwitchExt;
+use gtk::ListBox;
 use gtk::{
     prelude::{BuilderExtManual, ButtonExt, EntryExt, TextBufferExt},
     Builder, Button, Entry, Switch, TextBuffer,
@@ -26,8 +26,8 @@ use crate::client_packets::{Connect, LastWill, Unsubscribe};
 use packets::publish::Publish;
 use packets::qos::QoSLevel;
 
-use self::utils::{Icon, InterfaceUtils};
 use self::subs_list::SubsList;
+use self::utils::{Icon, InterfaceUtils};
 
 /// Controller for the client. It both creates the
 /// internal client and handles all the user inputs
@@ -53,7 +53,7 @@ impl Controller {
         let cont = Rc::new(Self {
             builder,
             client: Mutex::new(None),
-            subs: Rc::new(SubsList::new(sub_box, unsub_entry))
+            subs: Rc::new(SubsList::new(sub_box, unsub_entry)),
         });
         cont.setup_handlers();
         cont.show_connect_menu();
@@ -313,7 +313,7 @@ impl Controller {
     fn _unsubscribe(&self) -> Result<(), ClientError> {
         let topic_entry: Entry = self.builder.object("unsub_top").unwrap();
         let text = vec![topic_entry.text().to_string()];
-        
+
         // TODO: ver que hacer con el unsuback, esto deberíá ir en el observer
         self.subs.remove_subs(&text);
 

@@ -1,6 +1,10 @@
 use std::rc::Rc;
 
-use gtk::{Box, Builder, Label, ListBox, ListBoxRow, Orientation, glib, prelude::{BuilderExtManual, ContainerExt, WidgetExt}};
+use gtk::{
+    glib,
+    prelude::{BuilderExtManual, ContainerExt, WidgetExt},
+    Box, Builder, Label, ListBox, ListBoxRow, Orientation,
+};
 use packets::qos::QoSLevel;
 use packets::{puback::Puback, publish::Publish, suback::Suback};
 
@@ -10,7 +14,10 @@ use crate::{
     observer::{Message, Observer},
 };
 
-use super::{subs_list::SubsList, utils::{alert, Icon, InterfaceUtils}};
+use super::{
+    subs_list::SubsList,
+    utils::{alert, Icon, InterfaceUtils},
+};
 
 /// Observer for the internal client. It sends all messages through
 /// a channel to the main GTK thread.
@@ -30,7 +37,7 @@ impl Observer for ClientObserver {
 impl ClientObserver {
     /// Creates a new ClientObserver with the given Builder
     /// of the interface
-    pub fn new(builder: Builder, subs : Rc<SubsList>) -> ClientObserver {
+    pub fn new(builder: Builder, subs: Rc<SubsList>) -> ClientObserver {
         let (sender, receiver) = glib::MainContext::channel(glib::PRIORITY_DEFAULT);
         let internal = InternalObserver::new(builder, subs);
         receiver.attach(None, move |message: Message| {
@@ -46,7 +53,7 @@ impl ClientObserver {
 /// the interface's Builder and runs in the main GKT thread
 struct InternalObserver {
     builder: Builder,
-    subs: Rc<SubsList>
+    subs: Rc<SubsList>,
 }
 
 impl InterfaceUtils for InternalObserver {
@@ -58,7 +65,7 @@ impl InterfaceUtils for InternalObserver {
 impl InternalObserver {
     /// Creates a new InternalObserver with the given
     /// interface builder
-    fn new(builder: Builder, subs : Rc<SubsList>) -> Self {
+    fn new(builder: Builder, subs: Rc<SubsList>) -> Self {
         Self { builder, subs }
     }
 
