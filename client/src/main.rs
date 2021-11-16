@@ -3,9 +3,11 @@ mod client_packets;
 mod interface;
 mod observer;
 use crate::interface::Controller;
+
 use gtk::prelude::CssProviderExt;
-use gtk::{gdk, Builder, StyleContext};
+use gtk::Builder;
 use gtk::{
+    gdk,
     prelude::{ApplicationExt, ApplicationExtManual, BuilderExtManual, GtkWindowExt, WidgetExt},
     Application, Window,
 };
@@ -15,23 +17,19 @@ fn main() {
         .application_id("ar.uba.fi.rostovfc.mqtt")
         .build();
 
-    app.connect_activate(move |app| {
-        // Load the compiled resource bundle
-        // let resources_bytes = include_bytes!("resources/resources.xml");
-        // let resource_data = Bytes::from(&resources_bytes[..]);
-        // let res = gio::Resource::from_data(&resource_data).unwrap();
-        // gio::resources_register(&res);
-
-        // Load the CSS
-        let glade_css = include_str!("resources/mqtt.glade");
+    app.connect_startup(|_app| {
+        // Load CSS
         let provider = gtk::CssProvider::new();
-        let _ = provider.load_from_path(glade_css);
-        StyleContext::add_provider_for_screen(
+        let style = include_bytes!("resources/mqtt.css");
+        provider.load_from_data(style).expect("Failed to load CSS");
+        gtk::StyleContext::add_provider_for_screen(
             &gdk::Screen::default().expect("Error initializing gtk css provider."),
             &provider,
             gtk::STYLE_PROVIDER_PRIORITY_APPLICATION,
         );
+    });
 
+    app.connect_activate(move |app| {
         // Load the window UI
         let glade_src = include_str!("resources/mqtt.glade");
         let builder = Builder::from_string(glade_src);
