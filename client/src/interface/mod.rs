@@ -19,7 +19,7 @@ use gtk::{
 use packets::topic::Topic;
 use packets::utf8::Field;
 
-use crate::client_packets::{Connect, LastWill};
+use crate::client_packets::{Connect, LastWill, Unsubscribe};
 use packets::publish::Publish;
 use packets::qos::QoSLevel;
 
@@ -100,11 +100,11 @@ impl Controller {
 
     #[doc(hidden)]
     fn setup_unsubscribe(self: &Rc<Self>) {
-        let _cont_clone = self.clone();
-        /*let unsubscribe: Button = self.builder.object("unsub_btn").unwrap();
+        let cont_clone = self.clone();
+        let unsubscribe: Button = self.builder.object("unsub_btn").unwrap();
         unsubscribe.connect_clicked(move |button: &Button| {
             cont_clone.handle_unsubscribe(button);
-        });*/ //TODO
+        });
     }
 
     #[doc(hidden)]
@@ -303,15 +303,21 @@ impl Controller {
 
     #[doc(hidden)]
     fn _unsubscribe(&self) -> Result<(), ClientError> {
-        // TODO
+        let topic_entry: Entry = self.builder.object("unsub_top").unwrap();
+        let text = vec![topic_entry.text().to_string()];
+        let unsubscribe = Unsubscribe::new(rand::random(), text)?;
+        if let Some(client) = self.client.lock()?.as_mut() {
+            client.unsubscribe(unsubscribe)?;
+        } else {
+            return Err(ClientError::new("No hay una conexión activa"));
+        }
         Err(ClientError::new("No implementado"))
     }
 
     /// Listener of the Unsubscribe button
     /// Tries to build an unsubscribe packet
     /// and send it to the server with the
-    /// given inputs
-    #[allow(dead_code)]
+    /// given inputsunwrap
     fn handle_unsubscribe(&self, _: &Button) {
         self.sensitive(false);
         self.status_message("Desuscribiendose...");
