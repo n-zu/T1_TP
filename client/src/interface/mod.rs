@@ -3,6 +3,8 @@ use std::{rc::Rc, sync::Mutex};
 
 mod client_observer;
 mod utils;
+mod subs_list;
+
 use crate::{
     client::ClientError,
     client_packets::{ConnectBuilder, Subscribe},
@@ -11,6 +13,7 @@ use crate::{
 
 use crate::client::Client;
 
+use gtk::ListBox;
 use gtk::prelude::SwitchExt;
 use gtk::{
     prelude::{BuilderExtManual, ButtonExt, EntryExt, TextBufferExt},
@@ -24,6 +27,7 @@ use packets::publish::Publish;
 use packets::qos::QoSLevel;
 
 use self::utils::{Icon, InterfaceUtils};
+use self::subs_list::SubsList;
 
 /// Controller for the client. It both creates the
 /// internal client and handles all the user inputs
@@ -31,6 +35,7 @@ use self::utils::{Icon, InterfaceUtils};
 pub struct Controller {
     builder: Builder,
     client: Mutex<Option<Client<ClientObserver>>>,
+    subs: Rc<SubsList>,
 }
 
 impl InterfaceUtils for Controller {
@@ -43,9 +48,12 @@ impl Controller {
     /// Creates a new Controller with the given
     /// interface builder
     pub fn new(builder: Builder) -> Rc<Self> {
+        let sub_box: ListBox = builder.object("sub_subs").unwrap();
+        let unsub_entry: Entry = builder.object("unsub_top").unwrap();
         let cont = Rc::new(Self {
             builder,
             client: Mutex::new(None),
+            subs: Rc::new(SubsList::new(sub_box, unsub_entry))
         });
         cont.setup_handlers();
         cont.show_connect_menu();
@@ -118,7 +126,7 @@ impl Controller {
         );
 
         let connect = self._create_connect_packet()?;
-        let observer = ClientObserver::new(self.builder.clone());
+        let observer = ClientObserver::new(self.builder.clone(), self.subs.clone());
         let client = Client::new(&full_addr, observer, connect)?;
 
         self.connection_info(Some(&format!("Conectado a {}", full_addr)));
@@ -305,6 +313,10 @@ impl Controller {
     fn _unsubscribe(&self) -> Result<(), ClientError> {
         let topic_entry: Entry = self.builder.object("unsub_top").unwrap();
         let text = vec![topic_entry.text().to_string()];
+        
+        // TODO: ver que hacer con el unsuback, esto deberíá ir en el observer
+        self.subs.remove_subs(&text);
+
         let unsubscribe = Unsubscribe::new(rand::random(), text)?;
         if let Some(client) = self.client.lock()?.as_mut() {
             client.unsubscribe(unsubscribe)?;

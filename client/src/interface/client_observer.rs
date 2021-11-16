@@ -1,8 +1,6 @@
-use gtk::{
-    glib,
-    prelude::{BuilderExtManual, ButtonExt, ContainerExt, WidgetExt},
-    Box, Builder, Button, Label, ListBox, ListBoxRow, Orientation,
-};
+use std::rc::Rc;
+
+use gtk::{Box, Builder, Label, ListBox, ListBoxRow, Orientation, glib, prelude::{BuilderExtManual, ContainerExt, WidgetExt}};
 use packets::qos::QoSLevel;
 use packets::{puback::Puback, publish::Publish, suback::Suback};
 
@@ -12,7 +10,7 @@ use crate::{
     observer::{Message, Observer},
 };
 
-use super::utils::{alert, Icon, InterfaceUtils};
+use super::{subs_list::SubsList, utils::{alert, Icon, InterfaceUtils}};
 
 /// Observer for the internal client. It sends all messages through
 /// a channel to the main GTK thread.
@@ -32,9 +30,9 @@ impl Observer for ClientObserver {
 impl ClientObserver {
     /// Creates a new ClientObserver with the given Builder
     /// of the interface
-    pub fn new(builder: Builder) -> ClientObserver {
+    pub fn new(builder: Builder, subs : Rc<SubsList>) -> ClientObserver {
         let (sender, receiver) = glib::MainContext::channel(glib::PRIORITY_DEFAULT);
-        let internal = InternalObserver::new(builder);
+        let internal = InternalObserver::new(builder, subs);
         receiver.attach(None, move |message: Message| {
             internal.message_receiver(message);
             glib::Continue(true)
@@ -48,6 +46,7 @@ impl ClientObserver {
 /// the interface's Builder and runs in the main GKT thread
 struct InternalObserver {
     builder: Builder,
+    subs: Rc<SubsList>
 }
 
 impl InterfaceUtils for InternalObserver {
@@ -59,8 +58,8 @@ impl InterfaceUtils for InternalObserver {
 impl InternalObserver {
     /// Creates a new InternalObserver with the given
     /// interface builder
-    fn new(builder: Builder) -> Self {
-        Self { builder }
+    fn new(builder: Builder, subs : Rc<SubsList>) -> Self {
+        Self { builder, subs }
     }
 
     /// Receives a message and updates the interface
@@ -99,26 +98,13 @@ impl InternalObserver {
             Ok(suback) => {
                 self.icon(Icon::Ok);
                 self.status_message("Suscrito");
-                self.add_subscription(suback);
+                self.subs.add_subs(suback.topics());
             }
             Err(error) => {
                 self.icon(Icon::Error);
                 self.status_message(&format!("No se pudo suscribir: {}", error));
             }
         }
-    }
-
-    fn add_subscription(&self, _result: Suback) {
-        let list: ListBox = self.builder.object("sub_subs").unwrap();
-
-        // for each topic in the suback, add a new row to the list
-        for topic in _result.topics() {
-            let row = ListBoxRow::new();
-            row.add(&get_sub_box(topic.name(), topic.qos()));
-            list.add(&row);
-        }
-
-        list.show_all();
     }
 
     /// Re-enables the interface and shows information
@@ -187,23 +173,5 @@ fn get_box(topic: &str, payload: &str, qos: QoSLevel) -> Box {
     inner_box.add(&Label::new(Some(&format!("QOS: {}", qos as u8))));
     outer_box.add(&inner_box);
     outer_box.add(&Label::new(Some(payload)));
-    outer_box
-}
-
-#[doc(hidden)]
-fn get_sub_box(topic: &str, qos: QoSLevel) -> Box {
-    let outer_box = Box::new(Orientation::Horizontal, 5);
-    outer_box.add(&Label::new(Some(&format!("QOS: {}", qos as u8))));
-    outer_box.add(&Label::new(Some(topic)));
-
-    // ADD UNSUB BUTTON
-    let _topic = topic.to_string();
-    let button = Button::with_label("Unsubscribe");
-    button.connect_clicked(move |_| {
-        // TODO: Unsubscribe
-        println!("Unsubscribing from {}", _topic);
-    });
-    outer_box.add(&button);
-
     outer_box
 }

@@ -1,8 +1,5 @@
-use gtk::{
-    prelude::{BuilderExtManual, DialogExt, LabelExt, StackExt, WidgetExt},
-    Box, Builder, Button, ButtonsType, DialogFlags, Label, MessageDialog, MessageType, Stack,
-    Window,
-};
+use gtk::{Box, Builder, Button, ButtonsType, DialogFlags, Label, MessageDialog, MessageType, Stack, Window, prelude::{BuilderExtManual, DialogExt, LabelExt, StackExt, WidgetExt}};
+
 
 /// Icons of the status bar
 pub(crate) enum Icon {
