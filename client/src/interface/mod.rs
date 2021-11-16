@@ -13,12 +13,12 @@ use crate::{
 
 use crate::client::Client;
 
-use gtk::prelude::SwitchExt;
-use gtk::ListBox;
+use gtk::prelude::{ComboBoxTextExt, SwitchExt};
 use gtk::{
     prelude::{BuilderExtManual, ButtonExt, EntryExt, TextBufferExt},
     Builder, Button, Entry, Switch, TextBuffer,
 };
+use gtk::{ComboBoxText, ListBox};
 use packets::topic::Topic;
 use packets::utf8::Field;
 
@@ -146,7 +146,7 @@ impl Controller {
         let last_will_retain_switch: Switch = self.builder.object("con_lw_ret").unwrap();
         let last_will_topic_entry: Entry = self.builder.object("con_lw_top").unwrap();
         let last_will_msg_entry: Entry = self.builder.object("con_lw_msg").unwrap();
-        let last_will_qos_entry: Entry = self.builder.object("con_lw_qos_entry").unwrap();
+        let last_will_qos_entry: ComboBoxText = self.builder.object("con_lw_qos").unwrap();
 
         // Get the values from the entries
         let user_name = user_entry.text().to_string();
@@ -162,10 +162,11 @@ impl Controller {
         let last_will_topic = last_will_topic_entry.text().to_string();
         let last_will_msg = last_will_msg_entry.text().to_string();
         let last_will_qos = last_will_qos_entry
-            .text()
+            .active_text()
+            .unwrap()
             .to_string()
             .parse::<u8>()
-            .unwrap_or(0);
+            .unwrap();
 
         // Create the connect builder
         let mut connect_builder = ConnectBuilder::new(&client_id, keep_alive, clean_session)?;
@@ -208,8 +209,13 @@ impl Controller {
     #[doc(hidden)]
     fn _subscribe(&self) -> Result<(), ClientError> {
         let topic_entry: Entry = self.builder.object("sub_top").unwrap();
-        let qos_entry: Entry = self.builder.object("sub_qos_entry").unwrap();
-        let qos = qos_entry.text().to_string().parse::<u8>().unwrap_or(0);
+        let qos_entry: ComboBoxText = self.builder.object("sub_qos").unwrap();
+        let qos = qos_entry
+            .active_text()
+            .unwrap()
+            .to_string()
+            .parse::<u8>()
+            .unwrap();
 
         let topic = Topic::new(&topic_entry.text().to_string(), QoSLevel::try_from(qos)?)?;
 
@@ -242,9 +248,16 @@ impl Controller {
     #[doc(hidden)]
     fn _publish(&self) -> Result<(), ClientError> {
         let topic_entry: Entry = self.builder.object("pub_top").unwrap();
-        let qos_entry: Entry = self.builder.object("pub_qos_entry").unwrap();
+        let qos_entry: ComboBoxText = self.builder.object("pub_qos").unwrap();
         let retain_switch: Switch = self.builder.object("pub_ret").unwrap();
-        let qos = QoSLevel::try_from(qos_entry.text().to_string().parse::<u8>().unwrap_or(0))?;
+        let qos = QoSLevel::try_from(
+            qos_entry
+                .active_text()
+                .unwrap()
+                .to_string()
+                .parse::<u8>()
+                .unwrap(),
+        )?;
         let mut id = None;
         if qos != QoSLevel::QoSLevel0 {
             id = Some(rand::random());
