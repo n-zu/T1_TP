@@ -1,17 +1,13 @@
-/*
-Se tienen que agregar los estilos como clases a los widgets, no por nombre
-*/
-
 .greenBg {
     background: #005826;
 }
 
-.connect_btn {
+#connect_btn {
     background: green;
     font-weight: bold;
 }
 
-.disconnect_btn {
+#disconnect_btn {
     background: red;
     font-weight: bold;
 }
