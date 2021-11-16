@@ -583,6 +583,7 @@
                                   <object class="GtkEntry" id="unsub_top">
                                     <property name="visible">True</property>
                                     <property name="can_focus">True</property>
+                                    <property name="editable">False</property>
                                     <property name="text" translatable="yes">top/sub</property>
                                   </object>
                                   <packing>
