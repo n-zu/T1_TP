@@ -24,7 +24,7 @@ fn main() {
 
     tracing::subscriber::set_global_default(subscriber).unwrap();
 
-    let threadpool_size = 5;
+    let threadpool_size = 20;
     let server = Server::new(config, threadpool_size);
     let _controller = server.run().unwrap();
 
