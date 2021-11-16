@@ -109,7 +109,7 @@ fn get_code_type(code: u8) -> Result<PacketType, PacketError> {
 impl Server {
     /// Creates a new Server
     pub fn new(config: Config, threadpool_size: usize) -> Arc<Self> {
-        info!("Iniciando servidor");
+        info!("Iniciando servidor en localhost:{}", config.port());
         Arc::new(Self {
             clients_manager: RwLock::new(ClientsManager::new(config.accounts_path())),
             config,
@@ -453,7 +453,7 @@ impl Server {
     /// Run the server in a new thread
     /// Returns a ServerController that can be used to stop the server
     pub fn run(self: Arc<Self>) -> io::Result<ServerController> {
-        let listener = TcpListener::bind(format!("127.0.0.1:{}", self.config.port()))?;
+        let listener = TcpListener::bind(format!("localhost:{}", self.config.port()))?;
         listener.set_nonblocking(true)?;
         let (shutdown_sender, shutdown_receiver) = channel();
         let server = self;
