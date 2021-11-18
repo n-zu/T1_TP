@@ -25,3 +25,9 @@ impl PingReq {
         PingReq
     }
 }
+
+impl Default for PingReq {
+    fn default() -> Self {
+        Self::new()
+    }
+}

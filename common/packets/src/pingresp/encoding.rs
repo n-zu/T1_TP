@@ -29,3 +29,9 @@ impl PingResp {
         PingResp
     }
 }
+
+impl Default for PingResp {
+    fn default() -> Self {
+        Self::new()
+    }
+}

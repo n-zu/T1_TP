@@ -26,6 +26,7 @@ impl MQTTDecoding for Publish {
     ///
     /// ```
     /// use std::io::Cursor;
+    /// use packets::publish::Publish;
     /// use packets::qos::QoSLevel;
     /// use packets::utf8::Field;
     /// use packets::traits::MQTTDecoding;

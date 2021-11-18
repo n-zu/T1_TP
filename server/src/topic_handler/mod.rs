@@ -54,7 +54,7 @@ impl TopicHandler {
             let data = SubscriptionData {
                 qos: topic_filter.qos(),
             };
-            subscribe_rec(&self.root, &topic_filter.name(), client_id, data)?;
+            subscribe_rec(&self.root, topic_filter.name(), client_id, data)?;
         }
 
         Ok(())
@@ -289,7 +289,7 @@ mod tests {
         handler.publish(&publish, sender).unwrap();
 
         let message = receiver.recv().unwrap();
-        assert!(message.client_id == "user");
+        assert_eq!(message.client_id, "user");
         assert_eq!(message.packet.topic_name(), "topic/auto/casa");
     }
 
@@ -312,7 +312,7 @@ mod tests {
         for msg in receiver {
             assert!(pending_users.contains(&msg.client_id));
             pending_users.remove(&msg.client_id);
-            assert!(msg.packet.topic_name() == "topic/auto/casa");
+            assert_eq!(msg.packet.topic_name(), "topic/auto/casa");
         }
     }
 
@@ -335,7 +335,7 @@ mod tests {
         for msg in receiver {
             assert!(pending_users.contains(&msg.client_id));
             pending_users.remove(&msg.client_id);
-            assert!(msg.packet.topic_name() == "topic/auto/casa");
+            assert_eq!(msg.packet.topic_name(), "topic/auto/casa");
         }
     }
 
@@ -368,7 +368,7 @@ mod tests {
         handler.unsubscribe(unsubscribe, "user").unwrap();
         handler.publish(&second_publish, sender).unwrap();
         let message = receiver.recv().unwrap();
-        assert!(message.client_id == "user");
+        assert_eq!(message.client_id, "user");
         assert_eq!(message.packet.topic_name(), "topic/auto/casa");
         // El canal se cerro sin enviar el segundo mensaje
         assert!(receiver.recv().is_err());
@@ -390,9 +390,9 @@ mod tests {
         handler.publish(&second_publish, sender).unwrap();
         let first_message = receiver.recv().unwrap();
         let second_message = receiver.recv().unwrap();
-        assert!(first_message.client_id == "user");
+        assert_eq!(first_message.client_id, "user");
         assert_eq!(first_message.packet.topic_name(), "topic/auto/casa");
-        assert!(second_message.client_id == "user");
+        assert_eq!(second_message.client_id, "user");
         assert_eq!(second_message.packet.topic_name(), "topic/auto/casa");
     }
 }

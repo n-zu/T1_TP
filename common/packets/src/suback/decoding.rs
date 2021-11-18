@@ -22,9 +22,11 @@ impl MQTTDecoding for Suback {
     /// - Any return code does not match any of these 0x00, 0x01, 0x80
     ///
     /// # Examples
+    ///
     /// ```
     /// use std::io::Cursor;
     /// use packets::suback::Suback;
+    /// use packets::traits::MQTTEncoding;
     /// use crate::packets::traits::MQTTDecoding;
     ///
     /// let stream_aux = vec![6, 0, 1, 1, 0, 1, 0];

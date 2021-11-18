@@ -17,12 +17,18 @@ impl MQTTEncoding for Unsuback {
     /// # Examples
     ///
     /// ```
+    /// use packets::traits::MQTTEncoding;
+    /// use packets::unsuback::Unsuback;
+    ///
+    /// const FIXED_REMAINING_LENGTH: u8 = 0b10;
+    ///
     /// let unsuback = Unsuback::new(1).unwrap();
-    /// let result = unsuback.encode();
+    /// let result = unsuback.encode().unwrap();
     /// let control_byte = 0b10110000;
     /// let expected: Vec<u8> = vec![control_byte, FIXED_REMAINING_LENGTH, 0, 1];
     /// assert_eq!(expected, result)
     /// ```
+    ///
     fn encode(&self) -> PacketResult<MQTTBytes> {
         let mut bytes: Vec<u8> = vec![];
         bytes.append(&mut self.fixed_header());

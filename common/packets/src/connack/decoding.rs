@@ -43,18 +43,18 @@ impl MQTTDecoding for Connack {
     /// use packets::traits::MQTTDecoding;
     ///
     /// let control_byte: u8 = 0b00100000;
-    /// let v: Vec<u8> = vec![0b100000, 0b10, 0b1, 0b0];
+    /// let v: Vec<u8> = vec![0b10, 0b01, 0b0];
     /// let mut stream = Cursor::new(v);
     /// let result = Connack::read_from(&mut stream, control_byte).unwrap();
     /// let connack_expected = Connack { session_present: true, return_code: ConnackReturnCode::Accepted };
     /// assert_eq!(result, connack_expected);
     /// ```
     /// # Errors
+    ///
     /// This function returns a Packet error if:
     /// - the stream's bytes doesn't follow MQTT v3.1.1 protocol
     /// - return_code is not 0
     ///
-
     /// If return_code is not 0, this function returns a specific PacketError
     fn read_from(stream: &mut impl Read, control_byte: u8) -> PacketResult<Connack> {
         let buffer = [0u8; 1];
