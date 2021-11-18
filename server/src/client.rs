@@ -4,10 +4,7 @@ use std::{
     vec,
 };
 
-use packets::{
-    connack::Connack, connect::Connect, pingresp::PingResp, qos::QoSLevel, traits::MQTTEncoding,
-    unsuback::Unsuback,
-};
+use packets::{connect::Connect, pingresp::PingResp, qos::QoSLevel, traits::MQTTEncoding};
 use packets::{puback::Puback, publish::Publish, suback::Suback};
 use tracing::{debug, error, info};
 
@@ -80,18 +77,8 @@ impl Client {
         }
     }
 
-    pub fn send_connack(&mut self, connack: Connack) -> ServerResult<()> {
-        self.stream.write_all(&connack.encode()?)?;
-        Ok(())
-    }
-
-    pub fn send_puback(&mut self, puback: Puback) -> ServerResult<()> {
-        self.write_all(&puback.encode())?;
-        Ok(())
-    }
-
-    pub fn send_unsuback(&mut self, unsuback: Unsuback) -> ServerResult<()> {
-        self.write_all(&unsuback.encode()?)?;
+    pub fn send_packet(&mut self, packet: impl MQTTEncoding) -> ServerResult<()> {
+        self.write_all(&mut packet.encode()?)?;
         Ok(())
     }
 

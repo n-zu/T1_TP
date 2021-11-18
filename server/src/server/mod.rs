@@ -160,7 +160,7 @@ impl Server {
         // QoSLevel1
         if let Some(packet_id) = publish.packet_id() {
             self.clients_manager.read()?.client_do(id, |mut client| {
-                client.send_puback(Puback::new(*packet_id)?)?;
+                client.send_packet(Puback::new(*packet_id)?)?;
                 Ok(())
             })?;
         }
@@ -177,10 +177,18 @@ impl Server {
     fn handle_subscribe(&self, mut subscribe: Subscribe, id: &ClientIdArg) -> ServerResult<()> {
         debug!("<{}>: Recibido SUBSCRIBE", id);
         subscribe.set_max_qos(QoSLevel::QoSLevel1);
-        self.topic_handler.subscribe(&subscribe, id)?;
         self.clients_manager
             .read()?
             .client_do(id, |mut client| client.send_suback(subscribe.response()?))?;
+
+        if let Some(retained_messages) = self.topic_handler.subscribe(&subscribe, id)? {
+            self.clients_manager.read()?.client_do(id, |mut client| {
+                for retained in retained_messages {
+                    client.send_publish(retained);
+                }
+                Ok(())
+            })?;
+        }
         Ok(())
     }
 
@@ -189,7 +197,7 @@ impl Server {
         let packet_id = unsubscribe.packet_id();
         self.topic_handler.unsubscribe(unsubscribe, id)?;
         self.clients_manager.read()?.client_do(id, |mut client| {
-            client.send_unsuback(Unsuback::new(packet_id)?)?;
+            client.send_packet(Unsuback::new(packet_id)?)?;
             Ok(())
         })?;
         Ok(())
@@ -275,7 +283,10 @@ impl Server {
 
     fn client_loop(self: &Arc<Self>, id: String, mut stream: TcpStream) -> ServerResult<()> {
         let mut timeout_counter = 0;
-        let client_keep_alive = self.clients_manager.read()?.keep_alive(&id)?;
+        let client_keep_alive = self
+            .clients_manager
+            .read()?
+            .get_client_property(&id, |client| Ok(client.keep_alive()))?;
 
         while self.clients_manager.read()?.is_connected(&id)? {
             match self.receive_packet(&mut stream) {
