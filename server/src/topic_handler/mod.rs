@@ -46,7 +46,11 @@ impl Topic {
 
 impl TopicHandler {
     /// Subscribe a client_id into a set of topics given a Subscribe packet
-    pub fn subscribe(&self, packet: &Subscribe, client_id: &str) -> Result<(), TopicHandlerError> {
+    pub fn subscribe(
+        &self,
+        packet: &Subscribe,
+        client_id: &str,
+    ) -> Result<Option<Vec<Publish>>, TopicHandlerError> {
         let topics = packet.topics();
         let topics: Vec<&packets::topic::Topic> = topics.iter().collect();
 
@@ -57,7 +61,7 @@ impl TopicHandler {
             subscribe_rec(&self.root, &topic_filter.name(), client_id, data)?;
         }
 
-        Ok(())
+        Ok(None)
     }
 
     /// Sends a Publish packet to the clients who are subscribed into a certain topic
