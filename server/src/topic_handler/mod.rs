@@ -7,10 +7,8 @@ use std::{
 
 pub mod topic_handler_error;
 
-use packets::publish::Publish;
 use packets::qos::QoSLevel;
-
-use crate::server_packets::{subscribe::TopicFilter, unsubscribe::Unsubscribe, Subscribe};
+use packets::{publish::Publish, subscribe::Subscribe, unsubscribe::Unsubscribe};
 
 use self::topic_handler_error::TopicHandlerError;
 
@@ -49,13 +47,14 @@ impl Topic {
 impl TopicHandler {
     /// Subscribe a client_id into a set of topics given a Subscribe packet
     pub fn subscribe(&self, packet: &Subscribe, client_id: &str) -> Result<(), TopicHandlerError> {
-        let topics: Vec<&TopicFilter> = packet.topic_filters().iter().collect();
+        let topics = packet.topics();
+        let topics: Vec<&packets::topic::Topic> = topics.iter().collect();
 
         for topic_filter in topics {
             let data = SubscriptionData {
-                qos: topic_filter.qos,
+                qos: topic_filter.qos(),
             };
-            subscribe_rec(&self.root, &topic_filter.topic_name, client_id, data)?;
+            subscribe_rec(&self.root, &topic_filter.name(), client_id, data)?;
         }
 
         Ok(())
@@ -226,9 +225,10 @@ fn remove_client_rec(node: &Topic, user_id: &str) -> Result<(), TopicHandlerErro
 mod tests {
     use std::{collections::HashSet, io::Cursor, sync::mpsc::channel};
 
-    use crate::server_packets::{unsubscribe::Unsubscribe, Subscribe};
-
     use packets::qos::QoSLevel;
+    use packets::subscribe::Subscribe;
+    use packets::traits::MQTTDecoding;
+    use packets::unsubscribe::Unsubscribe;
     use packets::{publish::Publish, utf8::Field};
 
     fn build_publish(topic: &str, message: &str) -> Publish {
@@ -248,8 +248,8 @@ mod tests {
         bytes.push(0); // QoS level 0
 
         bytes.insert(0, bytes.len() as u8);
-        let header = [0b10000010];
-        Subscribe::new(&mut Cursor::new(bytes), &header).unwrap()
+        let control_byte = 0b10000010;
+        Subscribe::read_from(&mut Cursor::new(bytes), control_byte).unwrap()
     }
 
     fn build_unsubscribe(topic: &str) -> Unsubscribe {

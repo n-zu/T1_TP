@@ -1,9 +1,8 @@
-use packets::{puback::Puback, publish::Publish, suback::Suback};
-
-use crate::{
-    client::ClientError,
-    client_packets::{Connack, Unsuback},
+use packets::{
+    connack::Connack, puback::Puback, publish::Publish, suback::Suback, unsuback::Unsuback,
 };
+
+use crate::client::ClientError;
 
 /// Messages for the Observer trait. They are intended
 /// to inform the result of the send operations of the

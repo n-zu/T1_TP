@@ -2,13 +2,15 @@ mod login;
 
 use std::{collections::HashMap, sync::Mutex};
 
-use packets::publish::Publish;
+use packets::{
+    connack::{Connack, ConnackReturnCode},
+    publish::Publish,
+};
 use tracing::{debug, warn};
 
 use crate::{
     client::Client,
     server::{server_error::ServerErrorKind, ClientId, ClientIdArg, ServerError, ServerResult},
-    server_packets::{connack::ConnackReturnCode, Connack},
 };
 
 type Username = String;

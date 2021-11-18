@@ -7,10 +7,12 @@ pub mod client_error;
 mod client_listener;
 mod client_sender;
 
-use crate::client_packets::unsubscribe::Unsubscribe;
-use crate::client_packets::{Connect, PingReq, Subscribe};
 use client_listener::ClientListener;
 use client_sender::ClientSender;
+use packets::connect::Connect;
+use packets::pingreq::PingReq;
+use packets::subscribe::Subscribe;
+use packets::unsubscribe::Unsubscribe;
 
 use crate::observer::Observer;
 pub use client_error::ClientError;

@@ -1,6 +1,7 @@
 #![allow(dead_code)]
 
 use std::{
+    convert::TryFrom,
     io::{self, Read},
     net::{SocketAddr, TcpListener, TcpStream},
     sync::{
@@ -14,8 +15,11 @@ use std::{
 use threadpool::ThreadPool;
 use tracing::{debug, error, info, warn};
 
-use packets::packet_error::{ErrorKind, PacketError};
-use packets::puback::Puback;
+use packets::{connect::Connect, disconnect::Disconnect, traits::MQTTDecoding};
+use packets::{
+    helpers::PacketType, pingreq::PingReq, puback::Puback, subscribe::Subscribe,
+    unsuback::Unsuback, unsubscribe::Unsubscribe,
+};
 
 mod server_controller;
 pub mod server_error;
@@ -35,9 +39,6 @@ use crate::{
     clients_manager::ClientsManager,
     config::Config,
     server::server_error::ServerErrorKind,
-    server_packets::{
-        unsuback::Unsuback, unsubscribe::Unsubscribe, Connect, Disconnect, PingReq, Subscribe,
-    },
     topic_handler::{Message, TopicHandler},
 };
 
@@ -57,20 +58,6 @@ pub enum Packet {
     Disconnect(Disconnect),
 }
 
-pub enum PacketType {
-    Connect,
-    Connack,
-    Publish,
-    Puback,
-    Subscribe,
-    Suback,
-    Unsubscribe,
-    Unsuback,
-    Pingreq,
-    Pingresp,
-    Disconnect,
-}
-
 /// Represents a Server that complies with the
 /// MQTT V3.1.1 protocol
 pub struct Server {
@@ -83,27 +70,6 @@ pub struct Server {
     /// Vector with the handlers of the clients running in parallel
     client_thread_joiner: Mutex<ClientThreadJoiner>,
     pool: Mutex<ThreadPool>,
-}
-
-// Temporal
-fn get_code_type(code: u8) -> Result<PacketType, PacketError> {
-    match code {
-        1 => Ok(PacketType::Connect),
-        2 => Ok(PacketType::Connack),
-        3 => Ok(PacketType::Publish),
-        4 => Ok(PacketType::Puback),
-        8 => Ok(PacketType::Subscribe),
-        9 => Ok(PacketType::Suback),
-        10 => Ok(PacketType::Unsubscribe),
-        11 => Ok(PacketType::Unsuback),
-        12 => Ok(PacketType::Pingreq),
-        13 => Ok(PacketType::Pingresp),
-        14 => Ok(PacketType::Disconnect),
-        _ => Err(PacketError::new_kind(
-            "Tipo de paquete invalido/no soportado",
-            ErrorKind::InvalidControlPacketType,
-        )),
-    }
 }
 
 impl Server {
@@ -120,10 +86,7 @@ impl Server {
     }
 
     fn read_packet(&self, control_byte: u8, stream: &mut TcpStream) -> ServerResult<Packet> {
-        let buf: [u8; 1] = [control_byte];
-
-        let code = control_byte >> 4;
-        match get_code_type(code)? {
+        match PacketType::try_from(control_byte)? {
             PacketType::Publish => {
                 let packet = Publish::read_from(stream, control_byte)?;
                 Ok(Packet::Publish(packet))
@@ -133,19 +96,19 @@ impl Server {
                 Ok(Packet::Puback(packet))
             }
             PacketType::Subscribe => {
-                let packet = Subscribe::new(stream, &buf)?;
+                let packet = Subscribe::read_from(stream, control_byte)?;
                 Ok(Packet::Subscribe(packet))
             }
             PacketType::Unsubscribe => {
                 let packet = Unsubscribe::read_from(stream, control_byte)?;
                 Ok(Packet::Unsubscribe(packet))
             }
-            PacketType::Pingreq => {
+            PacketType::PingReq => {
                 let packet = PingReq::read_from(stream, control_byte)?;
                 Ok(Packet::PingReq(packet))
             }
             PacketType::Disconnect => {
-                let packet = Disconnect::read_from(buf[0], stream)?;
+                let packet = Disconnect::read_from(stream, control_byte)?;
                 Ok(Packet::Disconnect(packet))
             }
             _ => Err(ServerError::new_kind(
