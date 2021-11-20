@@ -6,6 +6,7 @@
   <object class="GtkTextBuffer" id="pub_mg_txtbuffer"/>
   <object class="GtkWindow" id="main_window">
     <property name="can_focus">False</property>
+    <property name="title" translatable="yes">MQTT Client</property>
     <child type="titlebar">
       <placeholder/>
     </child>
