@@ -646,7 +646,7 @@ mod tests {
         let mut listener = ClientListener::new(
             stream,
             pending_ack.clone(),
-            observer.clone(),
+            observer,
             stop,
             SenderMock::new(),
         )
@@ -667,7 +667,7 @@ mod tests {
         let mut listener = ClientListener::new(
             stream,
             pending_ack.clone(),
-            observer.clone(),
+            observer,
             stop,
             SenderMock::new(),
         )
@@ -689,7 +689,7 @@ mod tests {
         let stream = Cursor::new(publish.encode().unwrap());
         let sender = SenderMock::new();
         let mut listener = ClientListener::new(
-            stream.clone(),
+            stream,
             pending_ack.clone(),
             observer.clone(),
             stop,
@@ -721,7 +721,7 @@ mod tests {
         let stream = Cursor::new(publish.encode().unwrap());
         let sender = SenderMock::new();
         let mut listener = ClientListener::new(
-            stream.clone(),
+            stream,
             pending_ack.clone(),
             observer.clone(),
             stop,
@@ -860,7 +860,7 @@ mod tests {
         let stream = Cursor::new(vec![224, 2, 1, 5]); // header de disconnect
         let mut listener = ClientListener::new(
             stream,
-            pending_ack.clone(),
+            pending_ack,
             observer.clone(),
             stop,
             SenderMock::new(),
