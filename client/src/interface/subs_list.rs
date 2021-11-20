@@ -57,7 +57,7 @@ impl SubsList {
 
         // ADD UNSUB BUTTON
         let _topic = topic.to_string();
-        let button = Button::from_icon_name(Some("gtk-copy"), IconSize::Button);
+        let button = Button::from_icon_name(Some("gtk-go-up"), IconSize::Button);
         let entry = self.unsub_entry.clone();
         button.connect_clicked(move |_| {
             entry.set_text(&_topic);

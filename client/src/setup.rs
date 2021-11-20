@@ -1,4 +1,5 @@
 use crate::interface::Controller;
+//use gtk::{gdk_pixbuf::PixbufLoader, prelude::PixbufLoaderExt};
 use gtk::prelude::{BuilderExtManual, CssProviderExt, GtkWindowExt, WidgetExt};
 use gtk::{gdk, Application, Builder, Window};
 
@@ -23,8 +24,15 @@ pub fn load_main_window(app: &Application) {
     win.set_application(Some(app));
     win.set_default_width(320);
     win.set_default_height(200);
-    win.set_title("MQTT Client");
 
+    /* No logré hacer andar el ícono
+    let loader = PixbufLoader::with_type("png").unwrap();
+    loader.write(include_bytes!("resources/logo.png")).unwrap();
+    loader.close().unwrap();
+    win.set_icon(Some(&loader.pixbuf().unwrap()));
+    */
+
+    win.set_icon_name(Some("gtk-network"));
     // We show the window.
     win.show_all();
 
