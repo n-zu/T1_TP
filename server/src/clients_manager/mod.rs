@@ -2,13 +2,15 @@ mod login;
 
 use std::{collections::HashMap, sync::Mutex};
 
-use packets::publish::Publish;
+use packets::{
+    connack::{Connack, ConnackReturnCode},
+    publish::Publish,
+};
 use tracing::{debug, warn};
 
 use crate::{
     client::Client,
     server::{server_error::ServerErrorKind, ClientId, ClientIdArg, ServerError, ServerResult},
-    server_packets::{connack::ConnackReturnCode, Connack},
 };
 
 type Username = String;
@@ -38,6 +40,19 @@ impl ClientsManager {
                 action(client.lock()?)?;
                 Ok(())
             }
+            None => Err(ServerError::new_kind(
+                "No existe el cliente",
+                ServerErrorKind::ClientNotFound,
+            )),
+        }
+    }
+
+    pub fn get_client_property<F, T>(&self, id: &ClientIdArg, action: F) -> ServerResult<T>
+    where
+        F: FnOnce(std::sync::MutexGuard<'_, Client>) -> ServerResult<T>,
+    {
+        match self.clients.get(id) {
+            Some(client) => action(client.lock()?),
             None => Err(ServerError::new_kind(
                 "No existe el cliente",
                 ServerErrorKind::ClientNotFound,
@@ -132,12 +147,12 @@ impl ClientsManager {
             // Descarto sesion vieja
             if client.clean_session() {
                 self.clients.remove(client.id());
-                client.send_connack(Connack::new(false, ConnackReturnCode::Accepted))?;
+                client.send_packet(Connack::new(false, ConnackReturnCode::Accepted))?;
                 self.client_add(client);
             }
             // El cliente quiere reconectarse a la sesion guaradada
             else {
-                client.send_connack(Connack::new(true, ConnackReturnCode::Accepted))?;
+                client.send_packet(Connack::new(true, ConnackReturnCode::Accepted))?;
                 self.client_do(&id, |mut old_client| {
                     old_client.reconnect(client)?;
                     Ok(())
@@ -148,7 +163,7 @@ impl ClientsManager {
                 })?;
             }
         } else {
-            client.send_connack(Connack::new(false, ConnackReturnCode::Accepted))?;
+            client.send_packet(Connack::new(false, ConnackReturnCode::Accepted))?;
             self.client_add(client);
         }
         Ok(())
@@ -159,12 +174,12 @@ impl ClientsManager {
             Ok(()) => self.new_session_unchecked(client),
             Err(err) if err.kind() == ServerErrorKind::ClientNotInWhitelist => {
                 warn!("<{}>: Usuario invalido", client.id());
-                client.send_connack(Connack::new(false, ConnackReturnCode::NotAuthorized))?;
+                client.send_packet(Connack::new(false, ConnackReturnCode::NotAuthorized))?;
                 Err(err)
             }
             Err(err) if err.kind() == ServerErrorKind::InvalidPassword => {
                 warn!("<{}>: Contraseña invalida", client.id());
-                client.send_connack(Connack::new(
+                client.send_packet(Connack::new(
                     false,
                     ConnackReturnCode::BadUserNameOrPassword,
                 ))?;
@@ -175,7 +190,7 @@ impl ClientsManager {
                     "<{}>: La ID ya se encuentra en uso en el servidor",
                     client.id()
                 );
-                client.send_connack(Connack::new(false, ConnackReturnCode::IdentifierRejected))?;
+                client.send_packet(Connack::new(false, ConnackReturnCode::IdentifierRejected))?;
                 Err(err)
             }
             Err(err) => Err(err),
@@ -204,14 +219,5 @@ impl ClientsManager {
             Err(_) => false,
         });
         Ok(())
-    }
-
-    pub fn keep_alive(&self, id: &ClientIdArg) -> ServerResult<u16> {
-        let mut keep_alive = 0;
-        self.client_do(id, |client| {
-            keep_alive = client.keep_alive();
-            Ok(())
-        })?;
-        Ok(keep_alive)
     }
 }

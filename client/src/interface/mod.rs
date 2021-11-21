@@ -3,11 +3,7 @@ use std::{rc::Rc, sync::Mutex};
 
 mod client_observer;
 mod utils;
-use crate::{
-    client::ClientError,
-    client_packets::{ConnectBuilder, Subscribe},
-    interface::client_observer::ClientObserver,
-};
+use crate::{client::ClientError, interface::client_observer::ClientObserver};
 
 use crate::client::Client;
 
@@ -16,10 +12,10 @@ use gtk::{
     prelude::{BuilderExtManual, ButtonExt, EntryExt, TextBufferExt},
     Builder, Button, Entry, Switch, TextBuffer,
 };
+use packets::connect::{Connect, ConnectBuilder, LastWill};
+use packets::subscribe::Subscribe;
 use packets::topic::Topic;
-use packets::utf8::Field;
 
-use crate::client_packets::{Connect, LastWill};
 use packets::publish::Publish;
 use packets::qos::QoSLevel;
 
@@ -170,8 +166,8 @@ impl Controller {
 
         if !last_will_topic.trim().is_empty() {
             let last_will = LastWill::new(
-                Field::new_from_string(&last_will_topic)?,
-                Field::new_from_string(&last_will_msg)?,
+                last_will_topic,
+                last_will_msg,
                 QoSLevel::try_from(last_will_qos)?,
                 last_will_retain,
             );

@@ -4,14 +4,11 @@ use std::{
     vec,
 };
 
-use packets::qos::QoSLevel;
+use packets::{connect::Connect, pingresp::PingResp, qos::QoSLevel, traits::MQTTEncoding};
 use packets::{puback::Puback, publish::Publish, suback::Suback};
 use tracing::{debug, error, info};
 
-use crate::{
-    server::{ClientId, ServerError, ServerResult},
-    server_packets::{unsuback::Unsuback, Connack, Connect, PingResp},
-};
+use crate::server::{ClientId, ServerError, ServerResult};
 
 #[derive(PartialEq)]
 pub enum ClientStatus {
@@ -68,7 +65,7 @@ impl Client {
 
     pub fn send_pingresp(&mut self) -> ServerResult<()> {
         debug!("<{}> Enviando PINGRESP", self.id);
-        self.write_all(&PingResp::new().encode())?;
+        self.write_all(&PingResp::new().encode()?)?;
         Ok(())
     }
 
@@ -80,18 +77,8 @@ impl Client {
         }
     }
 
-    pub fn send_connack(&mut self, connack: Connack) -> io::Result<()> {
-        self.stream.write_all(&connack.encode())?;
-        Ok(())
-    }
-
-    pub fn send_puback(&mut self, puback: Puback) -> ServerResult<()> {
-        self.write_all(&puback.encode())?;
-        Ok(())
-    }
-
-    pub fn send_unsuback(&mut self, unsuback: Unsuback) -> ServerResult<()> {
-        self.write_all(&unsuback.encode())?;
+    pub fn send_packet(&mut self, packet: impl MQTTEncoding) -> ServerResult<()> {
+        self.write_all(&mut packet.encode()?)?;
         Ok(())
     }
 
@@ -113,7 +100,7 @@ impl Client {
     }
 
     pub fn keep_alive(&self) -> u16 {
-        *self.connect.keep_alive()
+        self.connect.keep_alive()
     }
 
     pub fn user_name(&self) -> Option<&String> {

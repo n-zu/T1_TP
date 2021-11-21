@@ -4,11 +4,15 @@ use std::sync::{Arc, Mutex};
 use std::time::Duration;
 use std::{thread, time};
 
+use packets::connect::Connect;
+use packets::disconnect::Disconnect;
+use packets::pingreq::PingReq;
 use packets::puback::Puback;
 use packets::qos::QoSLevel;
+use packets::subscribe::Subscribe;
+use packets::traits::MQTTEncoding;
+use packets::unsubscribe::Unsubscribe;
 
-use crate::client_packets::unsubscribe::Unsubscribe;
-use crate::client_packets::{Connect, Disconnect, PingReq, Subscribe};
 use crate::observer::{Message, Observer};
 use packets::publish::Publish;
 
@@ -72,7 +76,7 @@ impl<T: Observer, W: Write> ClientSender<T, W> {
     #[doc(hidden)]
     fn _connect(&self, connect: Connect) -> Result<(), ClientError> {
         let mut lock = self.stream.lock()?;
-        let bytes = connect.encode();
+        let bytes = connect.encode()?;
         self.pending_ack
             .lock()?
             .replace(PendingAck::Connect(connect));
@@ -181,7 +185,7 @@ impl<T: Observer, W: Write> ClientSender<T, W> {
     #[doc(hidden)]
     fn _pingreq(&self, pingreq: PingReq) -> Result<(), ClientError> {
         let mut lock = self.stream.lock()?;
-        let bytes = pingreq.encode();
+        let bytes = pingreq.encode()?;
         self.pending_ack
             .lock()?
             .replace(PendingAck::PingReq(pingreq));
@@ -304,12 +308,12 @@ mod tests {
 
     use crate::{
         client::{client_listener::AckSender, client_sender::MAX_RETRIES, ClientError, PendingAck},
-        client_packets::{
-            subscribe::Subscribe, unsubscribe::Unsubscribe, ConnectBuilder, Disconnect, PingReq,
-        },
         observer::Message,
     };
-    use packets::qos::QoSLevel;
+    use packets::{
+        connect::ConnectBuilder, disconnect::Disconnect, pingreq::PingReq, qos::QoSLevel,
+        subscribe::Subscribe, traits::MQTTEncoding, unsubscribe::Unsubscribe,
+    };
     use packets::{puback::Puback, publish::Publish, topic::Topic};
 
     use super::ClientSender;
@@ -378,7 +382,7 @@ mod tests {
     #[test]
     fn test_connect() {
         let connect = ConnectBuilder::new("id", 0, true).unwrap().build().unwrap();
-        let bytes = connect.encode();
+        let bytes = connect.encode().unwrap();
 
         let stream = Cursor::new();
         let observer = ObserverMock::new();
@@ -418,7 +422,7 @@ mod tests {
     #[test]
     fn test_connect_fail() {
         let connect = ConnectBuilder::new("id", 0, true).unwrap().build().unwrap();
-        let bytes = connect.encode();
+        let bytes = connect.encode().unwrap();
 
         let stream = Cursor::new();
         let observer = ObserverMock::new();
@@ -597,7 +601,7 @@ mod tests {
         // Una vez terminó y ya habiendo otro thread sacado el PendingAck, debería
         // haber quedado en None
 
-        assert_eq!(stream.content(), PingReq::new().encode());
+        assert_eq!(stream.content(), PingReq::new().encode().unwrap());
         // Debería haber escrito el pingreq en el stream
 
         assert!(observer.messages.lock().unwrap().is_empty());
@@ -619,7 +623,10 @@ mod tests {
 
         assert_eq!(
             stream.content(),
-            PingReq::new().encode().repeat(1 + MAX_RETRIES as usize)
+            PingReq::new()
+                .encode()
+                .unwrap()
+                .repeat(1 + MAX_RETRIES as usize)
         );
         // Debería haber escrito el unsubscribe en el stream, con el intento inicial + MAX_RETRIES veces
 

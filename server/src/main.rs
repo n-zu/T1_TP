@@ -9,7 +9,6 @@ mod client_thread_joiner;
 mod clients_manager;
 mod config;
 mod server;
-mod server_packets;
 mod topic_handler;
 
 fn main() {

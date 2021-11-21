@@ -1,5 +1,4 @@
 mod client;
-mod client_packets;
 mod interface;
 mod observer;
 use crate::interface::Controller;

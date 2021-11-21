@@ -1,4 +1,4 @@
-use crate::packet_error::PacketError;
+use crate::packet_error::PacketResult;
 use crate::qos::QoSLevel;
 use crate::utf8::Field;
 
@@ -12,7 +12,7 @@ pub struct Topic {
 impl Topic {
     /// Creates a new topic
     /// Returns PacketError if the topic name is invalid
-    pub fn new(name: &str, qos: QoSLevel) -> Result<Topic, PacketError> {
+    pub fn new(name: &str, qos: QoSLevel) -> PacketResult<Topic> {
         Ok(Topic {
             name: Field::new_from_string(name)?,
             qos,
@@ -46,5 +46,11 @@ impl Topic {
     /// Returns the topic qos
     pub fn qos(&self) -> QoSLevel {
         self.qos
+    }
+
+    pub fn set_max_qos(&mut self, max_qos: QoSLevel) {
+        if (self.qos as u8) > (max_qos as u8) {
+            self.qos = max_qos;
+        }
     }
 }
