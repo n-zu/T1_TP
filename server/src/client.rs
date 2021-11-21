@@ -78,7 +78,7 @@ impl Client {
     }
 
     pub fn send_packet(&mut self, packet: impl MQTTEncoding) -> ServerResult<()> {
-        self.write_all(&mut packet.encode()?)?;
+        self.write_all(&packet.encode()?)?;
         Ok(())
     }
 
