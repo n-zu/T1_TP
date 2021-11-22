@@ -184,7 +184,7 @@ impl<T: Observer, R: ReadTimeout, A: AckSender> ClientListener<T, R, A> {
     #[doc(hidden)]
     fn handle_publish(&mut self, header: u8) -> Result<(), ClientError> {
         let publish = Publish::read_from(&mut self.stream, header)?;
-        let id_opt = publish.packet_id().cloned();
+        let id_opt = publish.packet_id();
         self.observer.update(Message::Publish(publish));
 
         // Si tiene id no es QoS 0
@@ -247,7 +247,7 @@ impl<T: Observer, R: ReadTimeout, A: AckSender> ClientListener<T, R, A> {
 
         if let Some(PendingAck::Publish(publish)) = lock.as_ref() {
             if let Some(expected_id) = publish.packet_id() {
-                if *expected_id == puback.packet_id() {
+                if expected_id == puback.packet_id() {
                     lock.take();
                     self.observer.update(Message::Published(Ok(Some(puback))));
                 }
@@ -744,7 +744,7 @@ mod tests {
         let mut msgs = observer.messages.lock().unwrap();
         assert!(matches!(msgs[0], Message::Publish(_)));
         if let Message::Publish(publish) = msgs.remove(0) {
-            assert_eq!(publish.packet_id(), Some(&123));
+            assert_eq!(publish.packet_id(), Some(123));
             assert_eq!(publish.topic_name(), "topic");
             assert_eq!(publish.payload(), Some(&"msg".to_string()));
         }

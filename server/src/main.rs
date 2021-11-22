@@ -1,7 +1,8 @@
-use std::thread;
+use std::io::Read;
 
 use crate::config::Config;
-use server::Server;
+use server::{Server, ServerInterface};
+use tracing::info;
 use tracing_subscriber::{fmt, prelude::__tracing_subscriber_SubscriberExt, Registry};
 
 mod client;
@@ -27,7 +28,10 @@ fn main() {
     let server = Server::new(config, threadpool_size);
     let _controller = server.run().unwrap();
 
-    thread::park();
-    //thread::sleep(Duration::from_secs(1));
-    //controller.shutdown();
+    info!("Presione [ENTER] para detener la ejecucion del servidor");
+
+    let mut buf = [0u8; 1];
+    std::io::stdin()
+        .read_exact(&mut buf)
+        .expect("Error al leer de stdin");
 }

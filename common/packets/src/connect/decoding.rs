@@ -73,10 +73,10 @@ impl Connect {
         let qos = QoSLevel::try_from((buf[0] & WILL_QOS) >> WILL_QOS_SHIFT)?;
         if buf[0] & LAST_WILL_PRESENT != 0 {
             return Ok(Some(LastWill {
-                retain: buf[0] & WILL_RETAIN != 0,
+                retain_flag: buf[0] & WILL_RETAIN != 0,
                 qos,
-                topic: String::new(),
-                message: String::new(),
+                topic_name: String::new(),
+                topic_message: String::new(),
             }));
         }
 
@@ -135,8 +135,8 @@ impl Connect {
         if let Some(lw) = &mut self.last_will {
             let topic = Field::new_from_stream(bytes).ok_or_else(PacketError::new)?;
             let message = Field::new_from_stream(bytes).ok_or_else(PacketError::new)?;
-            lw.topic = topic.value;
-            lw.message = message.value;
+            lw.topic_name = topic.value;
+            lw.topic_message = message.value;
         }
         Ok(())
     }

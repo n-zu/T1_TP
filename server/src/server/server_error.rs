@@ -30,6 +30,7 @@ pub enum ServerErrorKind {
     Timeout,
     PoinsonedLock,
     Irrecoverable,
+    Idle,
     Other,
     _NonExhaustive,
 }

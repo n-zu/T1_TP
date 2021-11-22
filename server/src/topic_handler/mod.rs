@@ -93,7 +93,7 @@ impl TopicHandler {
         Self { root: Topic::new() }
     }
 
-    fn remove_client(&self, client_id: &str) -> Result<(), TopicHandlerError> {
+    pub fn remove_client(&self, client_id: &str) -> Result<(), TopicHandlerError> {
         remove_client_rec(&self.root, client_id)?;
         Ok(())
     }

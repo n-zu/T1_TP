@@ -14,12 +14,19 @@ use crate::{
 };
 
 type Username = String;
+const GENERIC_ID_SUFFIX: &str = "__CLIENT__";
 
 pub struct ClientsManager {
     clients: HashMap<String, Mutex<Client>>,
     /// client_id - username
     taken_ids: HashMap<ClientId, Username>,
     accounts_path: String,
+    generic_ids_counter: u32,
+}
+
+pub struct DisconnectInfo {
+    pub publish_last_will: Option<Publish>,
+    pub clean_session: bool,
 }
 
 impl ClientsManager {
@@ -28,6 +35,7 @@ impl ClientsManager {
             clients: HashMap::new(),
             taken_ids: HashMap::new(),
             accounts_path: accounts_path.to_owned(),
+            generic_ids_counter: 0,
         }
     }
 
@@ -60,11 +68,17 @@ impl ClientsManager {
         }
     }
 
-    pub fn finish_session(&mut self, id: &ClientIdArg, gracefully: bool) -> ServerResult<()> {
+    pub fn finish_session(
+        &mut self,
+        id: &ClientIdArg,
+        gracefully: bool,
+    ) -> ServerResult<DisconnectInfo> {
+        let mut publish_last_will = None;
         self.client_do(id, |mut client| {
-            client.disconnect(gracefully);
+            publish_last_will = client.disconnect(gracefully)?;
             Ok(())
         })?;
+        let clean_session;
         // Si la funcion anterior no devolvio error, entonces existe el cliente
         if self
             .clients
@@ -75,10 +89,15 @@ impl ClientsManager {
         {
             debug!("<{}>: Terminando sesion con clean_session = true", id);
             self.clients.remove(id);
+            clean_session = true;
         } else {
             debug!("<{}>: Terminando sesion con clean_session = false", id);
+            clean_session = false;
         }
-        Ok(())
+        Ok(DisconnectInfo {
+            publish_last_will,
+            clean_session,
+        })
     }
 
     fn client_add(&mut self, client: Client) -> Option<Mutex<Client>> {
@@ -88,7 +107,7 @@ impl ClientsManager {
 
     pub fn send_unacknowledged(&self, id: &ClientIdArg) -> ServerResult<()> {
         self.client_do(id, |mut client| {
-            client.send_unacknowledged();
+            client.send_unacknowledged()?;
             Ok(())
         })
     }
@@ -112,15 +131,23 @@ impl ClientsManager {
                     ServerErrorKind::TakenID,
                 ));
             } else {
-                Ok(())
+                return Ok(());
             }
-        } else {
-            self.taken_ids.insert(id.to_owned(), user_name.to_owned());
-            Ok(())
         }
+        Ok(())
     }
 
     fn check_credentials(&mut self, client: &Client) -> ServerResult<()> {
+        if client.id().starts_with(GENERIC_ID_SUFFIX) {
+            return Err(ServerError::new_kind(
+                &format!(
+                    "IDs que empiezan con {} estan reservadas por el servidor",
+                    GENERIC_ID_SUFFIX
+                ),
+                ServerErrorKind::TakenID,
+            ));
+        }
+
         if let Some(user_name) = client.user_name() {
             let password = login::search_password(&self.accounts_path, user_name)?;
             if password == *client.password().unwrap_or(&String::new()) {
@@ -139,8 +166,33 @@ impl ClientsManager {
         }
     }
 
-    fn new_session_unchecked(&mut self, mut client: Client) -> ServerResult<()> {
+    fn new_generic_id(&mut self) -> String {
+        self.generic_ids_counter += 1;
+        let mut generic_id = String::from(GENERIC_ID_SUFFIX);
+        generic_id.push_str(&self.generic_ids_counter.to_string());
+        generic_id
+    }
+
+    fn new_session_empty_id(&mut self, mut client: Client) -> ServerResult<ClientId> {
+        if !client.clean_session() {
+            client.send_packet(Connack::new(false, ConnackReturnCode::IdentifierRejected))?;
+            Err(ServerError::new_kind(
+                "Clientes con id vacia deben tener clean session en true",
+                ServerErrorKind::ProtocolViolation,
+            ))
+        } else {
+            let id = self.new_generic_id();
+            client.set_id(&id)?;
+            Ok(id)
+        }
+    }
+
+    fn new_session_unchecked(&mut self, mut client: Client) -> ServerResult<ClientId> {
+        if client.id().is_empty() {
+            return self.new_session_empty_id(client);
+        }
         let id = client.id().to_owned();
+
         // Hay una sesion_presente en el servidor con la misma ID
         // (con clean_sesion = false)
         if self.exists(client.id())? {
@@ -158,18 +210,25 @@ impl ClientsManager {
                     Ok(())
                 })?;
                 self.client_do(&id, |mut client| {
-                    client.send_unacknowledged();
+                    client.send_unacknowledged()?;
                     Ok(())
                 })?;
             }
         } else {
+            self.taken_ids.insert(
+                id.to_owned(),
+                client
+                    .user_name()
+                    .expect("Se esperaba un user_name")
+                    .to_owned(),
+            );
             client.send_packet(Connack::new(false, ConnackReturnCode::Accepted))?;
             self.client_add(client);
         }
-        Ok(())
+        Ok(id)
     }
 
-    pub fn new_session(&mut self, mut client: Client) -> ServerResult<()> {
+    pub fn new_session(&mut self, mut client: Client) -> ServerResult<ClientId> {
         match self.check_credentials(&client) {
             Ok(()) => self.new_session_unchecked(client),
             Err(err) if err.kind() == ServerErrorKind::ClientNotInWhitelist => {
@@ -198,12 +257,8 @@ impl ClientsManager {
     }
 
     pub fn is_connected(&self, id: &ClientIdArg) -> ServerResult<bool> {
-        let mut alive = false;
-        match self.client_do(id, |client| {
-            alive = client.connected();
-            Ok(())
-        }) {
-            Ok(_) => Ok(alive),
+        match self.get_client_property(id, |client| Ok(client.connected())) {
+            Ok(alive) => Ok(alive),
             Err(err) if err.kind() == ServerErrorKind::ClientNotFound => Ok(false),
             Err(err) => Err(err),
         }
@@ -212,7 +267,7 @@ impl ClientsManager {
     pub fn finish_all_sessions(&mut self, gracefully: bool) -> ServerResult<()> {
         for (id, client) in &self.clients {
             debug!("<{}>: Desconectando", id);
-            client.lock()?.disconnect(gracefully);
+            client.lock()?.disconnect(gracefully)?;
         }
         self.clients.retain(|_id, client| match client.get_mut() {
             Ok(client) => client.clean_session(),

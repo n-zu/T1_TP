@@ -30,8 +30,8 @@ pub struct Publish {
 
 impl Publish {
     /// Gets packet_id from a Publish packet
-    pub fn packet_id(&self) -> Option<&u16> {
-        self.packet_id.as_ref()
+    pub fn packet_id(&self) -> Option<u16> {
+        self.packet_id
     }
     /// Gets topic_name from a Publish packet
     pub fn topic_name(&self) -> &str {
