@@ -152,7 +152,8 @@ impl<T: Observer, R: ReadTimeout, A: AckSender> ClientListener<T, R, A> {
             }
             Err(err)
                 if (err.kind() == io::ErrorKind::TimedOut
-                    || err.kind() == io::ErrorKind::WouldBlock) =>
+                    || err.kind() == io::ErrorKind::WouldBlock)
+                    || self.stop.load(Ordering::Relaxed) =>
             {
                 Ok(())
             }
