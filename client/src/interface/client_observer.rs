@@ -5,12 +5,11 @@ use gtk::{
     prelude::{BuilderExtManual, ContainerExt, WidgetExt},
     Box, Builder, Label, ListBox, ListBoxRow, Orientation,
 };
-use packets::qos::QoSLevel;
+use packets::{connack::Connack, qos::QoSLevel, unsuback::Unsuback};
 use packets::{puback::Puback, publish::Publish, suback::Suback};
 
 use crate::{
     client::ClientError,
-    client_packets::{Connack, Unsuback},
     observer::{Message, Observer},
 };
 

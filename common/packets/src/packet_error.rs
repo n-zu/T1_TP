@@ -38,6 +38,7 @@ impl Default for PacketError {
 }
 
 const DEFAULT_MSG: &str = "Invalid packet encoding";
+pub type PacketResult<T> = Result<T, PacketError>;
 
 impl PacketError {
     pub fn new() -> PacketError {

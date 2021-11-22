@@ -7,14 +7,16 @@ use std::{
     time::Duration,
 };
 
-use packets::packet_error::{ErrorKind, PacketError};
+use packets::{
+    connack::Connack,
+    packet_error::{ErrorKind, PacketError},
+    pingresp::PingResp,
+    traits::MQTTDecoding,
+    unsuback::Unsuback,
+};
 use packets::{puback::Puback, publish::Publish, suback::Suback};
 
-use crate::{
-    client::PendingAck,
-    client_packets::{Connack, PingResp, Unsuback},
-    observer::Observer,
-};
+use crate::{client::PendingAck, observer::Observer};
 
 use crate::observer::Message;
 
@@ -317,12 +319,16 @@ mod tests {
     use std::time::Duration;
 
     use crate::client::PendingAck;
-    use crate::client_packets::{ConnectBuilder, PingReq, Subscribe, Unsubscribe};
     use crate::observer::Message;
+    use packets::connect::ConnectBuilder;
+    use packets::pingreq::PingReq;
     use packets::puback::Puback;
     use packets::publish::Publish;
     use packets::qos::QoSLevel::*;
+    use packets::subscribe::Subscribe;
     use packets::topic::Topic;
+    use packets::traits::MQTTEncoding;
+    use packets::unsubscribe::Unsubscribe;
 
     use super::{AckSender, ClientListener, ReadTimeout};
 
