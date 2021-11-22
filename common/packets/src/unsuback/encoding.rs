@@ -45,7 +45,10 @@ impl Unsuback {
     /// If packet_id is zero, this functions returns a [ErrorKind::InvalidProtocol]
     pub fn new(packet_id: u16) -> PacketResult<Unsuback> {
         Self::verify_packet_id(&packet_id)?;
-        Ok(Self { packet_id })
+        Ok(Self {
+            packet_id,
+            topics: Vec::new(),
+        })
     }
 
     #[doc(hidden)]

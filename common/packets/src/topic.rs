@@ -4,7 +4,7 @@ use crate::utf8::Field;
 
 #[derive(Debug, Clone)]
 pub struct Topic {
-    /// Topic for a subsribe packet
+    /// Topic for a subscribe packet
     name: Field,
     qos: QoSLevel,
 }

@@ -239,6 +239,22 @@ impl<T: Observer, R: ReadTimeout, A: AckSender> ClientListener<T, R, A> {
     }
 
     #[doc(hidden)]
+    fn handle_unsuback(&mut self, header: u8) -> Result<(), ClientError> {
+        let mut unsuback = Unsuback::read_from(&mut self.stream, header)?;
+        let mut lock = self.pending_ack.lock()?;
+
+        if let Some(PendingAck::Unsubscribe(unsubscribe)) = lock.as_ref() {
+            if unsubscribe.packet_id() == unsuback.packet_id() {
+                unsuback.set_topics(unsubscribe.topic_filters());
+                lock.take();
+                self.observer.update(Message::Unsubscribed(Ok(unsuback)));
+            }
+        }
+
+        Ok(())
+    }
+
+    #[doc(hidden)]
     fn handle_puback(&mut self, header: u8) -> Result<(), ClientError> {
         let puback = Puback::read_from(&mut self.stream, header)?;
 
@@ -268,21 +284,6 @@ impl<T: Observer, R: ReadTimeout, A: AckSender> ClientListener<T, R, A> {
 
         if let Some(PendingAck::PingReq(_)) = lock.as_ref() {
             lock.take();
-        }
-
-        Ok(())
-    }
-
-    #[doc(hidden)]
-    fn handle_unsuback(&mut self, header: u8) -> Result<(), ClientError> {
-        let unsuback = Unsuback::read_from(&mut self.stream, header)?;
-        let mut lock = self.pending_ack.lock()?;
-
-        if let Some(PendingAck::Unsubscribe(unsubscribe)) = lock.as_ref() {
-            if unsubscribe.packet_id() == unsuback.packet_id() {
-                lock.take();
-                self.observer.update(Message::Unsubscribed(Ok(unsuback)));
-            }
         }
 
         Ok(())
@@ -324,6 +325,7 @@ mod tests {
     use packets::pingreq::PingReq;
     use packets::puback::Puback;
     use packets::publish::Publish;
+    use packets::qos::QoSLevel;
     use packets::qos::QoSLevel::*;
     use packets::subscribe::Subscribe;
     use packets::topic::Topic;
@@ -379,7 +381,7 @@ mod tests {
     fn test_unsuback() {
         let observer = ObserverMock::new();
         let pending_ack = Arc::new(Mutex::new(Some(PendingAck::Unsubscribe(
-            Unsubscribe::new(123, vec!["topic".to_string()]).unwrap(),
+            Unsubscribe::new(123, vec![Topic::new("topic", QoSLevel::QoSLevel0).unwrap()]).unwrap(),
         ))));
         let stop = Arc::new(AtomicBool::new(false));
         let stream = Cursor::new(vec![0b10110000, 2, 0, 123]);
@@ -405,7 +407,7 @@ mod tests {
     fn test_unsuback_different_id() {
         let observer = ObserverMock::new();
         let pending_ack = Arc::new(Mutex::new(Some(PendingAck::Unsubscribe(
-            Unsubscribe::new(25, vec!["topic".to_string()]).unwrap(),
+            Unsubscribe::new(25, vec![Topic::new("topic", QoSLevel::QoSLevel0).unwrap()]).unwrap(),
         ))));
         let stop = Arc::new(AtomicBool::new(false));
         let stream = Cursor::new(vec![0b10110000, 2, 0, 123]);
@@ -666,7 +668,7 @@ mod tests {
     fn test_pingresp_unexpected() {
         let observer = ObserverMock::new();
         let pending_ack = Arc::new(Mutex::new(Some(PendingAck::Unsubscribe(
-            Unsubscribe::new(25, vec!["topic".to_string()]).unwrap(),
+            Unsubscribe::new(25, vec![Topic::new("topic", QoSLevel::QoSLevel0).unwrap()]).unwrap(),
         ))));
         let stop = Arc::new(AtomicBool::new(false));
         let stream = Cursor::new(vec![0b11010000, 0b00000000]);

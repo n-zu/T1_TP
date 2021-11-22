@@ -1,4 +1,5 @@
 use crate::packet_error::{ErrorKind, PacketError, PacketResult};
+use crate::topic::Topic;
 
 mod decoding;
 mod encoding;
@@ -10,17 +11,28 @@ const MSG_INVALID_PACKET_ID: &str = "Packet identifier must be greater than zero
 #[doc(hidden)]
 const RESERVED_BITS: u8 = 0;
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug)]
 /// The UNSUBACK Packet is sent by the Server to the Client
 /// to confirm receipt of an UNSUBSCRIBE Packet.
 pub struct Unsuback {
     packet_id: u16,
+    topics: Vec<Topic>,
 }
 
 impl Unsuback {
     /// Returns the packet identifier
     pub fn packet_id(&self) -> u16 {
         self.packet_id
+    }
+
+    /// Set the unsuback's subscribe topics
+    pub fn set_topics(&mut self, topics: Vec<Topic>) {
+        self.topics = topics;
+    }
+
+    /// Get the unsuback's subscribe topics
+    pub fn topics(&self) -> &Vec<Topic> {
+        &self.topics
     }
 
     #[doc(hidden)]

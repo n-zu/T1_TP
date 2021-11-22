@@ -14,7 +14,7 @@ use crate::{
 };
 
 use super::{
-    subs_list::SubsList,
+    subscription_list::SubscriptionList,
     utils::{alert, Icon, InterfaceUtils},
 };
 
@@ -36,7 +36,7 @@ impl Observer for ClientObserver {
 impl ClientObserver {
     /// Creates a new ClientObserver with the given Builder
     /// of the interface
-    pub fn new(builder: Builder, subs: Rc<SubsList>) -> ClientObserver {
+    pub fn new(builder: Builder, subs: Rc<SubscriptionList>) -> ClientObserver {
         let (sender, receiver) = glib::MainContext::channel(glib::PRIORITY_DEFAULT);
         let internal = InternalObserver::new(builder, subs);
         receiver.attach(None, move |message: Message| {
@@ -52,7 +52,7 @@ impl ClientObserver {
 /// the interface's Builder and runs in the main GKT thread
 struct InternalObserver {
     builder: Builder,
-    subs: Rc<SubsList>,
+    subs: Rc<SubscriptionList>,
 }
 
 impl InterfaceUtils for InternalObserver {
@@ -64,7 +64,7 @@ impl InterfaceUtils for InternalObserver {
 impl InternalObserver {
     /// Creates a new InternalObserver with the given
     /// interface builder
-    fn new(builder: Builder, subs: Rc<SubsList>) -> Self {
+    fn new(builder: Builder, subs: Rc<SubscriptionList>) -> Self {
         Self { builder, subs }
     }
 
@@ -161,12 +161,16 @@ impl InternalObserver {
     /// about the result of the unsubscribe operation
     fn unsubscribed(&self, result: Result<Unsuback, ClientError>) {
         self.sensitive(true);
-        if let Err(e) = result {
-            self.icon(Icon::Error);
-            self.status_message(&format!("No se pudo desuscribir: {}", e));
-        } else {
-            self.icon(Icon::Ok);
-            self.status_message("Desuscrito");
+        match result {
+            Ok(unsuback) => {
+                self.icon(Icon::Ok);
+                self.status_message("Desuscrito");
+                self.subs.remove_subs(unsuback.topics());
+            }
+            Err(error) => {
+                self.icon(Icon::Error);
+                self.status_message(&format!("No se pudo desuscribir: {}", error));
+            }
         }
     }
 }

@@ -2,16 +2,12 @@ use std::convert::TryFrom;
 use std::{rc::Rc, sync::Mutex};
 
 mod client_observer;
-mod subs_list;
+mod subscription_list;
 mod utils;
 
-use crate::{
-    client::ClientError,
-    client_packets::{ConnectBuilder, Subscribe},
-    interface::client_observer::ClientObserver,
-};
+use crate::interface::client_observer::ClientObserver;
 
-use crate::client::Client;
+use crate::client::{Client, ClientError};
 
 use gtk::prelude::{ComboBoxTextExt, SwitchExt};
 use gtk::{
@@ -19,14 +15,15 @@ use gtk::{
     Builder, Button, Entry, Switch, TextBuffer,
 };
 use gtk::{ComboBoxText, ListBox};
+use packets::connect::{Connect, ConnectBuilder, LastWill};
 use packets::topic::Topic;
-use packets::utf8::Field;
 
-use crate::client_packets::{Connect, LastWill, Unsubscribe};
 use packets::publish::Publish;
 use packets::qos::QoSLevel;
+use packets::subscribe::Subscribe;
+use packets::unsubscribe::Unsubscribe;
 
-use self::subs_list::SubsList;
+use self::subscription_list::SubscriptionList;
 use self::utils::{Icon, InterfaceUtils};
 
 /// Controller for the client. It both creates the
@@ -35,7 +32,6 @@ use self::utils::{Icon, InterfaceUtils};
 pub struct Controller {
     builder: Builder,
     client: Mutex<Option<Client<ClientObserver>>>,
-    subs: Rc<SubsList>,
 }
 
 impl InterfaceUtils for Controller {
@@ -48,12 +44,9 @@ impl Controller {
     /// Creates a new Controller with the given
     /// interface builder
     pub fn new(builder: Builder) -> Rc<Self> {
-        let sub_box: ListBox = builder.object("sub_subs").unwrap();
-        let unsub_entry: Entry = builder.object("unsub_top").unwrap();
         let cont = Rc::new(Self {
             builder,
             client: Mutex::new(None),
-            subs: Rc::new(SubsList::new(sub_box, unsub_entry)),
         });
         cont.setup_handlers();
         cont.show_connect_menu();
@@ -126,7 +119,10 @@ impl Controller {
         );
 
         let connect = self._create_connect_packet()?;
-        let observer = ClientObserver::new(self.builder.clone(), self.subs.clone());
+        let sub_box: ListBox = self.builder.object("sub_subs").unwrap();
+        let unsub_entry: Entry = self.builder.object("unsub_top").unwrap();
+        let subs_list = Rc::new(SubscriptionList::new(sub_box, unsub_entry));
+        let observer = ClientObserver::new(self.builder.clone(), subs_list);
         let client = Client::new(&full_addr, observer, connect)?;
 
         self.connection_info(Some(&format!("Conectado a {}", full_addr)));
@@ -179,8 +175,8 @@ impl Controller {
 
         if !last_will_topic.trim().is_empty() {
             let last_will = LastWill::new(
-                Field::new_from_string(&last_will_topic)?,
-                Field::new_from_string(&last_will_msg)?,
+                last_will_topic,
+                last_will_msg,
                 QoSLevel::try_from(last_will_qos)?,
                 last_will_retain,
             );
@@ -195,6 +191,7 @@ impl Controller {
     /// Tries to connect the client to the
     /// server with the given inputs, and sets
     /// up the ClientObserver
+    #[doc(hidden)]
     fn handle_connect(&self, _: &Button) {
         self.icon(Icon::Loading);
         self.status_message("Conectando...");
@@ -219,7 +216,7 @@ impl Controller {
 
         let topic = Topic::new(&topic_entry.text().to_string(), QoSLevel::try_from(qos)?)?;
 
-        let packet = Subscribe::new(vec![topic], 0);
+        let packet = Subscribe::new(vec![topic], rand::random());
 
         if let Some(client) = self.client.lock()?.as_mut() {
             client.subscribe(packet)?;
@@ -234,6 +231,7 @@ impl Controller {
     /// Tries to build a subscribe packet
     /// and send it to the server with the
     /// given inputs
+    #[doc(hidden)]
     fn handle_subscribe(&self, _: &Button) {
         self.sensitive(false);
         self.status_message("Suscribiendose...");
@@ -289,6 +287,7 @@ impl Controller {
     /// Tries to build a publish packet
     /// and send it to the server with the
     /// given inputs
+    #[doc(hidden)]
     fn handle_publish(&self, _: &Button) {
         self.sensitive(false);
         self.status_message("Publicando...");
@@ -325,11 +324,10 @@ impl Controller {
     #[doc(hidden)]
     fn _unsubscribe(&self) -> Result<(), ClientError> {
         let topic_entry: Entry = self.builder.object("unsub_top").unwrap();
-        let text = vec![topic_entry.text().to_string()];
-
-        // TODO: ver que hacer con el unsuback, esto deberíá ir en el observer
-        self.subs.remove_subs(&text);
-
+        let text = vec![Topic::new(
+            &topic_entry.text().to_string(),
+            QoSLevel::QoSLevel0,
+        )?];
         let unsubscribe = Unsubscribe::new(rand::random(), text)?;
         if let Some(client) = self.client.lock()?.as_mut() {
             client.unsubscribe(unsubscribe)?;
@@ -342,7 +340,7 @@ impl Controller {
     /// Listener of the Unsubscribe button
     /// Tries to build an unsubscribe packet
     /// and send it to the server with the
-    /// given inputsunwrap
+    /// given inputs
     fn handle_unsubscribe(&self, _: &Button) {
         self.sensitive(false);
         self.status_message("Desuscribiendose...");

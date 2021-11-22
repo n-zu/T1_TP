@@ -18,7 +18,7 @@ fn main() {
     });
 
     app.connect_activate(move |app| {
-        setup::load_main_window(app);
+        setup::build_ui(app);
     });
 
     app.run();
