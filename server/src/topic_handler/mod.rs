@@ -27,6 +27,7 @@ struct SubscriptionData {
 }
 
 const SEP: &str = "/";
+const EMPTY: &str = "";
 
 pub struct TopicHandler {
     root: Topic,
@@ -142,10 +143,15 @@ fn pub_rec(
             }
         }
         None => {
-            // Publish to all subscribers of topic
-            let subtopics = node.subtopics.read()?;
-            if let Some(subtopic) = subtopics.get(topic_name) {
-                let subscribers = subtopic.subscribers.read()?;
+            if topic_name != EMPTY {
+                let subtopics = node.subtopics.read()?;
+
+                if let Some(subtopic) = subtopics.get(topic_name) {
+                    pub_rec(subtopic, EMPTY, sender, packet)?;
+                }
+
+            } else {
+                let subscribers = node.subscribers.read()?;
 
                 for (id, data) in subscribers.iter() {
                     let mut to_be_sent = packet.clone();
@@ -155,8 +161,9 @@ fn pub_rec(
                         packet: to_be_sent,
                     })?;
                 }
+
                 // TODO: Refactor this
-                let subscribers = subtopic.multilevel_subscribers.read()?;
+                let subscribers = node.multilevel_subscribers.read()?;
                 for (id, data) in subscribers.iter() {
                     let mut to_be_sent = packet.clone();
                     to_be_sent.set_max_qos(data.qos);
@@ -165,9 +172,6 @@ fn pub_rec(
                         packet: to_be_sent,
                     })?;
                 }
-            } else {
-                // TODO: Agregar tratamiento para topic not found
-                // return Err(TopicHandlerError::new("Topic Not Found"));
             }
         }
     }
@@ -202,28 +206,31 @@ fn subscribe_rec(
             }
         }
         None => {
-            // Wildcard MultiLevel (#)
-            if topic_name == "#" {
-                let mut multilevel_subscribers = node.multilevel_subscribers.write()?;
-                multilevel_subscribers.insert(user_id.to_string(), sub_data);
-                return Ok(());
-            }
+            if topic_name != EMPTY {
+                // Wildcard MultiLevel (#)
+                if topic_name == "#" {
+                    let mut multilevel_subscribers = node.multilevel_subscribers.write()?;
+                    multilevel_subscribers.insert(user_id.to_string(), sub_data);
+                    return Ok(());
+                }
 
-            let mut subtopics = node.subtopics.read()?;
+                let mut subtopics = node.subtopics.read()?;
+                // Insercion de nuevo nodo
+                // TODO: Refactor - este codigo se repite
+                if subtopics.get(topic_name).is_none() {
+                    drop(subtopics); //lo tengo que pedir en modo write y si esta leyendo no va a poder
+                    let mut wr_subtopics = node.subtopics.write()?;
+                    let subtopic = Topic::new();
+                    wr_subtopics.insert(topic_name.to_string(), subtopic);
+                    drop(wr_subtopics);
+                    subtopics = node.subtopics.read()?;
+                }
 
-            // Insercion de nuevo nodo
-            if subtopics.get(topic_name).is_none() {
-                drop(subtopics); //lo tengo que pedir en modo write y si esta leyendo no va a poder
-                let mut wr_subtopics = node.subtopics.write()?;
-                let subtopic = Topic::new();
-                wr_subtopics.insert(topic_name.to_string(), subtopic);
-                drop(wr_subtopics);
-                subtopics = node.subtopics.read()?;
-            }
-
-            if let Some(subtopic) = subtopics.get(topic_name) {
-                subtopic
-                    .subscribers
+                if let Some(subtopic) = subtopics.get(topic_name) {
+                    subscribe_rec(subtopic, EMPTY, user_id, sub_data)?;
+                }
+            } else {
+                node.subscribers
                     .write()?
                     .insert(user_id.to_string(), sub_data);
             }
@@ -244,10 +251,16 @@ fn unsubscribe_rec(node: &Topic, topic_name: &str, user_id: &str) -> Result<(), 
             }
         }
         None => {
-            let subtopics = node.subtopics.read()?;
+            if topic_name != EMPTY {
+                // ANTE ULTIMA HOJA
+                let subtopics = node.subtopics.read()?;
 
-            if let Some(subtopic) = subtopics.get(topic_name) {
-                subtopic.subscribers.write()?.remove(user_id);
+                if let Some(subtopic) = subtopics.get(topic_name) {
+                    unsubscribe_rec(subtopic, "", user_id)?;
+                }
+            } else {
+                // ULTIMA HOJA
+                node.subscribers.write()?.remove(user_id);
             }
         }
     }
@@ -439,6 +452,26 @@ mod tests {
         handler.subscribe(&subscribe, "user").unwrap();
         handler.publish(&first_publish, sender.clone()).unwrap();
         handler.unsubscribe(unsubscribe, "user").unwrap();
+        handler.publish(&second_publish, sender).unwrap();
+        let message = receiver.recv().unwrap();
+        assert_eq!(message.client_id, "user");
+        assert_eq!(message.packet.topic_name(), "topic/auto/casa");
+        // El canal se cerro sin enviar el segundo mensaje
+        assert!(receiver.recv().is_err());
+    }
+
+    #[test]
+    fn test_removed_stop_sending_messages_to_client() {
+        let subscribe = build_subscribe("topic/auto/casa");
+        let first_publish = build_publish("topic/auto/casa", "unMensaje");
+        let second_publish = build_publish("topic/auto/casa", "otroMensaje");
+        let handler = super::TopicHandler::new();
+
+        let (sender, receiver) = channel();
+
+        handler.subscribe(&subscribe, "user").unwrap();
+        handler.publish(&first_publish, sender.clone()).unwrap();
+        handler.remove_client("user").unwrap();
         handler.publish(&second_publish, sender).unwrap();
         let message = receiver.recv().unwrap();
         assert_eq!(message.client_id, "user");
