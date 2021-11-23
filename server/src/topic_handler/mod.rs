@@ -1,6 +1,10 @@
 #![allow(dead_code)]
 
-use std::{collections::HashMap, fmt::Debug, sync::{mpsc::Sender, RwLock}};
+use std::{
+    collections::HashMap,
+    fmt::Debug,
+    sync::{mpsc::Sender, RwLock},
+};
 
 pub mod topic_handler_error;
 
@@ -118,9 +122,8 @@ fn pub_rec(
     sender: Sender<Message>,
     packet: &Publish,
 ) -> Result<(), TopicHandlerError> {
-
     let mlsubs = node.multilevel_subscribers.read().unwrap();
-    for( id, data ) in mlsubs.iter() {
+    for (id, data) in mlsubs.iter() {
         let mut to_be_sent = packet.clone();
         to_be_sent.set_max_qos(data.qos);
         sender.send(Message {
@@ -139,12 +142,11 @@ fn pub_rec(
             }
         }
         None => {
-
             // Publish to all subscribers of topic
             let subtopics = node.subtopics.read()?;
             if let Some(subtopic) = subtopics.get(topic_name) {
                 let subscribers = subtopic.subscribers.read()?;
-                
+
                 for (id, data) in subscribers.iter() {
                     let mut to_be_sent = packet.clone();
                     to_be_sent.set_max_qos(data.qos);
@@ -163,7 +165,7 @@ fn pub_rec(
                         packet: to_be_sent,
                     })?;
                 }
-            }else{
+            } else {
                 // TODO: Agregar tratamiento para topic not found
                 // return Err(TopicHandlerError::new("Topic Not Found"));
             }
@@ -200,7 +202,6 @@ fn subscribe_rec(
             }
         }
         None => {
-
             // Wildcard MultiLevel (#)
             if topic_name == "#" {
                 let mut multilevel_subscribers = node.multilevel_subscribers.write()?;
@@ -221,11 +222,11 @@ fn subscribe_rec(
             }
 
             if let Some(subtopic) = subtopics.get(topic_name) {
-                subtopic.subscribers
+                subtopic
+                    .subscribers
                     .write()?
                     .insert(user_id.to_string(), sub_data);
             }
-
         }
     }
 
@@ -495,5 +496,4 @@ mod tests {
         assert_eq!(message.client_id, "user");
         assert_eq!(message.packet.topic_name(), "topic/subtopic");
     }
-
 }
