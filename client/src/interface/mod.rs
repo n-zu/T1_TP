@@ -314,6 +314,7 @@ impl Controller {
             self.icon(Icon::Error);
             self.status_message(&format!("Error desconectando: {}", err));
         } else {
+            self.reset_ui();
             self.show_connect_menu();
             self.icon(Icon::Ok);
             self.status_message("Desconectado");
@@ -350,5 +351,23 @@ impl Controller {
             self.status_message(&format!("No se pudo desuscribir: {}", e));
             self.icon(Icon::Error);
         }
+    }
+
+    fn reset_ui(&self) {
+        self.reset_connection_box();
+        //self.reset_connected_box();
+    }
+
+    fn reset_connection_box(&self) {
+        self.set_text_to_entry_box("con_host", "localhost");
+        self.set_text_to_entry_box("con_port", "1883");
+        self.set_text_to_entry_box("con_cli", "default_client");
+        self.set_text_to_entry_box("con_usr", "");
+        self.set_text_to_entry_box("con_psw", "");
+        self.set_text_to_entry_box("con_ka", "0");
+        self.set_text_to_entry_box("con_lw_top", "");
+        self.set_text_to_entry_box("con_lw_msg", "");
+        self.set_state_to_switch("con_cs", false);
+        self.set_state_to_switch("con_lw_ret", false);
     }
 }

@@ -1,7 +1,7 @@
 use gtk::{
-    prelude::{BuilderExtManual, DialogExt, LabelExt, StackExt, WidgetExt},
-    Box, Builder, Button, ButtonsType, DialogFlags, Label, MessageDialog, MessageType, Stack,
-    Window,
+    prelude::{BuilderExtManual, DialogExt, EntryExt, LabelExt, StackExt, SwitchExt, WidgetExt},
+    Box, Builder, Button, ButtonsType, DialogFlags, Entry, Label, MessageDialog, MessageType,
+    Stack, Switch, Window,
 };
 
 /// Icons of the status bar
@@ -73,6 +73,18 @@ pub(crate) trait InterfaceUtils {
         } else {
             info_box.set_visible(false);
         }
+    }
+
+    /// Sets a given text to a Entry label
+    fn set_text_to_entry_box(&self, box_id: &str, text: &str) {
+        let entry: Entry = self.builder().object(box_id).unwrap();
+        entry.set_text(text);
+    }
+
+    /// Sets a given state to a Switch label
+    fn set_state_to_switch(&self, switch_id: &str, new_state: bool) {
+        let entry: Switch = self.builder().object(switch_id).unwrap();
+        entry.set_active(new_state);
     }
 }
 

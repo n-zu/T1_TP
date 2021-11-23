@@ -153,7 +153,7 @@ impl InternalObserver {
         } else {
             self.show_content_menu();
             self.icon(Icon::Ok);
-            self.status_message("Connected");
+            self.status_message("Conectado");
         }
     }
 
