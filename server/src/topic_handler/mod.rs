@@ -36,10 +36,12 @@ struct Topic {
 
 impl Debug for Topic {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "Topic\n\tsubtopics: {:?}\n\tsubscribers: {:?}\n\tmultilevel_subscribers: {:?}\n\n",
+        write!(f, "Topic\n\tsubtopics: {:?}\n\tsubscribers: {:?}\n\tmultilevel_subscribers: {:?}\nsubtopic details: {:?}\n\n",
                 self.subtopics.read().unwrap().keys(),
                 self.subscribers.read().unwrap(),
-                self.multilevel_subscribers.read().unwrap())
+                self.multilevel_subscribers.read().unwrap(),
+                self.subtopics.read().unwrap()
+            )
     }
 }
 
@@ -117,6 +119,8 @@ fn pub_rec(
     packet: &Publish,
 ) -> Result<(), TopicHandlerError> {
 
+    println!("topic_name: {:?}", topic_name);
+
     match topic_name.split_once(SEP) {
         // Aca se le puede agregar tratamiento especial para *, #, etc.
         // Uso un HashMap para no preocuparse por agregar el mismo cliente mas de una vez
@@ -139,7 +143,8 @@ fn pub_rec(
                     })?;
                 }
             }else{
-                return Err(TopicHandlerError::new("Topic Not Found"));
+                // TODO: Agregar tratamiento para topic not found
+                // return Err(TopicHandlerError::new("Topic Not Found"));
             }
         }
     }
@@ -194,7 +199,6 @@ fn subscribe_rec(
                 subtopics = node.subtopics.read()?;
             }
 
-            // En principio siempre tiene que entrar a este if, pero lo pongo para no unwrappear
             if let Some(subtopic) = subtopics.get(topic_name) {
                 subtopic.subscribers
                     .write()?
