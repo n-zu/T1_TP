@@ -24,7 +24,7 @@ impl Error for TopicHandlerError {
 }
 
 impl TopicHandlerError {
-    fn new(msg: &str) -> TopicHandlerError {
+    pub fn new(msg: &str) -> TopicHandlerError {
         TopicHandlerError {
             msg: msg.to_string(),
         }

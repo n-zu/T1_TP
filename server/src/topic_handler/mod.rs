@@ -1,9 +1,6 @@
 #![allow(dead_code)]
 
-use std::{
-    collections::HashMap,
-    sync::{mpsc::Sender, RwLock},
-};
+use std::{collections::HashMap, fmt::Debug, sync::{mpsc::Sender, RwLock}};
 
 pub mod topic_handler_error;
 
@@ -20,6 +17,7 @@ pub struct Message {
     pub packet: Publish,
 }
 
+#[derive(Debug)]
 struct SubscriptionData {
     qos: QoSLevel,
 }
@@ -33,6 +31,16 @@ pub struct TopicHandler {
 struct Topic {
     subtopics: RwLock<Subtopics>,
     subscribers: RwLock<Subscribers>,
+    multilevel_subscribers: RwLock<Subscribers>,
+}
+
+impl Debug for Topic {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "Topic\n\tsubtopics: {:?}\n\tsubscribers: {:?}\n\tmultilevel_subscribers: {:?}\n\n",
+                self.subtopics.read().unwrap().keys(),
+                self.subscribers.read().unwrap(),
+                self.multilevel_subscribers.read().unwrap())
+    }
 }
 
 impl Topic {
@@ -40,6 +48,7 @@ impl Topic {
         Topic {
             subtopics: RwLock::new(HashMap::new()),
             subscribers: RwLock::new(HashMap::new()),
+            multilevel_subscribers: RwLock::new(HashMap::new()),
         }
     }
 }
@@ -107,6 +116,7 @@ fn pub_rec(
     sender: Sender<Message>,
     packet: &Publish,
 ) -> Result<(), TopicHandlerError> {
+
     match topic_name.split_once(SEP) {
         // Aca se le puede agregar tratamiento especial para *, #, etc.
         // Uso un HashMap para no preocuparse por agregar el mismo cliente mas de una vez
@@ -117,14 +127,19 @@ fn pub_rec(
             }
         }
         None => {
-            let subscribers = node.subscribers.read()?;
-            for (id, data) in subscribers.iter() {
-                let mut to_be_sent = packet.clone();
-                to_be_sent.set_max_qos(data.qos);
-                sender.send(Message {
-                    client_id: id.to_string(),
-                    packet: to_be_sent,
-                })?;
+            let subtopics = node.subtopics.read()?;
+            if let Some(subtopic) = subtopics.get(topic_name) {
+                let subscribers = subtopic.subscribers.read()?;
+                for (id, data) in subscribers.iter() {
+                    let mut to_be_sent = packet.clone();
+                    to_be_sent.set_max_qos(data.qos);
+                    sender.send(Message {
+                        client_id: id.to_string(),
+                        packet: to_be_sent,
+                    })?;
+                }
+            }else{
+                return Err(TopicHandlerError::new("Topic Not Found"));
             }
         }
     }
@@ -159,9 +174,33 @@ fn subscribe_rec(
             }
         }
         None => {
-            node.subscribers
-                .write()?
-                .insert(user_id.to_string(), sub_data);
+
+            // Wildcard MultiLevel (#)
+            if topic_name == "#" {
+                let mut multilevel_subscribers = node.multilevel_subscribers.write()?;
+                multilevel_subscribers.insert(user_id.to_string(), sub_data);
+                return Ok(());
+            }
+
+            let mut subtopics = node.subtopics.read()?;
+
+            // Insercion de nuevo nodo
+            if subtopics.get(topic_name).is_none() {
+                drop(subtopics); //lo tengo que pedir en modo write y si esta leyendo no va a poder
+                let mut wr_subtopics = node.subtopics.write()?;
+                let subtopic = Topic::new();
+                wr_subtopics.insert(topic_name.to_string(), subtopic);
+                drop(wr_subtopics);
+                subtopics = node.subtopics.read()?;
+            }
+
+            // En principio siempre tiene que entrar a este if, pero lo pongo para no unwrappear
+            if let Some(subtopic) = subtopics.get(topic_name) {
+                subtopic.subscribers
+                    .write()?
+                    .insert(user_id.to_string(), sub_data);
+            }
+
         }
     }
 
@@ -399,4 +438,33 @@ mod tests {
         assert_eq!(second_message.client_id, "user");
         assert_eq!(second_message.packet.topic_name(), "topic/auto/casa");
     }
+
+    #[test]
+    fn test_doesnt_publish_to_siblings() {
+        let subscribe = build_subscribe("topic/notsubtopic");
+        let publish = build_publish("topic/subtopic", "unMensaje");
+        let handler = super::TopicHandler::new();
+        let (sender, receiver) = channel();
+
+        handler.subscribe(&subscribe, "user").unwrap();
+        handler.publish(&publish, sender).unwrap();
+
+        assert!(receiver.recv().is_err());
+    }
+
+    #[test]
+    fn test_multilevel_wildcard_one_subscribe_one_publish() {
+        let subscribe = build_subscribe("topic/#");
+        let publish = build_publish("topic/subtopic", "unMensaje");
+        let handler = super::TopicHandler::new();
+        let (sender, receiver) = channel();
+
+        handler.subscribe(&subscribe, "user").unwrap();
+        handler.publish(&publish, sender).unwrap();
+
+        let message = receiver.recv().unwrap();
+        assert_eq!(message.client_id, "user");
+        assert_eq!(message.packet.topic_name(), "topic/subtopic");
+    }
+
 }
