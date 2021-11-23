@@ -119,7 +119,15 @@ fn pub_rec(
     packet: &Publish,
 ) -> Result<(), TopicHandlerError> {
 
-    println!("topic_name: {:?}", topic_name);
+    let mlsubs = node.multilevel_subscribers.read().unwrap();
+    for( id, data ) in mlsubs.iter() {
+        let mut to_be_sent = packet.clone();
+        to_be_sent.set_max_qos(data.qos);
+        sender.send(Message {
+            client_id: id.to_string(),
+            packet: to_be_sent,
+        })?;
+    }
 
     match topic_name.split_once(SEP) {
         // Aca se le puede agregar tratamiento especial para *, #, etc.
@@ -131,9 +139,22 @@ fn pub_rec(
             }
         }
         None => {
+
+            // Publish to all subscribers of topic
             let subtopics = node.subtopics.read()?;
             if let Some(subtopic) = subtopics.get(topic_name) {
                 let subscribers = subtopic.subscribers.read()?;
+                
+                for (id, data) in subscribers.iter() {
+                    let mut to_be_sent = packet.clone();
+                    to_be_sent.set_max_qos(data.qos);
+                    sender.send(Message {
+                        client_id: id.to_string(),
+                        packet: to_be_sent,
+                    })?;
+                }
+                // TODO: Refactor this
+                let subscribers = subtopic.multilevel_subscribers.read()?;
                 for (id, data) in subscribers.iter() {
                     let mut to_be_sent = packet.clone();
                     to_be_sent.set_max_qos(data.qos);
@@ -222,7 +243,11 @@ fn unsubscribe_rec(node: &Topic, topic_name: &str, user_id: &str) -> Result<(), 
             }
         }
         None => {
-            node.subscribers.write()?.remove(user_id);
+            let subtopics = node.subtopics.read()?;
+
+            if let Some(subtopic) = subtopics.get(topic_name) {
+                subtopic.subscribers.write()?.remove(user_id);
+            }
         }
     }
 
