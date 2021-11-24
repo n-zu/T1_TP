@@ -10,6 +10,7 @@ use crate::interface::client_observer::ClientObserver;
 use crate::client::{Client, ClientError};
 
 use gtk::prelude::{ComboBoxTextExt, SwitchExt};
+
 use gtk::{
     prelude::{BuilderExtManual, ButtonExt, EntryExt, TextBufferExt},
     Builder, Button, Entry, Switch, TextBuffer,
@@ -309,6 +310,7 @@ impl Controller {
     /// Tries to disconnect the client and
     /// allow the user to connect to another
     /// server
+    #[doc(hidden)]
     fn handle_disconnect(&self, _: &Button) {
         if let Err(err) = self._disconnect() {
             self.icon(Icon::Error);
@@ -342,6 +344,7 @@ impl Controller {
     /// Tries to build an unsubscribe packet
     /// and send it to the server with the
     /// given inputs
+    #[doc(hidden)]
     fn handle_unsubscribe(&self, _: &Button) {
         self.sensitive(false);
         self.status_message("Desuscribiendose...");
@@ -353,12 +356,16 @@ impl Controller {
         }
     }
 
+    /// Resets both connection and connected screen to theirs default state
+    #[doc(hidden)]
     fn reset_ui(&self) {
-        self.reset_connection_box();
-        //self.reset_connected_box();
+        self.reset_connection_screen();
+        self.reset_connected_screen();
     }
 
-    fn reset_connection_box(&self) {
+    /// Resets connection screen its default state
+    #[doc(hidden)]
+    fn reset_connection_screen(&self) {
         self.set_text_to_entry_box("con_host", "localhost");
         self.set_text_to_entry_box("con_port", "1883");
         self.set_text_to_entry_box("con_cli", "default_client");
@@ -367,7 +374,18 @@ impl Controller {
         self.set_text_to_entry_box("con_ka", "0");
         self.set_text_to_entry_box("con_lw_top", "");
         self.set_text_to_entry_box("con_lw_msg", "");
-        self.set_state_to_switch("con_cs", false);
-        self.set_state_to_switch("con_lw_ret", false);
+        self.set_state_to_switch_box("con_cs", false);
+        self.set_state_to_switch_box("con_lw_ret", false);
+    }
+
+    /// Resets connected screen its default state
+    #[doc(hidden)]
+    fn reset_connected_screen(&self) {
+        self.set_text_to_entry_box("pub_top", "top/sub");
+        self.set_state_to_switch_box("pub_ret", false);
+        self.set_text_to_entry_box("sub_top", "top/sub");
+        self.set_text_to_entry_box("unsub_top", "top/sub");
+        self.remove_all_children_from_listbox("sub_subs");
+        self.remove_all_children_from_listbox("sub_msgs");
     }
 }
