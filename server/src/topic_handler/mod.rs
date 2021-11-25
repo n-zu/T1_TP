@@ -60,10 +60,8 @@ fn matches_singlelevel(topic_filter: String, topic_name: String) -> bool {
         if filter_part.to_string() == MULTILEVEL_WILDCARD.to_string() {
             return true;
         } else if filter_part.to_string() == SINGLELEVEL_WILDCARD.to_string() {
-            //println!("plus");
             continue;
         } else if filter_part.to_string() != name[i].to_string() {
-            //println!("{} != {}", filter_part, name[i]);
             return false;
         }
     }
@@ -94,6 +92,18 @@ fn remove_matching_subscriptions(
             singlelevel_subscribers.remove(topic_name);
         }
     };
+}
+#[doc(hidden)]
+fn remove_subscriber(
+    singlelevel_subscribers : &mut Subscriptions,
+    client_id : &str,
+) {
+
+    singlelevel_subscribers.retain( |_,subscribers| {
+        subscribers.remove(client_id);
+        !subscribers.is_empty()
+    });
+
 }
 
 const SEP: &str = "/";
@@ -210,7 +220,7 @@ fn pub_rec(
     set_matching_subscribers(
         multilevel_subscribers,
         topic_name,
-        &node.singlelevel_subscriptions.read().map_err(|_| TopicHandlerError::new("Error writing to singlelevel_subscriptions"))?.clone()
+        &node.singlelevel_subscriptions.read()?.clone()
     );
 
     match topic_name.split_once(SEP) {
@@ -270,8 +280,7 @@ fn subscribe_rec(
                 let topic_filter = topic_name.to_string() + SEP + rest;
                 let mut singlelevel_subscriptions = node
                     .singlelevel_subscriptions
-                    .write()
-                    .map_err(|_| TopicHandlerError::new("Error writing to singlelevel_subscriptions"))?;
+                    .write()?;
                 let singlelevel_subscribers = singlelevel_subscriptions
                     .entry(topic_filter)
                     .or_insert(HashMap::new());
@@ -342,7 +351,7 @@ fn unsubscribe_rec(node: &Topic, topic_name: &str, user_id: &str) -> Result<(), 
 
             if topic_name == SINGLELEVEL_WILDCARD {
                 let topic_filter = topic_name.to_string() + SEP + rest;
-                let mut singlelevel_subscriptions = node.singlelevel_subscriptions.write().map_err(|_| TopicHandlerError::new("Error writing to singlelevel_subscriptions"))?;
+                let mut singlelevel_subscriptions = node.singlelevel_subscriptions.write()?;
                 remove_matching_subscriptions(&mut singlelevel_subscriptions, &topic_filter, user_id);
                 return Ok(()); 
             }
@@ -385,7 +394,12 @@ fn clean_node(node: &Topic) -> Result<(), TopicHandlerError> {
 
     let subtopics_read = node.subtopics.read()?;
     for (sub_topic, topic) in subtopics_read.iter() {
-        if topic.subscribers.read()?.is_empty() && topic.subtopics.read()?.is_empty() {
+        if
+            topic.subscribers.read()?.is_empty() && 
+            topic.subtopics.read()?.is_empty() &&
+            topic.multilevel_subscribers.read()?.is_empty() &&
+            topic.singlelevel_subscriptions.read()?.is_empty()
+        {
             empty_subtopics.push(sub_topic.to_string());
         }
     }
@@ -411,6 +425,9 @@ fn remove_client_rec(node: &Topic, user_id: &str) -> Result<(), TopicHandlerErro
         drop(subs_read);
         node.subscribers.write()?.remove(user_id);
     }
+    node.multilevel_subscribers.write()?.remove(user_id);
+    let mut singlelevel_subscriptions = node.singlelevel_subscriptions.write()?;
+    remove_subscriber( &mut singlelevel_subscriptions, user_id);
 
     // si falla no importa
     let _res = clean_node(node);
@@ -848,6 +865,31 @@ mod tests {
     }
 
     #[test]
+    fn test_singlelevel_wildcard_complex_subscribe_3_publish() {
+        let subscribe = build_subscribe("topic/+/+//leaf");
+        let publish = build_publish("topic/subtopic///leaf", "unMensaje");
+        let handler = super::TopicHandler::new();
+        let (sender, receiver) = channel();
+
+        handler.subscribe(&subscribe, "user").unwrap();
+        handler.publish(&publish, sender.clone()).unwrap();
+        handler.publish(&publish, sender.clone()).unwrap();
+        handler.publish(&publish, sender).unwrap();
+
+        let message = receiver.recv().unwrap();
+        assert_eq!(message.client_id, "user");
+        assert_eq!(message.packet.topic_name(), "topic/subtopic///leaf");
+        let message = receiver.recv().unwrap();
+        assert_eq!(message.client_id, "user");
+        assert_eq!(message.packet.topic_name(), "topic/subtopic///leaf");
+        let message = receiver.recv().unwrap();
+        assert_eq!(message.client_id, "user");
+        assert_eq!(message.packet.topic_name(), "topic/subtopic///leaf");
+
+        assert!(receiver.recv().is_err());
+    }  
+
+    #[test]
     fn test_wildcards_one_subscribe_one_publish() {
         let subscribe = build_subscribe("topic/+/+//#");
         let publish = build_publish("topic/subtopic///leaf//Orangutan", "unMensaje");
@@ -857,6 +899,31 @@ mod tests {
         handler.subscribe(&subscribe, "user").unwrap();
         handler.publish(&publish, sender).unwrap();
 
+        let message = receiver.recv().unwrap();
+        assert_eq!(message.client_id, "user");
+        assert_eq!(message.packet.topic_name(), "topic/subtopic///leaf//Orangutan");
+
+        assert!(receiver.recv().is_err());
+    }
+
+    #[test]
+    fn test_wildcards_one_subscribe_3_publish() {
+        let subscribe = build_subscribe("topic/+/+//#");
+        let publish = build_publish("topic/subtopic///leaf//Orangutan", "unMensaje");
+        let handler = super::TopicHandler::new();
+        let (sender, receiver) = channel();
+
+        handler.subscribe(&subscribe, "user").unwrap();
+        handler.publish(&publish, sender.clone()).unwrap();
+        handler.publish(&publish, sender.clone()).unwrap();
+        handler.publish(&publish, sender).unwrap();
+
+        let message = receiver.recv().unwrap();
+        assert_eq!(message.client_id, "user");
+        assert_eq!(message.packet.topic_name(), "topic/subtopic///leaf//Orangutan");
+        let message = receiver.recv().unwrap();
+        assert_eq!(message.client_id, "user");
+        assert_eq!(message.packet.topic_name(), "topic/subtopic///leaf//Orangutan");
         let message = receiver.recv().unwrap();
         assert_eq!(message.client_id, "user");
         assert_eq!(message.packet.topic_name(), "topic/subtopic///leaf//Orangutan");
@@ -903,6 +970,54 @@ mod tests {
         assert_eq!(message.client_id, "user");
         assert_eq!(message.packet.topic_name(), "topic/subtopic///leaf//Orangutan");
         // El canal se cerro sin enviar el segundo mensaje
+        assert!(receiver.recv().is_err());
+    }
+
+    #[test]
+    fn test_removed_wildcards_stop_sending_messages_to_client() {
+        let subscribe = build_subscribe("topic/+/+//#");
+        let publish = build_publish("topic/subtopic///leaf//Orangutan", "unMensaje");
+        let handler = super::TopicHandler::new();
+        let (sender, receiver) = channel();
+
+        handler.subscribe(&subscribe, "user").unwrap();
+        handler.publish(&publish, sender.clone()).unwrap();
+        handler.remove_client("user").unwrap();
+        handler.publish(&publish, sender.clone()).unwrap();
+        handler.publish(&publish, sender).unwrap();
+
+        let message = receiver.recv().unwrap();
+        assert_eq!(message.client_id, "user");
+        assert_eq!(message.packet.topic_name(), "topic/subtopic///leaf//Orangutan");
+
+        assert!(receiver.recv().is_err());
+    }
+    #[test]
+    fn test_2_clients_wildcard_subscribed_one_removed() {
+        let subscribe = build_subscribe("topic/+/+//#");
+        let publish = build_publish("topic/subtopic///leaf//Orangutan", "unMensaje");
+        let handler = super::TopicHandler::new();
+        let (sender, receiver) = channel();
+
+        handler.subscribe(&subscribe, "user1").unwrap();
+        handler.subscribe(&subscribe, "user2").unwrap();
+
+        handler.publish(&publish, sender.clone()).unwrap();
+
+        let message = receiver.recv().unwrap();
+        assert_eq!(message.packet.topic_name(), "topic/subtopic///leaf//Orangutan");
+        let message = receiver.recv().unwrap();
+        assert_eq!(message.packet.topic_name(), "topic/subtopic///leaf//Orangutan");
+
+
+        handler.remove_client("user1").unwrap();
+
+        handler.publish(&publish, sender).unwrap();
+
+        let message = receiver.recv().unwrap();
+        assert_eq!(message.client_id, "user2");
+        assert_eq!(message.packet.topic_name(), "topic/subtopic///leaf//Orangutan");
+
         assert!(receiver.recv().is_err());
     }
 
