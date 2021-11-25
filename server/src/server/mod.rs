@@ -43,7 +43,7 @@ use crate::{
     topic_handler::{Message, TopicHandler},
 };
 
-use self::server_controller::ServerController;
+pub use self::server_controller::ServerController;
 
 pub type ServerResult<T> = Result<T, ServerError>;
 pub type ClientId = String;
