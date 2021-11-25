@@ -15,7 +15,7 @@ use self::topic_handler_error::TopicHandlerError;
 
 type Subtopics = HashMap<String, Topic>; // key: subtopic name
 type Subscribers = HashMap<String, SubscriptionData>; // key: client_id
-type Subscriptions = HashMap<String, Subscribers>; // key: topic filter
+type Subscriptions = HashMap<String, Subscribers>; // key: topic filter { key: client_id }
 
 pub struct Message {
     pub client_id: String,
@@ -44,12 +44,56 @@ fn set_max_data(subscribers: &mut Subscribers, data: Subscribers) {
     }
 }
 #[doc(hidden)]
+fn matches_singlelevel(topic_filter: String, topic_name: String) -> bool {
+
+    let name = topic_name.split(SEP).collect::<Vec<&str>>();
+    let filter = topic_filter.split(SEP).collect::<Vec<&str>>();
+
+    if filter.len() > name.len() {
+        return false;
+    }
+    if filter.len() < name.len() && filter[filter.len() - 1] != MULTILEVEL_WILDCARD {
+        return false;
+    }
+
+    for (i, filter_part) in filter.iter().enumerate() {
+        if filter_part.to_string() == MULTILEVEL_WILDCARD.to_string() {
+            return true;
+        } else if filter_part.to_string() == SINGLELEVEL_WILDCARD.to_string() {
+            //println!("plus");
+            continue;
+        } else if filter_part.to_string() != name[i].to_string() {
+            //println!("{} != {}", filter_part, name[i]);
+            return false;
+        }
+    }
+
+    true
+}
+#[doc(hidden)]
 fn set_matching_subscribers(
     singlelevel_subscribers : &mut Subscribers,
     topic_name : &str,
     singlelevel_subscriptions : &Subscriptions,
 ){
-
+    for (topic_filter, subscribers) in singlelevel_subscriptions {
+        if matches_singlelevel(topic_filter.to_string(), topic_name.to_string()) {
+            set_max_data(singlelevel_subscribers, subscribers.clone());
+        }
+    }
+}
+#[doc(hidden)]
+fn remove_matching_subscriptions(
+    singlelevel_subscribers : &mut Subscriptions,
+    topic_name : &str,
+    client_id : &str,
+){
+    if let Some(subscribers) = singlelevel_subscribers.get_mut(topic_name) {
+        subscribers.remove(client_id);
+        if subscribers.is_empty() {
+            singlelevel_subscribers.remove(topic_name);
+        }
+    };
 }
 
 const SEP: &str = "/";
@@ -124,7 +168,6 @@ impl TopicHandler {
             sender,
             packet,
             &mut HashMap::new(),
-            &mut HashMap::new()
         )?;
 
         Ok(())
@@ -160,13 +203,12 @@ fn pub_rec(
     sender: Sender<Message>,
     packet: &Publish,
     multilevel_subscribers: &mut Subscribers,
-    singlelevel_subscribers: &mut Subscribers,
 ) -> Result<(), TopicHandlerError> {
     // Agregar los subscribers multinivel de esta hoja
     let mlsubs = node.multilevel_subscribers.read().unwrap();
     set_max_data(multilevel_subscribers, mlsubs.clone());
     set_matching_subscribers(
-        singlelevel_subscribers,
+        multilevel_subscribers,
         topic_name,
         &node.singlelevel_subscriptions.read().map_err(|_| TopicHandlerError::new("Error writing to singlelevel_subscriptions"))?.clone()
     );
@@ -177,9 +219,9 @@ fn pub_rec(
         Some((topic_name, rest)) => {
             let subtopics = node.subtopics.read()?;
             if let Some(subtopic) = subtopics.get(topic_name) {
-                pub_rec(subtopic, rest, sender, packet, multilevel_subscribers, singlelevel_subscribers)?;
+                pub_rec(subtopic, rest, sender, packet, multilevel_subscribers)?;
             } else if !multilevel_subscribers.is_empty() {
-                pub_rec(&Topic::new(), NO_TOPIC, sender, packet, multilevel_subscribers, singlelevel_subscribers)?;
+                pub_rec(&Topic::new(), NO_TOPIC, sender, packet, multilevel_subscribers)?;
             }
         }
         None => {
@@ -189,9 +231,9 @@ fn pub_rec(
                 let subtopics = node.subtopics.read()?;
 
                 if let Some(subtopic) = subtopics.get(topic_name) {
-                    pub_rec(subtopic, NO_TOPIC, sender, packet, multilevel_subscribers, singlelevel_subscribers)?;
+                    pub_rec(subtopic, NO_TOPIC, sender, packet, multilevel_subscribers)?;
                 } else if !multilevel_subscribers.is_empty() {
-                    pub_rec(&Topic::new(), NO_TOPIC, sender, packet, multilevel_subscribers, singlelevel_subscribers)?;
+                    pub_rec(&Topic::new(), NO_TOPIC, sender, packet, multilevel_subscribers)?;
                 }
             } else {
                 // ULTIIMA HOJA
@@ -225,12 +267,13 @@ fn subscribe_rec(
 
             // Wildcard SingleLevel (+)
             if topic_name == SINGLELEVEL_WILDCARD {
+                let topic_filter = topic_name.to_string() + SEP + rest;
                 let mut singlelevel_subscriptions = node
                     .singlelevel_subscriptions
                     .write()
                     .map_err(|_| TopicHandlerError::new("Error writing to singlelevel_subscriptions"))?;
                 let singlelevel_subscribers = singlelevel_subscriptions
-                    .entry(rest.to_string())
+                    .entry(topic_filter)
                     .or_insert(HashMap::new());
 
                 set_max_datum(singlelevel_subscribers, user_id, sub_data);
@@ -295,6 +338,15 @@ fn unsubscribe_rec(node: &Topic, topic_name: &str, user_id: &str) -> Result<(), 
     match topic_name.split_once(SEP) {
         // Aca se le puede agregar tratamiento especial para *, #, etc.
         Some((topic_name, rest)) => {
+
+
+            if topic_name == SINGLELEVEL_WILDCARD {
+                let topic_filter = topic_name.to_string() + SEP + rest;
+                let mut singlelevel_subscriptions = node.singlelevel_subscriptions.write().map_err(|_| TopicHandlerError::new("Error writing to singlelevel_subscriptions"))?;
+                remove_matching_subscriptions(&mut singlelevel_subscriptions, &topic_filter, user_id);
+                return Ok(()); 
+            }
+
             let subtopics = node.subtopics.read()?;
 
             if let Some(subtopic) = subtopics.get(topic_name) {
@@ -375,6 +427,8 @@ mod tests {
     use packets::traits::MQTTDecoding;
     use packets::unsubscribe::Unsubscribe;
     use packets::{publish::Publish, utf8::Field};
+
+    use crate::topic_handler::matches_singlelevel;
 
     fn build_publish(topic: &str, message: &str) -> Publish {
         let mut bytes = Vec::new();
@@ -744,6 +798,22 @@ mod tests {
     }
 
     #[test]
+    fn test_matches_singlelevel() {
+        // name, filter
+
+        assert!(matches_singlelevel("top".to_string(), "top".to_string()));
+        assert!(matches_singlelevel("top/sub".to_string(), "top/sub".to_string()));
+        assert!(matches_singlelevel("+/sub".to_string(), "top/sub".to_string()));
+        assert!(matches_singlelevel("top/+/leaf".to_string(), "top/sub/leaf".to_string()));
+        assert!(matches_singlelevel("top/#".to_string(), "top/sub/leaf".to_string()));
+        assert!(matches_singlelevel("top/+/+/green".to_string(), "top/sub/leaf/green".to_string()));
+        assert!(matches_singlelevel("top/+/+/#".to_string(), "top/sub/leaf/green".to_string()));
+        assert!(matches_singlelevel("top/+/+/#".to_string(), "top/sub/leaf/green".to_string()));
+        assert!(matches_singlelevel("top/+/+/#".to_string(), "top/sub/leaf/green/#00FF00".to_string()));
+        assert!(matches_singlelevel("top/+//#".to_string(), "top/sub//green/#00FF00".to_string()));
+    }
+
+    #[test]
     fn test_singlelevel_wildcard_one_subscribe_one_publish() {
         let subscribe = build_subscribe("topic/+/leaf");
         let publish = build_publish("topic/subtopic/leaf", "unMensaje");
@@ -759,4 +829,81 @@ mod tests {
 
         assert!(receiver.recv().is_err());
     }
+
+    #[test]
+    fn test_singlelevel_wildcard_complex_subscribe_one_publish() {
+        let subscribe = build_subscribe("topic/+/+//leaf");
+        let publish = build_publish("topic/subtopic///leaf", "unMensaje");
+        let handler = super::TopicHandler::new();
+        let (sender, receiver) = channel();
+
+        handler.subscribe(&subscribe, "user").unwrap();
+        handler.publish(&publish, sender).unwrap();
+
+        let message = receiver.recv().unwrap();
+        assert_eq!(message.client_id, "user");
+        assert_eq!(message.packet.topic_name(), "topic/subtopic///leaf");
+
+        assert!(receiver.recv().is_err());
+    }
+
+    #[test]
+    fn test_wildcards_one_subscribe_one_publish() {
+        let subscribe = build_subscribe("topic/+/+//#");
+        let publish = build_publish("topic/subtopic///leaf//Orangutan", "unMensaje");
+        let handler = super::TopicHandler::new();
+        let (sender, receiver) = channel();
+
+        handler.subscribe(&subscribe, "user").unwrap();
+        handler.publish(&publish, sender).unwrap();
+
+        let message = receiver.recv().unwrap();
+        assert_eq!(message.client_id, "user");
+        assert_eq!(message.packet.topic_name(), "topic/subtopic///leaf//Orangutan");
+
+        assert!(receiver.recv().is_err());
+    }
+
+    #[test]
+    fn test_unsubscribe_singlelevel_stop_sending_messages_to_client() {
+        let subscribe = build_subscribe("topic/+/+//leaf");
+        let unsubscribe = build_unsubscribe("topic/+/+//leaf");
+        let first_publish = build_publish("topic/subtopic///leaf", "unMensaje");
+        let second_publish = build_publish("topic/subtopic///leaf", "otroMensaje");
+        let handler = super::TopicHandler::new();
+
+        let (sender, receiver) = channel();
+
+        handler.subscribe(&subscribe, "user").unwrap();
+        handler.publish(&first_publish, sender.clone()).unwrap();
+        handler.unsubscribe(unsubscribe, "user").unwrap();
+        handler.publish(&second_publish, sender).unwrap();
+        let message = receiver.recv().unwrap();
+        assert_eq!(message.client_id, "user");
+        assert_eq!(message.packet.topic_name(), "topic/subtopic///leaf");
+        // El canal se cerro sin enviar el segundo mensaje
+        assert!(receiver.recv().is_err());
+    }
+
+    #[test]
+    fn test_unsubscribe_wildcards_stop_sending_messages_to_client() {
+        let subscribe = build_subscribe("topic/+/+//#");
+        let unsubscribe = build_unsubscribe("topic/+/+//#");
+        let first_publish = build_publish("topic/subtopic///leaf//Orangutan", "unMensaje");
+        let second_publish = build_publish("topic/subtopic///leaf//Orangutan", "otroMensaje");
+        let handler = super::TopicHandler::new();
+
+        let (sender, receiver) = channel();
+
+        handler.subscribe(&subscribe, "user").unwrap();
+        handler.publish(&first_publish, sender.clone()).unwrap();
+        handler.unsubscribe(unsubscribe, "user").unwrap();
+        handler.publish(&second_publish, sender).unwrap();
+        let message = receiver.recv().unwrap();
+        assert_eq!(message.client_id, "user");
+        assert_eq!(message.packet.topic_name(), "topic/subtopic///leaf//Orangutan");
+        // El canal se cerro sin enviar el segundo mensaje
+        assert!(receiver.recv().is_err());
+    }
+
 }
