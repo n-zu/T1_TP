@@ -1,7 +1,15 @@
-use packets::{connack::Connack, connect::ConnectBuilder, traits::{MQTTDecoding, MQTTEncoding}};
+use packets::{
+    connack::Connack,
+    connect::ConnectBuilder,
+    traits::{MQTTDecoding, MQTTEncoding},
+};
 use rand::Rng;
 use server::*;
-use std::{io::{Cursor, Read, Write}, net::TcpStream};
+use std::{
+    io::{Cursor, Read, Write},
+    net::TcpStream,
+    time::Duration,
+};
 
 pub fn start_server() -> (ServerController, u32) {
     let mut port = random_port();
@@ -24,6 +32,7 @@ fn random_port() -> u32 {
     rand::thread_rng().gen_range(49152..65536)
 }
 
+// FIXME: por alguna razón, no escribe los logs a la ruta dada
 fn build_config(port: u32) -> Config {
     let cursor = Cursor::new(format!(
         "port={}
@@ -37,15 +46,26 @@ fn build_config(port: u32) -> Config {
     Config::new_from_file(cursor).unwrap()
 }
 
-pub fn connect_client(keep_alive: u16, clean_session: bool, port: u32, read_connack: bool) -> TcpStream {
+pub fn connect_client(
+    keep_alive: u16,
+    clean_session: bool,
+    port: u32,
+    read_connack: bool,
+) -> TcpStream {
     let mut stream = TcpStream::connect(format!("localhost:{}", port)).unwrap();
+
+    // Los tests no deberían esperar más de 30 segundos, se configura
+    // esto así no se bloquea la ejecucióñ de los tests en un caso que falle
+    stream
+        .set_read_timeout(Some(Duration::from_secs(30)))
+        .unwrap();
 
     let mut connect_builder = ConnectBuilder::new("id", keep_alive, clean_session).unwrap();
     connect_builder = connect_builder.user_name("user").unwrap();
     connect_builder = connect_builder.password("pass").unwrap();
     let connect = connect_builder.build().unwrap();
     stream.write_all(&connect.encode().unwrap()).unwrap();
-    
+
     if read_connack {
         let mut control = [0u8];
         stream.read_exact(&mut control).unwrap();
