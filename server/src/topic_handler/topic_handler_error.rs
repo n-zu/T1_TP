@@ -4,7 +4,7 @@ use std::{
     sync::{mpsc::SendError, PoisonError, RwLockReadGuard, RwLockWriteGuard},
 };
 
-use super::{Message, Subscribers, Subtopics};
+use super::{Message, Subtopics, Subscribers, Subscriptions};
 
 #[derive(Debug)]
 pub struct TopicHandlerError {
@@ -45,6 +45,12 @@ impl From<PoisonError<RwLockReadGuard<'_, Subtopics>>> for TopicHandlerError {
     }
 }
 
+impl From<PoisonError<RwLockReadGuard<'_, Subscriptions>>> for TopicHandlerError {
+    fn from(err: PoisonError<RwLockReadGuard<Subscriptions>>) -> TopicHandlerError {
+        TopicHandlerError::new(&format!("{} ({})", DEFAULT_MSG, err))
+    }
+}
+
 impl From<PoisonError<RwLockWriteGuard<'_, Subscribers>>> for TopicHandlerError {
     fn from(err: PoisonError<RwLockWriteGuard<Subscribers>>) -> TopicHandlerError {
         TopicHandlerError::new(&format!("{} ({})", DEFAULT_MSG, err))
@@ -53,6 +59,12 @@ impl From<PoisonError<RwLockWriteGuard<'_, Subscribers>>> for TopicHandlerError 
 
 impl From<PoisonError<RwLockWriteGuard<'_, Subtopics>>> for TopicHandlerError {
     fn from(err: PoisonError<RwLockWriteGuard<Subtopics>>) -> TopicHandlerError {
+        TopicHandlerError::new(&format!("{} ({})", DEFAULT_MSG, err))
+    }
+}
+
+impl From<PoisonError<RwLockWriteGuard<'_, Subscriptions>>> for TopicHandlerError {
+    fn from(err: PoisonError<RwLockWriteGuard<Subscriptions>>) -> TopicHandlerError {
         TopicHandlerError::new(&format!("{} ({})", DEFAULT_MSG, err))
     }
 }
