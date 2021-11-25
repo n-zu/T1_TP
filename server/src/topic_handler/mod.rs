@@ -110,6 +110,7 @@ const SEP: &str = "/";
 const NO_TOPIC: &str = "# NO_TOPIC #"; // This is mqtt invalid, no packet should have this topic filter
 const MULTILEVEL_WILDCARD: &str = "#";
 const SINGLELEVEL_WILDCARD: &str = "+";
+const UNMATCH_WILDCARD: &str = "$";
 
 pub struct TopicHandler {
     root: Topic,
@@ -178,6 +179,7 @@ impl TopicHandler {
             sender,
             packet,
             &mut HashMap::new(),
+            true
         )?;
 
         Ok(())
@@ -213,15 +215,25 @@ fn pub_rec(
     sender: Sender<Message>,
     packet: &Publish,
     multilevel_subscribers: &mut Subscribers,
+    is_root: bool,
 ) -> Result<(), TopicHandlerError> {
-    // Agregar los subscribers multinivel de esta hoja
-    let mlsubs = node.multilevel_subscribers.read().unwrap();
-    set_max_data(multilevel_subscribers, mlsubs.clone());
-    set_matching_subscribers(
-        multilevel_subscribers,
-        topic_name,
-        &node.singlelevel_subscriptions.read()?.clone()
-    );
+
+    if is_root &&
+        topic_name.len() > 0 &&
+        topic_name.starts_with(UNMATCH_WILDCARD)
+    {
+        multilevel_subscribers.clear();
+    } else {
+        // Agregar los subscribers multinivel de esta hoja
+        let mlsubs = node.multilevel_subscribers.read().unwrap();
+        set_max_data(multilevel_subscribers, mlsubs.clone());
+        set_matching_subscribers(
+            multilevel_subscribers,
+            topic_name,
+            &node.singlelevel_subscriptions.read()?.clone()
+        );
+    }
+    
 
     match topic_name.split_once(SEP) {
         // Aca se le puede agregar tratamiento especial para *, #, etc.
@@ -229,9 +241,9 @@ fn pub_rec(
         Some((topic_name, rest)) => {
             let subtopics = node.subtopics.read()?;
             if let Some(subtopic) = subtopics.get(topic_name) {
-                pub_rec(subtopic, rest, sender, packet, multilevel_subscribers)?;
+                pub_rec(subtopic, rest, sender, packet, multilevel_subscribers, false)?;
             } else if !multilevel_subscribers.is_empty() {
-                pub_rec(&Topic::new(), NO_TOPIC, sender, packet, multilevel_subscribers)?;
+                pub_rec(&Topic::new(), NO_TOPIC, sender, packet, multilevel_subscribers, false)?;
             }
         }
         None => {
@@ -241,9 +253,9 @@ fn pub_rec(
                 let subtopics = node.subtopics.read()?;
 
                 if let Some(subtopic) = subtopics.get(topic_name) {
-                    pub_rec(subtopic, NO_TOPIC, sender, packet, multilevel_subscribers)?;
+                    pub_rec(subtopic, NO_TOPIC, sender, packet, multilevel_subscribers, false)?;
                 } else if !multilevel_subscribers.is_empty() {
-                    pub_rec(&Topic::new(), NO_TOPIC, sender, packet, multilevel_subscribers)?;
+                    pub_rec(&Topic::new(), NO_TOPIC, sender, packet, multilevel_subscribers, false)?;
                 }
             } else {
                 // ULTIIMA HOJA
@@ -1017,6 +1029,55 @@ mod tests {
         let message = receiver.recv().unwrap();
         assert_eq!(message.client_id, "user2");
         assert_eq!(message.packet.topic_name(), "topic/subtopic///leaf//Orangutan");
+
+        assert!(receiver.recv().is_err());
+    }
+
+    #[test]
+    fn test_topic_starting_with_dolar_sign_recieve () {
+        let subscribe = build_subscribe("$SYS/info");
+        let publish = build_publish("$SYS/info", "ERROR");
+
+        let handler = super::TopicHandler::new();
+        let (sender, receiver) = channel();
+
+        handler.subscribe(&subscribe, "admin").unwrap();
+
+        handler.publish(&publish, sender).unwrap();
+
+        let message = receiver.recv().unwrap();
+        assert_eq!(message.client_id, "admin");
+        assert_eq!(message.packet.topic_name(), "$SYS/info");
+
+        assert!(receiver.recv().is_err());
+    }
+
+    #[test]
+    fn test_topic_starting_with_dolar_sign_not_recieve_singlelevel_wildcard () {
+        let subscribe = build_subscribe("+/info");
+        let publish = build_publish("$SYS/info", "ERROR");
+
+        let handler = super::TopicHandler::new();
+        let (sender, receiver) = channel();
+
+        handler.subscribe(&subscribe, "admin").unwrap();
+
+        handler.publish(&publish, sender).unwrap();
+
+        assert!(receiver.recv().is_err());
+    }
+
+    #[test]
+    fn test_topic_starting_with_dolar_sign_not_recieve_multilevel_wildcard () {
+        let subscribe = build_subscribe("#/info");
+        let publish = build_publish("$SYS/info", "ERROR");
+
+        let handler = super::TopicHandler::new();
+        let (sender, receiver) = channel();
+
+        handler.subscribe(&subscribe, "admin").unwrap();
+
+        handler.publish(&publish, sender).unwrap();
 
         assert!(receiver.recv().is_err());
     }
