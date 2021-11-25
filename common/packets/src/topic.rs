@@ -1,4 +1,4 @@
-use crate::packet_error::PacketResult;
+use crate::packet_error::{ErrorKind, PacketError, PacketResult};
 use crate::qos::QoSLevel;
 use crate::utf8::Field;
 
@@ -13,6 +13,9 @@ impl Topic {
     /// Creates a new topic
     /// Returns PacketError if the topic name is invalid
     pub fn new(name: &str, qos: QoSLevel) -> PacketResult<Topic> {
+
+        Topic::check_valid_topic_name(name)?;
+
         Ok(Topic {
             name: Field::new_from_string(name)?,
             qos,
@@ -53,4 +56,23 @@ impl Topic {
             self.qos = max_qos;
         }
     }
+
+    fn check_valid_topic_name(name: &str) -> PacketResult<()> {
+        if name.is_empty() {
+            return Err(PacketError::new_kind(
+                "Topic name is empty",
+                ErrorKind::InvalidTopicName
+            ));
+        }
+
+        if name.starts_with('$') {
+            return Err(PacketError::new_kind(
+                "Topic name cannot start with $",
+                ErrorKind::InvalidTopicName
+            ));
+        }
+
+        Ok(())
+    }
+
 }

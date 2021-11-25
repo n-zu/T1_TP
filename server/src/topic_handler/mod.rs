@@ -1034,8 +1034,10 @@ mod tests {
     }
 
     #[test]
+    #[should_panic] // topic starting with $ are no longer allowed
     fn test_topic_starting_with_dolar_sign_recieve () {
-        let subscribe = build_subscribe("$SYS/info");
+
+        let subscribe = build_subscribe("$SYS/info"); // PANICS HERE
         let publish = build_publish("$SYS/info", "ERROR");
 
         let handler = super::TopicHandler::new();
