@@ -47,9 +47,9 @@ fn build_config(port: u32) -> Config {
 }
 
 pub fn connect_client(
-    mut builder : ConnectBuilder,
+    mut builder: ConnectBuilder,
     set_auth: bool,
-    port : u32,
+    port: u32,
     read_connack: bool,
 ) -> TcpStream {
     let mut stream = TcpStream::connect(format!("localhost:{}", port)).unwrap();

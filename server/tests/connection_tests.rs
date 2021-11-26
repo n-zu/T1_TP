@@ -7,11 +7,9 @@ use packets::packet_error::ErrorKind;
 use packets::pingreq::PingReq;
 use packets::pingresp::PingResp;
 use packets::traits::{MQTTDecoding, MQTTEncoding};
+use std::io::{Read, Write};
 use std::thread;
 use std::time::Duration;
-use std::{
-    io::{Read, Write}
-};
 
 #[test]
 fn test_connect_clean_session_true() {

@@ -1,7 +1,20 @@
 mod common;
-use std::{io::{Read, Write}, thread, time::Duration};
+use std::{
+    io::{Read, Write},
+    thread,
+    time::Duration,
+};
 
-use packets::{connect::ConnectBuilder, puback::Puback, publish::Publish, qos::QoSLevel::*, suback::Suback, subscribe::Subscribe, topic::Topic, traits::{MQTTDecoding, MQTTEncoding}};
+use packets::{
+    connect::ConnectBuilder,
+    puback::Puback,
+    publish::Publish,
+    qos::QoSLevel::*,
+    suback::Suback,
+    subscribe::Subscribe,
+    topic::Topic,
+    traits::{MQTTDecoding, MQTTEncoding},
+};
 
 use crate::common::*;
 
@@ -34,7 +47,6 @@ fn test_subscription_qos0() {
     let recv_publish = Publish::read_from(&mut stream, control[0]).unwrap();
     assert_eq!(recv_publish.encode().unwrap(), publish.encode().unwrap());
 }
-
 
 #[test]
 fn test_subscription_qos1() {
@@ -76,7 +88,7 @@ fn test_subscription_qos1() {
                 assert_eq!(recv_puback.packet_id(), 10);
                 puback_received = true;
             }
-            _ => panic!("Se recibió paquete inválido")
+            _ => panic!("Se recibió paquete inválido"),
         }
     }
 }
@@ -121,7 +133,7 @@ fn test_subscription_lowers_qos() {
                 assert_eq!(recv_puback.packet_id(), 10);
                 puback_received = true;
             }
-            _ => panic!("Se recibió paquete inválido")
+            _ => panic!("Se recibió paquete inválido"),
         }
     }
 }
@@ -196,5 +208,8 @@ fn test_subscription_different_clients_persistent_session() {
     assert_eq!(control[0] >> 4, 3);
     let recv_publish = Publish::read_from(&mut stream_1, control[0]).unwrap();
     // ignoro el primer byte por si le ponen la dup flag
-    assert_eq!(recv_publish.encode().unwrap()[1..], publish.encode().unwrap()[1..]);
+    assert_eq!(
+        recv_publish.encode().unwrap()[1..],
+        publish.encode().unwrap()[1..]
+    );
 }
