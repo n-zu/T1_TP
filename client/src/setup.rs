@@ -23,8 +23,8 @@ pub fn build_ui(app: &Application) {
     // We get the main window and set details
     let win: Window = builder.object("main_window").unwrap();
     win.set_application(Some(app));
-    win.set_default_width(320);
-    win.set_default_height(200);
+    win.set_default_width(640);
+    win.set_default_height(480);
 
     win.set_icon_name(Some("gtk-network"));
     // We show the window.
