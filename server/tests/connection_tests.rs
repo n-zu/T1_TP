@@ -10,14 +10,15 @@ use packets::traits::{MQTTDecoding, MQTTEncoding};
 use std::thread;
 use std::time::Duration;
 use std::{
-    io::{Read, Write},
-    net::TcpStream,
+    io::{Read, Write}
 };
 
 #[test]
-fn test_connect_clean_session() {
+fn test_connect_clean_session_true() {
     let (_s, port) = start_server();
-    let mut stream = connect_client(0, true, port, false);
+    // Me conecto con clean session en true
+    let connection = ConnectBuilder::new("id", 0, true).unwrap();
+    let mut stream = connect_client(connection, true, port, false);
 
     let mut control = [0u8];
     stream.read_exact(&mut control).unwrap();
@@ -30,15 +31,13 @@ fn test_connect_clean_session() {
 #[test]
 fn test_connect_incorrect_password() {
     let (_s, port) = start_server();
-    let mut stream = TcpStream::connect(format!("localhost:{}", port)).unwrap();
-    let mut connect_builder = ConnectBuilder::new("id", 0, false).unwrap();
+    let mut connect_builder = ConnectBuilder::new("id", 0, true).unwrap();
     connect_builder = connect_builder.user_name("user").unwrap();
     connect_builder = connect_builder
         .password("contraseña totalmente incorrecta")
         .unwrap();
-    let connect = connect_builder.build().unwrap();
+    let mut stream = connect_client(connect_builder, false, port, false);
 
-    stream.write_all(&connect.encode().unwrap()).unwrap();
     let mut control = [0u8];
     stream.read_exact(&mut control).unwrap();
     assert_eq!(control[0] >> 4, 2);
@@ -54,7 +53,9 @@ fn test_connect_incorrect_password() {
 fn test_connect_present_after_reconnection() {
     let (_s, port) = start_server();
     // Me conecto con clean_session = false
-    let mut stream = connect_client(0, false, port, false);
+    let mut connect_builder = ConnectBuilder::new("id", 0, false).unwrap();
+
+    let mut stream = connect_client(connect_builder, true, port, false);
 
     let mut control = [0u8];
     stream.read_exact(&mut control).unwrap();
@@ -68,7 +69,8 @@ fn test_connect_present_after_reconnection() {
     // Me desconecto
     stream.write_all(&Disconnect::new().encode()).unwrap();
 
-    stream = connect_client(0, false, port, false);
+    connect_builder = ConnectBuilder::new("id", 0, false).unwrap();
+    stream = connect_client(connect_builder, true, port, false);
 
     stream.read_exact(&mut control).unwrap();
     assert_eq!(control[0] >> 4, 2);
@@ -82,7 +84,8 @@ fn test_connect_present_after_reconnection() {
 #[test]
 fn test_pings() {
     let (_s, port) = start_server();
-    let mut stream = connect_client(1, true, port, true);
+    let connect_builder = ConnectBuilder::new("id", 1, true).unwrap();
+    let mut stream = connect_client(connect_builder, true, port, true);
 
     let mut control = [0u8];
 
@@ -100,7 +103,8 @@ fn test_pings() {
 #[test]
 fn test_pings_should_disconnect() {
     let (_s, port) = start_server();
-    let mut stream = connect_client(1, true, port, true);
+    let connect_builder = ConnectBuilder::new("id", 1, true).unwrap();
+    let mut stream = connect_client(connect_builder, true, port, true);
 
     let mut control = [0u8];
 
