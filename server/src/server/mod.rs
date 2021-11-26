@@ -1,5 +1,3 @@
-#![allow(dead_code)]
-
 use std::{
     convert::TryFrom,
     io::{self, Read},
@@ -15,12 +13,13 @@ use std::{
 use threadpool::ThreadPool;
 use tracing::{debug, error, info, warn};
 
-use packets::{connect::Connect, disconnect::Disconnect, traits::MQTTDecoding};
+use packets::{connect::{Connect}, disconnect::Disconnect, traits::MQTTDecoding};
 use packets::{
     helpers::PacketType, pingreq::PingReq, puback::Puback, subscribe::Subscribe,
     unsuback::Unsuback, unsubscribe::Unsubscribe,
 };
 
+mod client_stream_reader;
 mod packet_processing;
 mod server_controller;
 pub mod server_error;
@@ -34,14 +33,7 @@ const ACCEPT_SLEEP_DUR: Duration = Duration::from_millis(100);
 use packets::publish::Publish;
 use packets::qos::QoSLevel;
 
-use crate::{
-    client::Client,
-    client_thread_joiner::ClientThreadJoiner,
-    clients_manager::{ClientsManager, DisconnectInfo},
-    config::Config,
-    server::server_error::ServerErrorKind,
-    topic_handler::{Message, TopicHandler},
-};
+use crate::{client::Client, client_thread_joiner::ClientThreadJoiner, clients_manager::{ClientsManager, ConnectInfo, DisconnectInfo}, config::Config, server::server_error::ServerErrorKind, topic_handler::{Message, TopicHandler}};
 
 use self::server_controller::ServerController;
 
@@ -50,25 +42,50 @@ pub type ClientId = String;
 // Se necesita para que Clippy lo detecte como slice
 pub type ClientIdArg = str;
 
-pub enum Packet {
-    Publish(Publish),
-    Puback(Puback),
-    Subscribe(Subscribe),
-    Unsubscribe(Unsubscribe),
-    PingReq(PingReq),
-    Disconnect(Disconnect),
-}
-
 /// Represents a Server that complies with the
 /// MQTT V3.1.1 protocol
+///
+/// A server runs on a separate thread from which it
+/// is invoked
+/// When a client connects, a new thread is created to
+/// handle it
+/// Every time a client sends a packet, it is read from
+/// the client thread and sent to a threadpool that
+/// processes it (exceptions to this rule are found in the
+/// description of the process_packet method)
+/// The shutdown of the server is controlled through a
+/// ServerController that sends a message to the server thread
+/// to stop it
 pub struct Server {
     /// Clients connected to the server
+    /// It handles the connection and disconnection of clients,
+    /// as well as credential verification
+    /// If a client has a clean session set to False, it is
+    /// responsible for saving their information even after
+    /// disconnection. If it has clean session set to True,
+    /// their data is deleted
     clients_manager: RwLock<ClientsManager>,
     /// Initial Server setup
     config: Config,
     /// Manages the Publish / Subscribe tree
+    /// When a customer subscribes to a topic or publish a message,
+    /// all the information is stored in this handler. This includes
+    /// Quality of Service and handling of retained messages.
+    /// When it processes a Publish, the TopicHandler indicates to
+    /// the Server the clients to whom it should send it through a
+    /// MPSC channel. An independent thread receives the information
+    /// and sends the packets.
+    /// The TopicHandler is not responsible for keeping the subscriptions
+    /// of users connected with clean session set to True. The
+    /// server is responsible to invoke remove_client() when the client
+    /// has clean session set to True
     topic_handler: TopicHandler,
-    /// Vector with the handlers of the clients running in parallel
+    /// Manages the join of the threads that are created for each of the
+    /// clients. It does not interfere in the threads of the threadpool
+    /// or the Server thread.
+    /// When a new client thread is created, it saves its JoinHandle
+    /// assosiationg it with the SockerAddr of the client that just
+    /// connected
     client_thread_joiner: Mutex<ClientThreadJoiner>,
     pool: Mutex<ThreadPool>,
 }
@@ -79,7 +96,7 @@ pub trait ServerInterface {
 }
 
 impl ServerInterface for Server {
-    /// Creates a new Server
+    /// Creates and returns a server in a valid state
     fn new(config: Config, threadpool_size: usize) -> Arc<Self> {
         info!("Iniciando servidor en localhost: {}", config.port());
         Arc::new(Self {
@@ -113,29 +130,7 @@ impl ServerInterface for Server {
 }
 
 impl Server {
-    fn to_threadpool<F>(self: &Arc<Self>, action: F, id: &ClientIdArg) -> ServerResult<()>
-    where
-        F: FnOnce(Arc<Self>, &ClientId) -> ServerResult<()> + Send + 'static,
-    {
-        let sv_copy = self.clone();
-        let id_copy = id.to_owned();
-        self.pool
-            .lock()?
-            .spawn(move || match action(sv_copy, &id_copy) {
-                Ok(()) => debug!(
-                    "ThreadPool: Paquete de cliente <{}> procesado con exito",
-                    id_copy
-                ),
-                Err(err) => error!(
-                    "ThreadPool: Error procesando paquete de cliente <{}>: {}",
-                    id_copy,
-                    err.to_string()
-                ),
-            })?;
-        Ok(())
-    }
-
-    fn connect_client(&self, stream: &mut TcpStream, addr: SocketAddr) -> ServerResult<String> {
+    fn connect_client(&self, stream: &mut TcpStream, addr: SocketAddr) -> ServerResult<ConnectInfo> {
         info!("<{}>: Conectando", addr);
         match self.wait_for_connect(stream, addr) {
             Ok(client) => {
@@ -145,8 +140,9 @@ impl Server {
                 } else {
                     stream.set_read_timeout(Some(CLIENT_READ_TIMEOUT))?;
                 }
-                let id = self.clients_manager.write()?.new_session(client)?;
-                Ok(id)
+                let connect_info = self.clients_manager.write()?.new_session(client)?;
+                info!("<{}> -> <{}>: Conectado", addr, connect_info.id);
+                Ok(connect_info)
             }
             Err(err) if err.kind() == ServerErrorKind::Timeout => {
                 error!("<{}>: timeout esperando CONNECT", addr);
@@ -191,7 +187,7 @@ impl Server {
             .read()?
             .get_client_property(&id, |client| Ok(client.keep_alive()))?;
 
-        while self.clients_manager.read()?.is_connected(&id)? {
+        loop {
             match self.process_packet(&mut stream, &id) {
                 Ok(packet_type) => {
                     timeout_counter = 0;
@@ -204,6 +200,10 @@ impl Server {
                     timeout_counter += 1;
                     self.clients_manager.read()?.send_unacknowledged(&id)?;
                 }
+                Err(err) if err.kind() == ServerErrorKind::ClientDisconnected => {
+                    info!("<{}>: Desconectado - {}", id, err.to_string());
+                    return self.clients_manager.write()?.finish_session(&id, false);
+                }
                 Err(err) => {
                     error!("<{}>: {}", id, err.to_string());
                     return self.clients_manager.write()?.finish_session(&id, false);
@@ -214,11 +214,6 @@ impl Server {
                 return self.clients_manager.write()?.finish_session(&id, false);
             }
         }
-        // TODO: no deberia pasar
-        Ok(DisconnectInfo {
-            publish_last_will: None,
-            clean_session: true,
-        })
     }
 
     fn manage_client(
@@ -250,13 +245,18 @@ impl Server {
                     return Err(err);
                 }
             },
-            Ok(id) => {
-                let disconnect_info = self.client_loop(id.clone(), stream)?;
+            Ok(connect_info) => {
+                // En caso de que haya ocurrido una reconexion y el cliente
+                // tenia un last will, se publica
+                if let Some(last_will) = connect_info.takeover_last_will {
+                    self.send_last_will(last_will, &connect_info.id)?;
+                }
+                let disconnect_info = self.client_loop(connect_info.id.clone(), stream)?;
                 if let Some(last_will) = disconnect_info.publish_last_will {
-                    self.send_last_will(last_will, &id)?;
+                    self.send_last_will(last_will, &connect_info.id)?;
                 }
                 if disconnect_info.clean_session {
-                    self.topic_handler.remove_client(&id)?;
+                    self.topic_handler.remove_client(&connect_info.id)?;
                 }
             }
         }
@@ -301,7 +301,7 @@ impl Server {
                 .finished(addr)
                 .unwrap_or_else(|err| panic!("Error irrecuperable: {}", err.to_string()));
         });
-        self.client_thread_joiner.lock()?.add(addr, handle);
+        self.client_thread_joiner.lock()?.add_thread(addr, handle)?;
         Ok(())
     }
 
@@ -325,7 +325,6 @@ impl Server {
                     break;
                 }
             }
-            self.client_thread_joiner.lock()?.join_finished();
             recv_result = shutdown_receiver.try_recv();
         }
         debug!("Apagando Servidor");

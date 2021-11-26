@@ -29,6 +29,11 @@ pub struct DisconnectInfo {
     pub clean_session: bool,
 }
 
+pub struct ConnectInfo {
+    pub id: ClientId,
+    pub takeover_last_will: Option<Publish>,
+}
+
 impl ClientsManager {
     pub fn new(accounts_path: &str) -> Self {
         Self {
@@ -49,7 +54,7 @@ impl ClientsManager {
                 Ok(())
             }
             None => Err(ServerError::new_kind(
-                "No existe el cliente",
+                &format!("No existe el cliente con id <{}>", id),
                 ServerErrorKind::ClientNotFound,
             )),
         }
@@ -62,7 +67,7 @@ impl ClientsManager {
         match self.clients.get(id) {
             Some(client) => action(client.lock()?),
             None => Err(ServerError::new_kind(
-                "No existe el cliente",
+                &format!("No existe el cliente con id <{}>", id),
                 ServerErrorKind::ClientNotFound,
             )),
         }
@@ -73,10 +78,8 @@ impl ClientsManager {
         id: &ClientIdArg,
         gracefully: bool,
     ) -> ServerResult<DisconnectInfo> {
-        let mut publish_last_will = None;
-        self.client_do(id, |mut client| {
-            publish_last_will = client.disconnect(gracefully)?;
-            Ok(())
+        let publish_last_will = self.get_client_property(id, |mut client| {
+            client.disconnect(gracefully)
         })?;
         let clean_session;
         // Si la funcion anterior no devolvio error, entonces existe el cliente
@@ -117,10 +120,6 @@ impl ClientsManager {
             client.send_publish(publish);
             Ok(())
         })
-    }
-
-    fn exists(&self, id: &ClientIdArg) -> ServerResult<bool> {
-        Ok(self.clients.contains_key(id))
     }
 
     fn check_taken_ids(&mut self, id: &ClientIdArg, user_name: &str) -> ServerResult<()> {
@@ -173,7 +172,7 @@ impl ClientsManager {
         generic_id
     }
 
-    fn new_session_empty_id(&mut self, mut client: Client) -> ServerResult<ClientId> {
+    fn process_client_empty_id(&mut self, client: &mut Client) -> ServerResult<()> {
         if !client.clean_session() {
             client.send_packet(Connack::new(false, ConnackReturnCode::IdentifierRejected))?;
             Err(ServerError::new_kind(
@@ -183,37 +182,21 @@ impl ClientsManager {
         } else {
             let id = self.new_generic_id();
             client.set_id(&id)?;
-            Ok(id)
+            Ok(())
         }
     }
 
-    fn new_session_unchecked(&mut self, mut client: Client) -> ServerResult<ClientId> {
+    fn new_session_unchecked(&mut self, mut client: Client) -> ServerResult<ConnectInfo> {
         if client.id().is_empty() {
-            return self.new_session_empty_id(client);
+            self.process_client_empty_id(&mut client)?;
         }
         let id = client.id().to_owned();
 
+        let mut takeover_last_will = None;
         // Hay una sesion_presente en el servidor con la misma ID
-        // (con clean_sesion = false)
-        if self.exists(client.id())? {
-            // Descarto sesion vieja
-            if client.clean_session() {
-                self.clients.remove(client.id());
-                client.send_packet(Connack::new(false, ConnackReturnCode::Accepted))?;
-                self.client_add(client);
-            }
-            // El cliente quiere reconectarse a la sesion guaradada
-            else {
-                client.send_packet(Connack::new(true, ConnackReturnCode::Accepted))?;
-                self.client_do(&id, |mut old_client| {
-                    old_client.reconnect(client)?;
-                    Ok(())
-                })?;
-                self.client_do(&id, |mut client| {
-                    client.send_unacknowledged()?;
-                    Ok(())
-                })?;
-            }
+        if let Some(old_client) = self.clients.get_mut(&id) {
+            client.send_packet(Connack::new(true, ConnackReturnCode::Accepted))?;
+            takeover_last_will = old_client.lock()?.reconnect(client)?;
         } else {
             self.taken_ids.insert(
                 id.to_owned(),
@@ -225,10 +208,13 @@ impl ClientsManager {
             client.send_packet(Connack::new(false, ConnackReturnCode::Accepted))?;
             self.client_add(client);
         }
-        Ok(id)
+        Ok(ConnectInfo {
+            id,
+            takeover_last_will,
+        })
     }
 
-    pub fn new_session(&mut self, mut client: Client) -> ServerResult<ClientId> {
+    pub fn new_session(&mut self, mut client: Client) -> ServerResult<ConnectInfo> {
         match self.check_credentials(&client) {
             Ok(()) => self.new_session_unchecked(client),
             Err(err) if err.kind() == ServerErrorKind::ClientNotInWhitelist => {
@@ -252,14 +238,6 @@ impl ClientsManager {
                 client.send_packet(Connack::new(false, ConnackReturnCode::IdentifierRejected))?;
                 Err(err)
             }
-            Err(err) => Err(err),
-        }
-    }
-
-    pub fn is_connected(&self, id: &ClientIdArg) -> ServerResult<bool> {
-        match self.get_client_property(id, |client| Ok(client.connected())) {
-            Ok(alive) => Ok(alive),
-            Err(err) if err.kind() == ServerErrorKind::ClientNotFound => Ok(false),
             Err(err) => Err(err),
         }
     }

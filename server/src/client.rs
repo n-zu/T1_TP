@@ -1,12 +1,8 @@
-use std::{
-    io::Write,
-    net::{Shutdown, TcpStream},
-    vec,
-};
+use std::{io::Write, net::{Shutdown, TcpStream}, vec};
 
 use packets::{connect::Connect, pingresp::PingResp, qos::QoSLevel, traits::MQTTEncoding};
 use packets::{puback::Puback, publish::Publish, suback::Suback};
-use tracing::{debug, error, info};
+use tracing::{debug, info};
 
 use crate::server::{
     server_error::ServerErrorKind, ClientId, ClientIdArg, ServerError, ServerResult,
@@ -18,7 +14,6 @@ pub struct Client {
     id: ClientId,
     /// TCP connection to send packets to the client
     stream: Option<TcpStream>,
-    /// Indicates if the client is currently connected
     connect: Connect,
     /// Unacknowledge packets
     unacknowledged: Vec<Publish>,
@@ -120,16 +115,26 @@ impl Client {
         *self.connect.clean_session()
     }
 
-    pub fn reconnect(&mut self, new_client: Client) -> ServerResult<()> {
-        if self.connected() {
-            error!("Se intento reconectar un usuario que ya esta conectado");
-            Err(ServerError::new_msg("Usuario ya conectado"))
-        } else {
-            info!("Reconectado <{}>", self.id);
-            self.stream = new_client.stream;
-            self.connect = new_client.connect;
-            Ok(())
+    pub fn reconnect(&mut self, new_client: Client) -> ServerResult<Option<Publish>> {
+        if self.id != new_client.id {
+            // No deberia pasar
+            return Err(ServerError::new_kind(
+                &format!(
+                    "<{}>: Intento de reconexion con un cliente con id diferente ({})",
+                    self.id, new_client.id
+                ),
+                ServerErrorKind::Irrecoverable,
+            ));
         }
+        info!("<{}>: Reconectando", self.id);
+        if *self.connect.clean_session() {
+            self.unacknowledged = vec![];
+        }
+
+        let last_will = self.disconnect(false)?;
+        self.stream = new_client.stream;
+        self.connect = new_client.connect;
+        Ok(last_will)
     }
 
     pub fn keep_alive(&self) -> u16 {

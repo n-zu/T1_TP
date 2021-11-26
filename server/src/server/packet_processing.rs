@@ -1,6 +1,28 @@
 use super::*;
 
 impl Server {
+    fn to_threadpool<F>(self: &Arc<Self>, action: F, id: &ClientIdArg) -> ServerResult<()>
+    where
+        F: FnOnce(Arc<Self>, &ClientId) -> ServerResult<()> + Send + 'static,
+    {
+        let sv_copy = self.clone();
+        let id_copy = id.to_owned();
+        self.pool
+            .lock()?
+            .spawn(move || match action(sv_copy, &id_copy) {
+                Ok(()) => debug!(
+                    "ThreadPool: Paquete de cliente <{}> procesado con exito",
+                    id_copy
+                ),
+                Err(err) => error!(
+                    "ThreadPool: Error procesando paquete de cliente <{}>: {}",
+                    id_copy,
+                    err.to_string()
+                ),
+            })?;
+        Ok(())
+    }
+
     fn process_packet_given_control_byte(
         self: &Arc<Self>,
         control_byte: u8,
