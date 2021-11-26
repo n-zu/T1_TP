@@ -13,7 +13,6 @@ impl Topic {
     /// Creates a new topic
     /// Returns PacketError if the topic name is invalid
     pub fn new(name: &str, qos: QoSLevel) -> PacketResult<Topic> {
-
         Topic::check_valid_topic_name(name)?;
 
         Ok(Topic {
@@ -61,18 +60,17 @@ impl Topic {
         if name.is_empty() {
             return Err(PacketError::new_kind(
                 "Topic name is empty",
-                ErrorKind::InvalidTopicName
+                ErrorKind::InvalidTopicName,
             ));
         }
 
         if name.starts_with('$') {
             return Err(PacketError::new_kind(
                 "Topic name cannot start with $",
-                ErrorKind::InvalidTopicName
+                ErrorKind::InvalidTopicName,
             ));
         }
 
         Ok(())
     }
-
 }

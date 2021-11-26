@@ -4,7 +4,7 @@ use std::{
     sync::{mpsc::SendError, PoisonError, RwLockReadGuard, RwLockWriteGuard},
 };
 
-use super::{Message, Subtopics, Subscribers, Subscriptions};
+use super::{Message, Subscribers, Subscriptions, Subtopics};
 
 #[derive(Debug)]
 pub struct TopicHandlerError {

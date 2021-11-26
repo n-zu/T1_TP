@@ -45,7 +45,6 @@ fn set_max_data(subscribers: &mut Subscribers, data: Subscribers) {
 }
 #[doc(hidden)]
 fn matches_singlelevel(topic_filter: String, topic_name: String) -> bool {
-
     let name = topic_name.split(SEP).collect::<Vec<&str>>();
     let filter = topic_filter.split(SEP).collect::<Vec<&str>>();
 
@@ -57,11 +56,11 @@ fn matches_singlelevel(topic_filter: String, topic_name: String) -> bool {
     }
 
     for (i, filter_part) in filter.iter().enumerate() {
-        if filter_part.to_string() == MULTILEVEL_WILDCARD.to_string() {
+        if filter_part == &MULTILEVEL_WILDCARD {
             return true;
-        } else if filter_part.to_string() == SINGLELEVEL_WILDCARD.to_string() {
+        } else if filter_part == &SINGLELEVEL_WILDCARD.to_string() {
             continue;
-        } else if filter_part.to_string() != name[i].to_string() {
+        } else if filter_part != &name[i].to_string() {
             return false;
         }
     }
@@ -70,10 +69,10 @@ fn matches_singlelevel(topic_filter: String, topic_name: String) -> bool {
 }
 #[doc(hidden)]
 fn set_matching_subscribers(
-    singlelevel_subscribers : &mut Subscribers,
-    topic_name : &str,
-    singlelevel_subscriptions : &Subscriptions,
-){
+    singlelevel_subscribers: &mut Subscribers,
+    topic_name: &str,
+    singlelevel_subscriptions: &Subscriptions,
+) {
     for (topic_filter, subscribers) in singlelevel_subscriptions {
         if matches_singlelevel(topic_filter.to_string(), topic_name.to_string()) {
             set_max_data(singlelevel_subscribers, subscribers.clone());
@@ -82,10 +81,10 @@ fn set_matching_subscribers(
 }
 #[doc(hidden)]
 fn remove_matching_subscriptions(
-    singlelevel_subscribers : &mut Subscriptions,
-    topic_name : &str,
-    client_id : &str,
-){
+    singlelevel_subscribers: &mut Subscriptions,
+    topic_name: &str,
+    client_id: &str,
+) {
     if let Some(subscribers) = singlelevel_subscribers.get_mut(topic_name) {
         subscribers.remove(client_id);
         if subscribers.is_empty() {
@@ -94,16 +93,11 @@ fn remove_matching_subscriptions(
     };
 }
 #[doc(hidden)]
-fn remove_subscriber(
-    singlelevel_subscribers : &mut Subscriptions,
-    client_id : &str,
-) {
-
-    singlelevel_subscribers.retain( |_,subscribers| {
+fn remove_subscriber(singlelevel_subscribers: &mut Subscriptions, client_id: &str) {
+    singlelevel_subscribers.retain(|_, subscribers| {
         subscribers.remove(client_id);
         !subscribers.is_empty()
     });
-
 }
 
 const SEP: &str = "/";
@@ -179,7 +173,7 @@ impl TopicHandler {
             sender,
             packet,
             &mut HashMap::new(),
-            true
+            true,
         )?;
 
         Ok(())
@@ -217,11 +211,7 @@ fn pub_rec(
     multilevel_subscribers: &mut Subscribers,
     is_root: bool,
 ) -> Result<(), TopicHandlerError> {
-
-    if is_root &&
-        topic_name.len() > 0 &&
-        topic_name.starts_with(UNMATCH_WILDCARD)
-    {
+    if is_root && !topic_name.is_empty() && topic_name.starts_with(UNMATCH_WILDCARD) {
         multilevel_subscribers.clear();
     } else {
         // Agregar los subscribers multinivel de esta hoja
@@ -230,10 +220,9 @@ fn pub_rec(
         set_matching_subscribers(
             multilevel_subscribers,
             topic_name,
-            &node.singlelevel_subscriptions.read()?.clone()
+            &node.singlelevel_subscriptions.read()?.clone(),
         );
     }
-    
 
     match topic_name.split_once(SEP) {
         // Aca se le puede agregar tratamiento especial para *, #, etc.
@@ -241,9 +230,23 @@ fn pub_rec(
         Some((topic_name, rest)) => {
             let subtopics = node.subtopics.read()?;
             if let Some(subtopic) = subtopics.get(topic_name) {
-                pub_rec(subtopic, rest, sender, packet, multilevel_subscribers, false)?;
+                pub_rec(
+                    subtopic,
+                    rest,
+                    sender,
+                    packet,
+                    multilevel_subscribers,
+                    false,
+                )?;
             } else if !multilevel_subscribers.is_empty() {
-                pub_rec(&Topic::new(), NO_TOPIC, sender, packet, multilevel_subscribers, false)?;
+                pub_rec(
+                    &Topic::new(),
+                    NO_TOPIC,
+                    sender,
+                    packet,
+                    multilevel_subscribers,
+                    false,
+                )?;
             }
         }
         None => {
@@ -253,9 +256,23 @@ fn pub_rec(
                 let subtopics = node.subtopics.read()?;
 
                 if let Some(subtopic) = subtopics.get(topic_name) {
-                    pub_rec(subtopic, NO_TOPIC, sender, packet, multilevel_subscribers, false)?;
+                    pub_rec(
+                        subtopic,
+                        NO_TOPIC,
+                        sender,
+                        packet,
+                        multilevel_subscribers,
+                        false,
+                    )?;
                 } else if !multilevel_subscribers.is_empty() {
-                    pub_rec(&Topic::new(), NO_TOPIC, sender, packet, multilevel_subscribers, false)?;
+                    pub_rec(
+                        &Topic::new(),
+                        NO_TOPIC,
+                        sender,
+                        packet,
+                        multilevel_subscribers,
+                        false,
+                    )?;
                 }
             } else {
                 // ULTIIMA HOJA
@@ -286,16 +303,14 @@ fn subscribe_rec(
 ) -> Result<(), TopicHandlerError> {
     match topic_name.split_once(SEP) {
         Some((topic_name, rest)) => {
-
             // Wildcard SingleLevel (+)
             if topic_name == SINGLELEVEL_WILDCARD {
                 let topic_filter = topic_name.to_string() + SEP + rest;
-                let mut singlelevel_subscriptions = node
-                    .singlelevel_subscriptions
-                    .write()?;
+                let mut singlelevel_subscriptions = node.singlelevel_subscriptions.write()?;
+                #[allow(clippy::or_fun_call)]
                 let singlelevel_subscribers = singlelevel_subscriptions
                     .entry(topic_filter)
-                    .or_insert(HashMap::new());
+                    .or_insert(HashMap::new()); // warning: use of `or_insert` followed by a function call
 
                 set_max_datum(singlelevel_subscribers, user_id, sub_data);
                 return Ok(());
@@ -359,13 +374,15 @@ fn unsubscribe_rec(node: &Topic, topic_name: &str, user_id: &str) -> Result<(), 
     match topic_name.split_once(SEP) {
         // Aca se le puede agregar tratamiento especial para *, #, etc.
         Some((topic_name, rest)) => {
-
-
             if topic_name == SINGLELEVEL_WILDCARD {
                 let topic_filter = topic_name.to_string() + SEP + rest;
                 let mut singlelevel_subscriptions = node.singlelevel_subscriptions.write()?;
-                remove_matching_subscriptions(&mut singlelevel_subscriptions, &topic_filter, user_id);
-                return Ok(()); 
+                remove_matching_subscriptions(
+                    &mut singlelevel_subscriptions,
+                    &topic_filter,
+                    user_id,
+                );
+                return Ok(());
             }
 
             let subtopics = node.subtopics.read()?;
@@ -406,11 +423,10 @@ fn clean_node(node: &Topic) -> Result<(), TopicHandlerError> {
 
     let subtopics_read = node.subtopics.read()?;
     for (sub_topic, topic) in subtopics_read.iter() {
-        if
-            topic.subscribers.read()?.is_empty() && 
-            topic.subtopics.read()?.is_empty() &&
-            topic.multilevel_subscribers.read()?.is_empty() &&
-            topic.singlelevel_subscriptions.read()?.is_empty()
+        if topic.subscribers.read()?.is_empty()
+            && topic.subtopics.read()?.is_empty()
+            && topic.multilevel_subscribers.read()?.is_empty()
+            && topic.singlelevel_subscriptions.read()?.is_empty()
         {
             empty_subtopics.push(sub_topic.to_string());
         }
@@ -439,7 +455,7 @@ fn remove_client_rec(node: &Topic, user_id: &str) -> Result<(), TopicHandlerErro
     }
     node.multilevel_subscribers.write()?.remove(user_id);
     let mut singlelevel_subscriptions = node.singlelevel_subscriptions.write()?;
-    remove_subscriber( &mut singlelevel_subscriptions, user_id);
+    remove_subscriber(&mut singlelevel_subscriptions, user_id);
 
     // si falla no importa
     let _res = clean_node(node);
@@ -686,7 +702,10 @@ mod tests {
 
         let message = receiver.recv().unwrap();
         assert_eq!(message.client_id, "user");
-        assert_eq!(message.packet.topic_name(), "topic/subtopic/messages/test/001");
+        assert_eq!(
+            message.packet.topic_name(),
+            "topic/subtopic/messages/test/001"
+        );
 
         assert!(receiver.recv().is_err());
     }
@@ -773,7 +792,7 @@ mod tests {
         assert_eq!(message.client_id, "user");
         assert_eq!(message.packet.topic_name(), "colors/primary/blue");
         assert_eq!(message.packet.qos(), QoSLevel::QoSLevel1);
-        
+
         assert!(receiver.recv().is_err());
     }
 
@@ -831,15 +850,42 @@ mod tests {
         // name, filter
 
         assert!(matches_singlelevel("top".to_string(), "top".to_string()));
-        assert!(matches_singlelevel("top/sub".to_string(), "top/sub".to_string()));
-        assert!(matches_singlelevel("+/sub".to_string(), "top/sub".to_string()));
-        assert!(matches_singlelevel("top/+/leaf".to_string(), "top/sub/leaf".to_string()));
-        assert!(matches_singlelevel("top/#".to_string(), "top/sub/leaf".to_string()));
-        assert!(matches_singlelevel("top/+/+/green".to_string(), "top/sub/leaf/green".to_string()));
-        assert!(matches_singlelevel("top/+/+/#".to_string(), "top/sub/leaf/green".to_string()));
-        assert!(matches_singlelevel("top/+/+/#".to_string(), "top/sub/leaf/green".to_string()));
-        assert!(matches_singlelevel("top/+/+/#".to_string(), "top/sub/leaf/green/#00FF00".to_string()));
-        assert!(matches_singlelevel("top/+//#".to_string(), "top/sub//green/#00FF00".to_string()));
+        assert!(matches_singlelevel(
+            "top/sub".to_string(),
+            "top/sub".to_string()
+        ));
+        assert!(matches_singlelevel(
+            "+/sub".to_string(),
+            "top/sub".to_string()
+        ));
+        assert!(matches_singlelevel(
+            "top/+/leaf".to_string(),
+            "top/sub/leaf".to_string()
+        ));
+        assert!(matches_singlelevel(
+            "top/#".to_string(),
+            "top/sub/leaf".to_string()
+        ));
+        assert!(matches_singlelevel(
+            "top/+/+/green".to_string(),
+            "top/sub/leaf/green".to_string()
+        ));
+        assert!(matches_singlelevel(
+            "top/+/+/#".to_string(),
+            "top/sub/leaf/green".to_string()
+        ));
+        assert!(matches_singlelevel(
+            "top/+/+/#".to_string(),
+            "top/sub/leaf/green".to_string()
+        ));
+        assert!(matches_singlelevel(
+            "top/+/+/#".to_string(),
+            "top/sub/leaf/green/#00FF00".to_string()
+        ));
+        assert!(matches_singlelevel(
+            "top/+//#".to_string(),
+            "top/sub//green/#00FF00".to_string()
+        ));
     }
 
     #[test]
@@ -899,7 +945,7 @@ mod tests {
         assert_eq!(message.packet.topic_name(), "topic/subtopic///leaf");
 
         assert!(receiver.recv().is_err());
-    }  
+    }
 
     #[test]
     fn test_wildcards_one_subscribe_one_publish() {
@@ -913,7 +959,10 @@ mod tests {
 
         let message = receiver.recv().unwrap();
         assert_eq!(message.client_id, "user");
-        assert_eq!(message.packet.topic_name(), "topic/subtopic///leaf//Orangutan");
+        assert_eq!(
+            message.packet.topic_name(),
+            "topic/subtopic///leaf//Orangutan"
+        );
 
         assert!(receiver.recv().is_err());
     }
@@ -932,13 +981,22 @@ mod tests {
 
         let message = receiver.recv().unwrap();
         assert_eq!(message.client_id, "user");
-        assert_eq!(message.packet.topic_name(), "topic/subtopic///leaf//Orangutan");
+        assert_eq!(
+            message.packet.topic_name(),
+            "topic/subtopic///leaf//Orangutan"
+        );
         let message = receiver.recv().unwrap();
         assert_eq!(message.client_id, "user");
-        assert_eq!(message.packet.topic_name(), "topic/subtopic///leaf//Orangutan");
+        assert_eq!(
+            message.packet.topic_name(),
+            "topic/subtopic///leaf//Orangutan"
+        );
         let message = receiver.recv().unwrap();
         assert_eq!(message.client_id, "user");
-        assert_eq!(message.packet.topic_name(), "topic/subtopic///leaf//Orangutan");
+        assert_eq!(
+            message.packet.topic_name(),
+            "topic/subtopic///leaf//Orangutan"
+        );
 
         assert!(receiver.recv().is_err());
     }
@@ -980,7 +1038,10 @@ mod tests {
         handler.publish(&second_publish, sender).unwrap();
         let message = receiver.recv().unwrap();
         assert_eq!(message.client_id, "user");
-        assert_eq!(message.packet.topic_name(), "topic/subtopic///leaf//Orangutan");
+        assert_eq!(
+            message.packet.topic_name(),
+            "topic/subtopic///leaf//Orangutan"
+        );
         // El canal se cerro sin enviar el segundo mensaje
         assert!(receiver.recv().is_err());
     }
@@ -1000,7 +1061,10 @@ mod tests {
 
         let message = receiver.recv().unwrap();
         assert_eq!(message.client_id, "user");
-        assert_eq!(message.packet.topic_name(), "topic/subtopic///leaf//Orangutan");
+        assert_eq!(
+            message.packet.topic_name(),
+            "topic/subtopic///leaf//Orangutan"
+        );
 
         assert!(receiver.recv().is_err());
     }
@@ -1017,10 +1081,15 @@ mod tests {
         handler.publish(&publish, sender.clone()).unwrap();
 
         let message = receiver.recv().unwrap();
-        assert_eq!(message.packet.topic_name(), "topic/subtopic///leaf//Orangutan");
+        assert_eq!(
+            message.packet.topic_name(),
+            "topic/subtopic///leaf//Orangutan"
+        );
         let message = receiver.recv().unwrap();
-        assert_eq!(message.packet.topic_name(), "topic/subtopic///leaf//Orangutan");
-
+        assert_eq!(
+            message.packet.topic_name(),
+            "topic/subtopic///leaf//Orangutan"
+        );
 
         handler.remove_client("user1").unwrap();
 
@@ -1028,15 +1097,17 @@ mod tests {
 
         let message = receiver.recv().unwrap();
         assert_eq!(message.client_id, "user2");
-        assert_eq!(message.packet.topic_name(), "topic/subtopic///leaf//Orangutan");
+        assert_eq!(
+            message.packet.topic_name(),
+            "topic/subtopic///leaf//Orangutan"
+        );
 
         assert!(receiver.recv().is_err());
     }
 
     #[test]
     #[should_panic] // topic starting with $ are no longer allowed
-    fn test_topic_starting_with_dolar_sign_recieve () {
-
+    fn test_topic_starting_with_dolar_sign_recieve() {
         let subscribe = build_subscribe("$SYS/info"); // PANICS HERE
         let publish = build_publish("$SYS/info", "ERROR");
 
@@ -1055,7 +1126,7 @@ mod tests {
     }
 
     #[test]
-    fn test_topic_starting_with_dolar_sign_not_recieve_singlelevel_wildcard () {
+    fn test_topic_starting_with_dolar_sign_not_recieve_singlelevel_wildcard() {
         let subscribe = build_subscribe("+/info");
         let publish = build_publish("$SYS/info", "ERROR");
 
@@ -1070,7 +1141,7 @@ mod tests {
     }
 
     #[test]
-    fn test_topic_starting_with_dolar_sign_not_recieve_multilevel_wildcard () {
+    fn test_topic_starting_with_dolar_sign_not_recieve_multilevel_wildcard() {
         let subscribe = build_subscribe("#/info");
         let publish = build_publish("$SYS/info", "ERROR");
 
@@ -1083,5 +1154,4 @@ mod tests {
 
         assert!(receiver.recv().is_err());
     }
-
 }
