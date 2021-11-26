@@ -1,252 +1,162 @@
-use core::panic;
+#![allow(dead_code)]
+
 use std::{
+    convert::TryFrom,
     io::{self, Read},
     net::{SocketAddr, TcpListener, TcpStream},
     sync::{
-        mpsc::{self, Receiver},
+        mpsc::{self, channel, Receiver},
         Arc, Mutex, RwLock,
     },
     thread::{self, JoinHandle},
     time::Duration,
-    vec,
 };
 
 use threadpool::ThreadPool;
-use tracing::{debug, error, info};
+use tracing::{debug, error, info, warn};
 
-use packets::{packet_reader::{ErrorKind, PacketError, QoSLevel}, puback::Puback, suback::Suback};
+use packets::{connect::Connect, disconnect::Disconnect, traits::MQTTDecoding};
+use packets::{
+    helpers::PacketType, pingreq::PingReq, puback::Puback, subscribe::Subscribe,
+    unsuback::Unsuback, unsubscribe::Unsubscribe,
+};
 
+mod packet_processing;
+mod server_controller;
 pub mod server_error;
+
 pub use server_error::ServerError;
 
 const CONNECTION_WAIT_TIMEOUT: Duration = Duration::from_secs(180);
 const CLIENT_READ_TIMEOUT: Duration = Duration::from_secs(1);
+const ACCEPT_SLEEP_DUR: Duration = Duration::from_millis(100);
 
 use packets::publish::Publish;
+use packets::qos::QoSLevel;
 
-use crate::{client::Client, config::Config, server::server_error::ServerErrorKind, server_packets::{Connack, Connect, Disconnect, PingReq, PingResp, Subscribe}, session::Session, topic_handler::{Message, TopicHandler}};
+use crate::{
+    client::Client,
+    client_thread_joiner::ClientThreadJoiner,
+    clients_manager::{ClientsManager, DisconnectInfo},
+    config::Config,
+    server::server_error::ServerErrorKind,
+    topic_handler::{Message, TopicHandler},
+};
+
+pub use self::server_controller::ServerController;
 
 pub type ServerResult<T> = Result<T, ServerError>;
+pub type ClientId = String;
+// Se necesita para que Clippy lo detecte como slice
+pub type ClientIdArg = str;
 
 pub type ClientId = String;
 
 pub enum Packet {
-    PublishTypee(Publish),
-    PubackType(Puback),
-    SubscribeType(Subscribe),
-    SubackType(Suback),
-    PingReqType(PingReq),
-    DisconnectType(Disconnect),
-}
-
-pub enum PacketType {
-    Connect,
-    Connack,
-    Publish,
-    Puback,
-    Subscribe,
-    Suback,
-    Unsubscribe,
-    Unsuback,
-    Pingreq,
-    Pingresp,
-    Disconnect,
+    Publish(Publish),
+    Puback(Puback),
+    Subscribe(Subscribe),
+    Unsubscribe(Unsubscribe),
+    PingReq(PingReq),
+    Disconnect(Disconnect),
 }
 
 /// Represents a Server that complies with the
 /// MQTT V3.1.1 protocol
 pub struct Server {
     /// Clients connected to the server
-    session: RwLock<Session>,
+    clients_manager: RwLock<ClientsManager>,
     /// Initial Server setup
     config: Config,
     /// Manages the Publish / Subscribe tree
     topic_handler: TopicHandler,
     /// Vector with the handlers of the clients running in parallel
-    client_handlers: Mutex<Vec<JoinHandle<()>>>,
+    client_thread_joiner: Mutex<ClientThreadJoiner>,
     pool: Mutex<ThreadPool>,
 }
 
-// Temporal
-fn get_code_type(code: u8) -> Result<PacketType, PacketError> {
-    match code {
-        1 => Ok(PacketType::Connect),
-        2 => Ok(PacketType::Connack),
-        3 => Ok(PacketType::Publish),
-        4 => Ok(PacketType::Puback),
-        8 => Ok(PacketType::Subscribe),
-        9 => Ok(PacketType::Suback),
-        10 => Ok(PacketType::Unsubscribe),
-        11 => Ok(PacketType::Unsuback),
-        12 => Ok(PacketType::Pingreq),
-        13 => Ok(PacketType::Pingresp),
-        14 => Ok(PacketType::Disconnect),
-        _ => Err(PacketError::new_kind(
-            "Tipo de paquete invalido/no soportado",
-            ErrorKind::InvalidControlPacketType,
-        )),
-    }
+pub trait ServerInterface {
+    fn new(config: Config, threadpool_size: usize) -> Arc<Self>;
+    fn run(self: Arc<Self>) -> io::Result<ServerController>;
 }
 
-impl Server {
+impl ServerInterface for Server {
     /// Creates a new Server
-    pub fn new(config: Config, threadpool_size: usize) -> Arc<Self> {
-        info!("Iniciando servidor");
+    fn new(config: Config, threadpool_size: usize) -> Arc<Self> {
+        info!("Iniciando servidor en localhost: {}", config.port());
         Arc::new(Self {
-            session: RwLock::new(Session::new()),
+            clients_manager: RwLock::new(ClientsManager::new(config.accounts_path())),
             config,
             topic_handler: TopicHandler::new(),
-            client_handlers: Mutex::new(vec![]),
+            client_thread_joiner: Mutex::new(ClientThreadJoiner::new()),
             pool: Mutex::new(ThreadPool::new(threadpool_size)),
         })
     }
 
-    fn read_packet(&self, control_byte: u8, stream: &mut TcpStream) -> ServerResult<Packet> {
-        let buf: [u8; 1] = [control_byte];
+    /// Run the server in a new thread
+    /// Returns a ServerController that can be used to stop the server
+    fn run(self: Arc<Self>) -> io::Result<ServerController> {
+        let listener = TcpListener::bind(format!("localhost:{}", self.config.port()))?;
+        listener.set_nonblocking(true)?;
+        let (shutdown_sender, shutdown_receiver) = channel();
+        let server = self;
 
-        let code = control_byte >> 4;
-        match get_code_type(code)? {
-            PacketType::Publish => {
-                let packet = Publish::read_from(stream, control_byte)?;
-                Ok(Packet::PublishTypee(packet))
+        let server_handle = thread::spawn(move || {
+            if let Err(err) = server.server_loop(listener, shutdown_receiver) {
+                error!(
+                    "Error inesperado del servidor: {} - Se recomienda apagarlo",
+                    err.to_string()
+                )
             }
-            PacketType::Puback => {
-                let packet = Puback::read_from(stream, control_byte)?;
-                Ok(Packet::PubackType(packet))
-            }
-            PacketType::Subscribe => {
-                let packet = Subscribe::new(stream, &buf)?;
-                Ok(Packet::SubscribeType(packet))
-            }
-            PacketType::Unsubscribe => todo!(),
-            PacketType::Pingreq => {
-                let packet = PingReq::read_from(stream, control_byte)?;
-                Ok(Packet::PingReqType(packet))
-            }
-            PacketType::Disconnect => {
-                let packet = Disconnect::read_from(buf[0], stream)?;
-                Ok(Packet::DisconnectType(packet))
-            }
-            _ => Err(ServerError::new_kind(
-                "Codigo de paquete inesperado",
-                ServerErrorKind::ProtocolViolation,
-            )),
-        }
-    }
-
-    fn receive_packet(&self, stream: &mut TcpStream) -> ServerResult<Packet> {
-        let mut control_byte_buff = [0u8; 1];
-        match stream.read_exact(&mut control_byte_buff) {
-            Ok(_) => Ok(self.read_packet(control_byte_buff[0], stream)?),
-            Err(error) if error.kind() == io::ErrorKind::UnexpectedEof => {
-                Err(ServerError::new_kind(
-                    "Cliente se desconecto sin avisar",
-                    ServerErrorKind::ClientDisconnected,
-                ))
-            }
-            Err(err) => Err(ServerError::from(err)),
-        }
-    }
-
-    fn publish_dispatcher_loop(&self, receiver: Receiver<Message>) -> ServerResult<()> {
-        for message in receiver {
-            debug!("<{}>: enviando PUBLISH", message.client_id);
-            let id = message.client_id.clone();
-            self.session.read()?.send_publish(&id, message.packet)?;
-        }
-        Ok(())
-    }
-
-    fn handle_publish(self: &Arc<Self>, mut publish: Publish, id: &str) -> ServerResult<()> {
-        info!("Recibido PUBLISH de <{}>", id);
-        publish.set_max_qos(QoSLevel::QoSLevel1);
-        let (sender, receiver) = mpsc::channel();
-        let sv_copy = self.clone();
-        let handler: JoinHandle<ServerResult<()>> = thread::spawn(move || {
-            sv_copy.publish_dispatcher_loop(receiver)?;
-            Ok(())
         });
-        self.topic_handler.publish(&publish, sender)?;
-        // QoSLevel1
-        if let Some(packet_id) = publish.packet_id() {
-            self.session
-                .read()?
-                .send_puback(id, &Puback::new(*packet_id)?)?;
-        }
-        if let Err(err) = handler.join() {
-            Err(ServerError::new_msg(&format!(
-                "Error en el thread de publish_dispatcher_loop: {:?}",
-                err
-            )))
-        } else {
-            Ok(())
-        }
+        let server_controller = ServerController::new(shutdown_sender, server_handle);
+        Ok(server_controller)
     }
+}
 
-    fn handle_subscribe(&self, subscribe: Subscribe, id: &str) -> ServerResult<()> {
-        debug!("Recibido SUBSCRIBE de <{}>", id);
-        self.topic_handler.subscribe(&subscribe, id)?;
+impl Server {
+    fn to_threadpool<F>(self: &Arc<Self>, action: F, id: &ClientIdArg) -> ServerResult<()>
+    where
+        F: FnOnce(Arc<Self>, &ClientId) -> ServerResult<()> + Send + 'static,
+    {
+        let sv_copy = self.clone();
+        let id_copy = id.to_owned();
+        self.pool
+            .lock()?
+            .spawn(move || match action(sv_copy, &id_copy) {
+                Ok(()) => debug!(
+                    "ThreadPool: Paquete de cliente <{}> procesado con exito",
+                    id_copy
+                ),
+                Err(err) => error!(
+                    "ThreadPool: Error procesando paquete de cliente <{}>: {}",
+                    id_copy,
+                    err.to_string()
+                ),
+            })?;
         Ok(())
-    }
-
-    fn handle_disconnect(&self, _disconnect: Disconnect, id: &str) -> ServerResult<()> {
-        debug!("Recibido DISCONNECT de <{}>", id);
-        self.session.write()?.disconnect(id, true)?;
-        Ok(())
-    }
-
-    fn handle_pingreq(&self, _pingreq: PingReq, id: &str) -> ServerResult<()> {
-        debug!("Recibido PINGREQ de <{}>", id);
-        self.session.read()?.client_do(id, |mut client| {
-            client.write_all(&PingResp::new().encode())?;
-            Ok(())
-        })?;
-        Ok(())
-    }
-
-    pub fn handle_packet(self: &Arc<Self>, packet: Packet, id: &str) -> ServerResult<()> {
-        match packet {
-            Packet::PublishTypee(packet) => self.handle_publish(packet, id),
-            Packet::SubscribeType(packet) => self.handle_subscribe(packet, id),
-            Packet::PingReqType(packet) => self.handle_pingreq(packet, id),
-            Packet::DisconnectType(packet) => self.handle_disconnect(packet, id),
-            _ => Err(ServerError::new_kind(
-                "Paquete invalido",
-                ServerErrorKind::ProtocolViolation,
-            )),
-        }
-    }
-
-    fn wait_for_connect(&self, stream: &mut TcpStream) -> ServerResult<Client> {
-        match Connect::new_from_zero(stream) {
-            Ok(packet) => {
-                info!(
-                    "Recibido CONNECT de cliente <{}>: {:?}",
-                    packet.client_id(),
-                    packet
-                );
-                Ok(Client::new(packet, stream.try_clone()?))
-            }
-            Err(err) => Err(ServerError::from(err)),
-        }
     }
 
     fn connect_client(&self, stream: &mut TcpStream, addr: SocketAddr) -> ServerResult<String> {
-        info!("Conectando <{}>", addr);
-        match self.wait_for_connect(stream) {
+        info!("<{}>: Conectando", addr);
+        match self.wait_for_connect(stream, addr) {
             Ok(client) => {
-                let id = client.id().to_owned();
-                stream.set_read_timeout(Some(CLIENT_READ_TIMEOUT))?;
-                self.session.write()?.connect(client)?;
+                let keep_alive = client.keep_alive();
+                if keep_alive == 0 {
+                    stream.set_read_timeout(None)?;
+                } else {
+                    stream.set_read_timeout(Some(CLIENT_READ_TIMEOUT))?;
+                }
+                let id = self.clients_manager.write()?.new_session(client)?;
                 Ok(id)
             }
             Err(err) if err.kind() == ServerErrorKind::Timeout => {
-                error!("<{}> timeout esperando CONNECT", addr);
+                error!("<{}>: timeout esperando CONNECT", addr);
                 Err(err)
             }
             Err(err) => {
                 error!(
-                    "Error recibiendo Connect de cliente <{}>: {}",
+                    "Error recibiendo CONNECT de cliente <{}>: {}",
                     addr,
                     err.to_string()
                 );
@@ -258,58 +168,111 @@ impl Server {
         }
     }
 
-    fn to_threadpool(self: &Arc<Self>, id: &str, packet: Packet) -> ServerResult<()> {
-        let sv_copy = self.clone();
-        let id_copy = id.to_owned();
-        self.pool
-            .lock()?
-            .spawn(move || sv_copy.handle_packet(packet, &id_copy).unwrap())?;
-        Ok(())
+    // TODO: convertirlo en macro
+    fn log_processed_packet(&self, packet_type: PacketType, id: &ClientIdArg) {
+        match packet_type {
+            PacketType::Connect => debug!("<{}>: Procesado CONNECT", id),
+            PacketType::Publish => debug!("<{}>: Procesado PUBLISH", id),
+            PacketType::Puback => debug!("<{}>: Procesado PUBACK", id),
+            PacketType::Subscribe => debug!("<{}>: Procesado SUBSCRIBE", id),
+            PacketType::Unsubscribe => debug!("<{}>: Procesado UNSUBSCRIBE", id),
+            PacketType::PingReq => debug!("<{}>: Procesado PINGREQ", id),
+            PacketType::Disconnect => debug!("<{}>: Procesado DISCONNECT", id),
+            _ => unreachable!(),
+        }
     }
 
-    fn client_loop(self: Arc<Self>, id: String, mut stream: TcpStream) -> ServerResult<()> {
-        debug!("Entrando al loop de {}", id);
+    fn client_loop(
+        self: &Arc<Self>,
+        id: String,
+        mut stream: TcpStream,
+    ) -> ServerResult<DisconnectInfo> {
         let mut timeout_counter = 0;
-        let client_keep_alive = self.session.read()?.keep_alive(&id)?;
+        let client_keep_alive = self
+            .clients_manager
+            .read()?
+            .get_client_property(&id, |client| Ok(client.keep_alive()))?;
 
-        loop {
-            match self.receive_packet(&mut stream) {
-                Ok(packet) => {
+        while self.clients_manager.read()?.is_connected(&id)? {
+            match self.process_packet(&mut stream, &id) {
+                Ok(packet_type) => {
                     timeout_counter = 0;
-                    self.to_threadpool(&id, packet)?;
+                    self.log_processed_packet(packet_type, &id);
+                    if packet_type == PacketType::Disconnect {
+                        return self.clients_manager.write()?.finish_session(&id, true);
+                    }
                 }
                 Err(err) if err.kind() == ServerErrorKind::Timeout => {
                     timeout_counter += 1;
-                    self.session.read()?.send_unacknowledged(&id)?;
+                    self.clients_manager.read()?.send_unacknowledged(&id)?;
                 }
                 Err(err) => {
                     error!("<{}>: {}", id, err.to_string());
-                    self.session.write()?.disconnect(&id, false)?;
-                    break;
+                    return self.clients_manager.write()?.finish_session(&id, false);
                 }
             }
             if timeout_counter > client_keep_alive {
                 error!("<{}>: Keep Alive timeout", id);
-                break;
+                return self.clients_manager.write()?.finish_session(&id, false);
             }
         }
-        debug!("Conexion finalizada con <{}>", id);
-        self.session.write()?.finish_session(&id)
+        // TODO: no deberia pasar
+        Ok(DisconnectInfo {
+            publish_last_will: None,
+            clean_session: true,
+        })
     }
 
-    fn manage_client(self: Arc<Self>, mut stream: TcpStream, addr: SocketAddr) -> ServerResult<()> {
+    fn manage_client(
+        self: &Arc<Self>,
+        mut stream: TcpStream,
+        addr: SocketAddr,
+    ) -> ServerResult<()> {
         match self.connect_client(&mut stream, addr) {
             Err(err) => match err.kind() {
-                ServerErrorKind::ProtocolViolation => Err(err),
-                _ => panic!("Error inesperado: {}", err.to_string()),
+                ServerErrorKind::ClientNotInWhitelist => {
+                    warn!("Addr {} - Intento de conexion con usuario invalido", addr);
+                }
+                ServerErrorKind::InvalidPassword => {
+                    warn!(
+                        "Addr {} - Intento de conexion con contraseña invalido",
+                        addr
+                    );
+                }
+                ServerErrorKind::ProtocolViolation => {
+                    error!(
+                        "Addr {} - Violacion de protocolo: {}",
+                        addr,
+                        err.to_string()
+                    );
+                    return Err(err);
+                }
+                _ => {
+                    error!("Error inesperado: {}", err.to_string());
+                    return Err(err);
+                }
             },
-            Ok(id) => self.client_loop(id, stream),
+            Ok(id) => {
+                let disconnect_info = self.client_loop(id.clone(), stream)?;
+                if let Some(last_will) = disconnect_info.publish_last_will {
+                    self.send_last_will(last_will, &id)?;
+                }
+                if disconnect_info.clean_session {
+                    self.topic_handler.remove_client(&id)?;
+                }
+            }
         }
+        Ok(())
     }
 
-    fn accept_client(self: Arc<Self>, listener: &TcpListener) -> Result<Arc<Server>, ServerError> {
+    fn accept_client(
+        self: &Arc<Self>,
+        listener: &TcpListener,
+    ) -> ServerResult<(TcpStream, SocketAddr)> {
         match listener.accept() {
-            Err(error) if error.kind() == io::ErrorKind::WouldBlock => Ok(self),
+            Err(error) if error.kind() == io::ErrorKind::WouldBlock => {
+                Err(ServerError::new_kind("Idle", ServerErrorKind::Idle))
+            }
             Err(error) => {
                 error!("No se pudo aceptar conexion TCP: {}", error.to_string());
                 Err(ServerError::from(error))
@@ -317,23 +280,58 @@ impl Server {
             Ok((stream, addr)) => {
                 info!("Aceptada conexion TCP con {}", addr);
                 stream.set_read_timeout(Some(CONNECTION_WAIT_TIMEOUT))?;
-                let sv_copy = self.clone();
-                // No funcionan los nombres en el trace
-                let handle = thread::Builder::new()
-                    .name(addr.to_string())
-                    .spawn(move || sv_copy.manage_client(stream, addr).unwrap())
-                    .expect("Error creando el thread");
-                self.client_handlers.lock().unwrap().push(handle);
-                Ok(self)
+                Ok((stream, addr))
             }
         }
     }
 
-    pub fn run(self: Arc<Self>) -> ServerResult<()> {
-        let listener = TcpListener::bind(format!("127.0.0.1:{}", self.config.port()))?;
-        let mut server = self;
-        loop {
-            server = server.accept_client(&listener)?;
+    fn run_client(self: &Arc<Self>, stream: TcpStream, addr: SocketAddr) -> ServerResult<()> {
+        let sv_copy = self.clone();
+        let handle = thread::spawn(move || {
+            match sv_copy.manage_client(stream, addr) {
+                Ok(()) => debug!("Cliente con Address {} procesado con exito", addr),
+                Err(err) => error!(
+                    "Error procesando al cliente con Address {}: {}",
+                    addr,
+                    err.to_string()
+                ),
+            }
+            sv_copy
+                .client_thread_joiner
+                .lock()
+                .expect("Lock envenenado")
+                .finished(addr)
+                .unwrap_or_else(|err| panic!("Error irrecuperable: {}", err.to_string()));
+        });
+        self.client_thread_joiner.lock()?.add(addr, handle);
+        Ok(())
+    }
+
+    fn server_loop(
+        self: Arc<Self>,
+        listener: TcpListener,
+        shutdown_receiver: Receiver<()>,
+    ) -> ServerResult<()> {
+        let mut recv_result = shutdown_receiver.try_recv();
+        while recv_result.is_err() {
+            match self.accept_client(&listener) {
+                Ok((stream, addr)) => {
+                    self.run_client(stream, addr)
+                        .unwrap_or_else(|err| error!("{}: Error - {}", addr, err.to_string()));
+                }
+                Err(err) if err.kind() == ServerErrorKind::Idle => {
+                    thread::sleep(ACCEPT_SLEEP_DUR);
+                }
+                Err(err) => {
+                    error!("Error aceptando una nueva conexion: {}", err.to_string());
+                    break;
+                }
+            }
+            self.client_thread_joiner.lock()?.join_finished();
+            recv_result = shutdown_receiver.try_recv();
         }
+        debug!("Apagando Servidor");
+        self.clients_manager.write()?.finish_all_sessions(false)?;
+        Ok(())
     }
 }

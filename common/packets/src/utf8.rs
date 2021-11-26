@@ -1,6 +1,6 @@
 use std::io::Read;
 
-use crate::packet_reader::PacketError;
+use crate::packet_error::PacketError;
 
 const MAX_FIELD_LEN: usize = 65535;
 

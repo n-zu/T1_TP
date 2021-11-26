@@ -1,50 +1,46 @@
-#![allow(dead_code)]
-
 use std::{
-    collections::HashMap,
-    io::{self, Write},
-    net::TcpStream,
+    io::Write,
+    net::{Shutdown, TcpStream},
+    vec,
 };
 
-type PacketId = u16;
-
-use packets::{packet_reader::QoSLevel, puback::Puback, publish::Publish};
+use packets::{connect::Connect, pingresp::PingResp, qos::QoSLevel, traits::MQTTEncoding};
+use packets::{puback::Puback, publish::Publish, suback::Suback};
 use tracing::{debug, error, info};
 use tracing_subscriber::field::debug;
 
-use crate::{
-    server::{ClientId, ServerError, ServerResult},
-    server_packets::{Connack, Connect},
+use crate::server::{
+    server_error::ServerErrorKind, ClientId, ClientIdArg, ServerError, ServerResult,
 };
-
-#[derive(PartialEq)]
-pub enum ClientStatus {
-    Connected,
-    DisconnectedGracefully,
-    DisconnectedUngracefully,
-}
 
 /// Represents the state of a client on the server
 pub struct Client {
     /// Id of the client
-    id: String,
+    id: ClientId,
     /// TCP connection to send packets to the client
-    stream: TcpStream,
+    stream: Option<TcpStream>,
     /// Indicates if the client is currently connected
-    status: ClientStatus,
     connect: Connect,
     /// Unacknowledge packets
-    unacknowledged: HashMap<PacketId, Publish>,
+    unacknowledged: Vec<Publish>,
 }
 
 impl Client {
-    pub fn new(connect: Connect, stream: TcpStream) -> Self {
+    pub fn new(connect: Connect) -> Self {
         Self {
             id: connect.client_id().to_owned(),
-            stream,
-            status: ClientStatus::Connected,
+            stream: None,
             connect,
-            unacknowledged: HashMap::new(),
+            unacknowledged: vec![],
+        }
+    }
+
+    pub fn connect(&mut self, stream: TcpStream) -> ServerResult<()> {
+        if self.stream.is_none() {
+            self.stream = Some(stream);
+            Ok(())
+        } else {
+            Err(ServerError::new_msg("Cliente ya conectado"))
         }
     }
 
@@ -52,35 +48,72 @@ impl Client {
         &self.id
     }
 
+    pub fn set_id(&mut self, new_id: &ClientIdArg) -> ServerResult<()> {
+        if self.id().is_empty() {
+            self.id = new_id.to_owned();
+            Ok(())
+        } else {
+            Err(ServerError::new_msg(
+                "Solo se puede setear la id de un cliente con id vacia",
+            ))
+        }
+    }
+
     pub fn connected(&self) -> bool {
-        self.status == ClientStatus::Connected
+        self.stream.is_some()
     }
 
-    fn send_last_will(&self) {
-        todo!()
-    }
-
-    pub fn disconnect(&mut self, gracefully: bool) {
-        if gracefully {
-            self.status = ClientStatus::DisconnectedGracefully;
-        } else {
-            // En que casos se envia el last_will? gracefully o ungracefully?
-            self.status = ClientStatus::DisconnectedUngracefully;
-            self.send_last_will();
+    pub fn disconnect(&mut self, gracefully: bool) -> ServerResult<Option<Publish>> {
+        if let Some(stream) = self.stream.take() {
+            stream.shutdown(Shutdown::Both)?;
+            if gracefully {
+                Ok(None)
+            } else if let Some(last_will) = self.connect.last_will().take() {
+                let packet_identifier: Option<u16>;
+                if last_will.qos != QoSLevel::QoSLevel0 {
+                    packet_identifier = Some(rand::random());
+                } else {
+                    packet_identifier = None;
+                }
+                let publish_last_will = Publish::new(
+                        false,
+                        last_will.qos,
+                        last_will.retain_flag,
+                        &last_will.topic_name,
+                        &last_will.topic_message,
+                        packet_identifier
+                    ).expect("Se esperaba un formato de Publish valido al crearlo con los datos del LastWill");
+                Ok(Some(publish_last_will))
+            } else {
+                Ok(None)
+            }
+        }
+        // El cliente ya estaba desconectado
+        else {
+            Ok(None)
         }
     }
 
-    // TODO: probablemente no sea buena idea que sea publico
-    pub fn write_all(&mut self, buf: &[u8]) -> io::Result<()> {
-        if self.connected() {
-            self.stream.write_all(buf)
+    pub fn send_pingresp(&mut self) -> ServerResult<()> {
+        debug!("<{}> Enviando PINGRESP", self.id);
+        Client::write_all(self.stream.as_mut(), &PingResp::new().encode()?)?;
+        Ok(())
+    }
+
+    fn write_all(mut stream: Option<&mut TcpStream>, buf: &[u8]) -> ServerResult<()> {
+        if let Some(stream) = stream.take() {
+            stream.write_all(buf)?;
+            Ok(())
         } else {
-            todo!()
+            Err(ServerError::new_kind(
+                "Se intento escribir en un stream de un cliente desconectado",
+                ServerErrorKind::ProtocolViolation,
+            ))
         }
     }
 
-    pub fn send_connack(&mut self, connack: Connack) -> io::Result<()> {
-        self.stream.write_all(&connack.encode())?;
+    pub fn send_packet(&mut self, packet: impl MQTTEncoding) -> ServerResult<()> {
+        Client::write_all(self.stream.as_mut(), &packet.encode()?)?;
         Ok(())
     }
 
@@ -89,56 +122,79 @@ impl Client {
     }
 
     pub fn reconnect(&mut self, new_client: Client) -> ServerResult<()> {
-        // TODO: chequeo de usuario y contraseña
         if self.connected() {
             error!("Se intento reconectar un usuario que ya esta conectado");
             Err(ServerError::new_msg("Usuario ya conectado"))
         } else {
             info!("Reconectado <{}>", self.id);
             self.stream = new_client.stream;
-            self.status = ClientStatus::Connected;
-            self.send_unacknowledged();
+            self.connect = new_client.connect;
             Ok(())
         }
     }
 
     pub fn keep_alive(&self) -> u16 {
-        *self.connect.keep_alive()
+        self.connect.keep_alive()
     }
 
-    pub fn acknowledge(&mut self, puback: Puback) {
+    pub fn user_name(&self) -> Option<&String> {
+        self.connect.user_name()
+    }
+
+    pub fn password(&self) -> Option<&String> {
+        self.connect.password()
+    }
+
+    pub fn acknowledge(&mut self, puback: Puback) -> ServerResult<()> {
         debug!("<{}>: Acknowledge {}", self.id, puback.packet_id());
-        self.unacknowledged.remove(&puback.packet_id()).unwrap();
+        self.unacknowledged.retain(|publish| {
+            puback.packet_id()
+                != publish
+                    .packet_id()
+                    .expect("Se esperaba un paquete con identificador (QoS > 0)")
+        });
+        Ok(())
     }
 
-    pub fn send_unacknowledged(&mut self) {
-        for (id, publish) in self.unacknowledged.iter() {
+    pub fn send_suback(&mut self, suback: Suback) -> ServerResult<()> {
+        Client::write_all(self.stream.as_mut(), &suback.encode()?)?;
+        Ok(())
+    }
+
+    pub fn send_unacknowledged(&mut self) -> ServerResult<()> {
+        for publish in self.unacknowledged.iter() {
             debug!(
-                "Reenviando paquete con id <{}> a cliente <{}>",
-                id,
-                publish.packet_id().unwrap()
+                "<{}>: Reenviando paquete con id <{}>",
+                self.id,
+                publish
+                    .packet_id()
+                    .expect("Se esperaba un paquete con identificador (QoS > 0)")
             );
-            self.stream.write_all(&publish.encode().unwrap()).unwrap();
+            Client::write_all(self.stream.as_mut(), &publish.encode()?)?;
         }
+        Ok(())
     }
 
-    fn add_unacknowledged(&mut self, publish: Publish) {
-        self.unacknowledged
-            .insert(*publish.packet_id().unwrap(), publish);
+    fn add_unacknowledged(&mut self, mut publish: Publish) {
+        publish.set_dup(true);
+        self.unacknowledged.push(publish);
     }
 
     pub fn send_publish(&mut self, publish: Publish) {
         if self.connected() {
-            self.write_all(&publish.encode().unwrap()).unwrap();
+            Client::write_all(self.stream.as_mut(), &publish.encode().unwrap()).unwrap();
             if publish.qos() == QoSLevel::QoSLevel1 {
                 // TODO: que pasa si el paquete ya existe en el HashMap?
-                debug!(
-                    "{}: Agregando PUBLISH a lista de paquetes no confirmados",
-                    self.id
-                );
+                debug!("<{}>: Agregando PUBLISH a UNACKNOWLEDGED", self.id);
                 self.add_unacknowledged(publish);
+            } else {
+                debug!("<{}>: Conectado y con QoS == 0", self.id);
             }
         } else if publish.qos() == QoSLevel::QoSLevel1 {
+            debug!(
+                "<{}>: Agregando Publish a UNACKNOWLEDGED desconectado",
+                self.id
+            );
             self.add_unacknowledged(publish);
         }
     }
