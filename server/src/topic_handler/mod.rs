@@ -3,6 +3,7 @@
 use std::{
     collections::HashMap,
     fmt::Debug,
+    ops::Deref,
     sync::{mpsc::Sender, RwLock},
 };
 
@@ -37,12 +38,14 @@ fn set_max_datum(subscribers: &mut Subscribers, key: &str, datum: SubscriptionDa
         subscribers.insert(key.to_string(), datum);
     }
 }
+
 #[doc(hidden)]
 fn set_max_data(subscribers: &mut Subscribers, data: Subscribers) {
     for (key, datum) in data {
         set_max_datum(subscribers, &key, datum);
     }
 }
+
 #[doc(hidden)]
 fn matches_singlelevel(topic_filter: String, topic_name: String) -> bool {
     let name = topic_name.split(SEP).collect::<Vec<&str>>();
@@ -67,6 +70,7 @@ fn matches_singlelevel(topic_filter: String, topic_name: String) -> bool {
 
     true
 }
+
 #[doc(hidden)]
 fn set_matching_subscribers(
     singlelevel_subscribers: &mut Subscribers,
@@ -79,6 +83,7 @@ fn set_matching_subscribers(
         }
     }
 }
+
 #[doc(hidden)]
 fn remove_matching_subscriptions(
     singlelevel_subscribers: &mut Subscriptions,
@@ -92,6 +97,7 @@ fn remove_matching_subscriptions(
         }
     };
 }
+
 #[doc(hidden)]
 fn remove_subscriber(singlelevel_subscribers: &mut Subscriptions, client_id: &str) {
     singlelevel_subscribers.retain(|_, subscribers| {
@@ -211,22 +217,19 @@ fn pub_rec(
     multilevel_subscribers: &mut Subscribers,
     is_root: bool,
 ) -> Result<(), TopicHandlerError> {
-    if is_root && !topic_name.is_empty() && topic_name.starts_with(UNMATCH_WILDCARD) {
-        multilevel_subscribers.clear();
-    } else {
+    if !is_root && !topic_name.starts_with(UNMATCH_WILDCARD) {
         // Agregar los subscribers multinivel de esta hoja
-        let mlsubs = node.multilevel_subscribers.read().unwrap();
+        let mlsubs = node.multilevel_subscribers.read()?;
         set_max_data(multilevel_subscribers, mlsubs.clone());
         set_matching_subscribers(
             multilevel_subscribers,
             topic_name,
-            &node.singlelevel_subscriptions.read()?.clone(),
+            node.singlelevel_subscriptions.read()?.deref(),
         );
     }
 
     match topic_name.split_once(SEP) {
         // Aca se le puede agregar tratamiento especial para *, #, etc.
-        // Uso un HashMap para no preocuparse por agregar el mismo cliente mas de una vez
         Some((topic_name, rest)) => {
             let subtopics = node.subtopics.read()?;
             if let Some(subtopic) = subtopics.get(topic_name) {
