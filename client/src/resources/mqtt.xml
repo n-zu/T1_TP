@@ -1414,6 +1414,7 @@
                 <property name="halign">start</property>
                 <property name="hexpand">True</property>
                 <property name="label" translatable="yes">Desconectado</property>
+                <property name="wrap">True</property>
               </object>
               <packing>
                 <property name="expand">False</property>
