@@ -65,6 +65,7 @@ impl Controller {
     }
 
     #[doc(hidden)]
+    /// Sets up the connect button
     fn setup_connect(self: &Rc<Self>) {
         let cont_clone = self.clone();
         let connect: Button = self.builder.object("con_btn").unwrap();
@@ -74,6 +75,7 @@ impl Controller {
     }
 
     #[doc(hidden)]
+    /// Sets up the subscribe button
     fn setup_subscribe(self: &Rc<Self>) {
         let cont_clone = self.clone();
         let subscribe: Button = self.builder.object("sub_btn").unwrap();
@@ -92,6 +94,7 @@ impl Controller {
     }
 
     #[doc(hidden)]
+    /// Sets up the disconnect button
     fn setup_disconnect(self: &Rc<Self>) {
         let cont_clone = self.clone();
         let disconnect: Button = self.builder.object("discon_btn").unwrap();
@@ -101,6 +104,7 @@ impl Controller {
     }
 
     #[doc(hidden)]
+    /// Sets up the unsubscribe button
     fn setup_unsubscribe(self: &Rc<Self>) {
         let cont_clone = self.clone();
         let unsubscribe: Button = self.builder.object("unsub_btn").unwrap();
@@ -110,6 +114,8 @@ impl Controller {
     }
 
     #[doc(hidden)]
+    /// Retrieves all the necessary input data from the UI in order to create and connect
+    /// a new Client
     fn _connect(&self) -> Result<(), ClientError> {
         let address_entry: Entry = self.builder.object("con_host").unwrap();
         let port_entry: Entry = self.builder.object("con_port").unwrap();
@@ -133,6 +139,7 @@ impl Controller {
     }
 
     #[doc(hidden)]
+    /// Creates a new CONNECT packet given the input data from the UI
     fn _create_connect_packet(&self) -> Result<Connect, ClientError> {
         // Get the entries from the interface
         let id_entry: Entry = self.builder.object("con_cli").unwrap();
@@ -205,6 +212,8 @@ impl Controller {
     }
 
     #[doc(hidden)]
+    /// Retrieves all the necessary input data from the UI in order to create and send
+    /// a new SUBSCRIBE packet
     fn _subscribe(&self) -> Result<(), ClientError> {
         let topic_entry: Entry = self.builder.object("sub_top").unwrap();
         let qos_entry: ComboBoxText = self.builder.object("sub_qos").unwrap();
@@ -229,7 +238,7 @@ impl Controller {
     }
 
     /// Listener of the Subscribe button
-    /// Tries to build a subscribe packet
+    /// Tries to build a SUBSCRIBE packet
     /// and send it to the server with the
     /// given inputs
     #[doc(hidden)]
@@ -245,6 +254,8 @@ impl Controller {
     }
 
     #[doc(hidden)]
+    /// Retrieves all the necessary input data from the UI in order to create and send
+    /// a new PUBLISH packet
     fn _publish(&self) -> Result<(), ClientError> {
         let topic_entry: Entry = self.builder.object("pub_top").unwrap();
         let qos_entry: ComboBoxText = self.builder.object("pub_qos").unwrap();
@@ -285,7 +296,7 @@ impl Controller {
     }
 
     /// Listener of the Publish button
-    /// Tries to build a publish packet
+    /// Tries to build a PUBLISH packet
     /// and send it to the server with the
     /// given inputs
     #[doc(hidden)]
@@ -301,6 +312,7 @@ impl Controller {
     }
 
     #[doc(hidden)]
+    /// Drops the internal Client
     fn _disconnect(&self) -> Result<(), ClientError> {
         self.client.lock()?.take();
         Ok(())
@@ -325,6 +337,8 @@ impl Controller {
     }
 
     #[doc(hidden)]
+    /// Retrieves all the necessary input data from the UI in order to create and send
+    /// a new SUBSCRIBE packet
     fn _unsubscribe(&self) -> Result<(), ClientError> {
         let topic_entry: Entry = self.builder.object("unsub_top").unwrap();
         let text = vec![Topic::new(
@@ -341,7 +355,7 @@ impl Controller {
     }
 
     /// Listener of the Unsubscribe button
-    /// Tries to build an unsubscribe packet
+    /// Tries to build an UNSUBSCRIBE packet
     /// and send it to the server with the
     /// given inputs
     #[doc(hidden)]
@@ -363,7 +377,7 @@ impl Controller {
         self.reset_connected_screen();
     }
 
-    /// Resets connection screen its default state
+    /// Resets connection screen to its default state
     #[doc(hidden)]
     fn reset_connection_screen(&self) {
         self.set_text_to_entry_box("con_host", "localhost");
@@ -378,7 +392,7 @@ impl Controller {
         self.set_state_to_switch_box("con_lw_ret", false);
     }
 
-    /// Resets connected screen its default state
+    /// Resets connected screen to its default state
     #[doc(hidden)]
     fn reset_connected_screen(&self) {
         self.set_text_to_entry_box("pub_top", "top/sub");

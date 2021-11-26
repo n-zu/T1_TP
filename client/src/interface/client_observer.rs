@@ -179,8 +179,8 @@ impl InternalObserver {
 fn get_box(topic: &str, payload: &str, qos: QoSLevel) -> Box {
     let outer_box = Box::new(Orientation::Vertical, 5);
     let inner_box = Box::new(Orientation::Horizontal, 5);
-    inner_box.add(&Label::new(Some(topic)));
-    inner_box.add(&Label::new(Some(&format!("QOS: {}", qos as u8))));
+    inner_box.add(&Label::new(Some(&("• ".to_owned() + topic))));
+    inner_box.add(&Label::new(Some(&format!("- QoS: {}", qos as u8))));
     outer_box.add(&inner_box);
     outer_box.add(&Label::new(Some(payload)));
     outer_box
