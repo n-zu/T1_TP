@@ -6,7 +6,8 @@ use std::{
 };
 
 use packets::{
-    connect::ConnectBuilder,
+    connect::{ConnectBuilder, LastWill},
+    disconnect::Disconnect,
     puback::Puback,
     publish::Publish,
     qos::QoSLevel::*,
@@ -191,6 +192,7 @@ fn test_subscription_different_clients_persistent_session() {
     let suback = Suback::read_from(&mut stream_1, control[0]).unwrap();
     assert_eq!(suback.packet_id(), 123);
 
+    stream_1.write_all(&Disconnect::new().encode()).unwrap();
     drop(stream_1); // Debería recordar al usuario
 
     // Mando publish con QoS1
@@ -212,4 +214,44 @@ fn test_subscription_different_clients_persistent_session() {
         recv_publish.encode().unwrap()[1..],
         publish.encode().unwrap()[1..]
     );
+}
+
+#[test]
+fn test_last_will() {
+    let (_s, port) = start_server();
+    // Me conecto con last will
+    let mut builder_1 = ConnectBuilder::new("id1", 0, false).unwrap();
+    builder_1 = builder_1.last_will(LastWill::new(
+        "topic".to_string(),
+        "message".to_string(),
+        QoSLevel0,
+        false,
+    ));
+    let stream_1 = connect_client(builder_1, true, port, true);
+
+    let builder_2 = ConnectBuilder::new("id2", 0, true).unwrap();
+    let mut stream_2 = connect_client(builder_2, true, port, true);
+    let mut control = [0u8];
+
+    // Mando subscribe con QoS0
+    let subscribe = Subscribe::new(vec![Topic::new("topic", QoSLevel0).unwrap()], 123);
+    stream_2.write_all(&subscribe.encode().unwrap()).unwrap();
+    thread::sleep(Duration::from_millis(100));
+
+    // Recibo suback
+    stream_2.read_exact(&mut control).unwrap();
+    assert_eq!(control[0] >> 4, 9);
+    let suback = Suback::read_from(&mut stream_2, control[0]).unwrap();
+    assert_eq!(suback.packet_id(), 123);
+
+    // Me desconecto sin mandar disconnect
+    drop(stream_1);
+
+    // El otro debería recibir publish
+    stream_2.read_exact(&mut control).unwrap();
+    assert_eq!(control[0] >> 4, 3);
+    let recv_publish = Publish::read_from(&mut stream_2, control[0]).unwrap();
+    // ignoro el primer byte por si le ponen la dup flag
+    assert_eq!(recv_publish.topic_name(), "topic");
+    assert_eq!(recv_publish.payload(), Some(&"message".to_string()));
 }
