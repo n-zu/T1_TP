@@ -128,7 +128,7 @@ impl Controller {
         let connect = self._create_connect_packet()?;
         let sub_box: ListBox = self.builder.object("sub_subs").unwrap();
         let unsub_entry: Entry = self.builder.object("unsub_top").unwrap();
-        let subs_list = Rc::new(SubscriptionList::new(sub_box, unsub_entry));
+        let subs_list = SubscriptionList::new(sub_box, unsub_entry);
         let observer = ClientObserver::new(self.builder.clone(), subs_list);
         let client = Client::new(&full_addr, observer, connect)?;
 
