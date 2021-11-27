@@ -18,6 +18,13 @@ type Subtopics = HashMap<String, Topic>; // key: subtopic name
 type Subscribers = HashMap<String, SubscriptionData>; // key: client_id
 type Subscriptions = HashMap<String, Subscribers>; // key: topic filter { key: client_id }
 
+fn split(topic: &str) -> (&str, Option<&str>) {
+    match topic.split_once(SEP) {
+        Some((splitted, rest)) => (splitted, Some(rest)),
+        None => (topic, None),
+    }
+}
+
 pub struct Message {
     pub client_id: String,
     pub packet: Publish,
@@ -26,24 +33,6 @@ pub struct Message {
 #[derive(Debug, Clone)]
 struct SubscriptionData {
     qos: QoSLevel,
-}
-
-#[doc(hidden)]
-fn set_max_datum(subscribers: &mut Subscribers, key: &str, datum: SubscriptionData) {
-    if let Some(og_datum) = subscribers.get(&key.to_string()) {
-        if (og_datum.qos as u8) < (datum.qos as u8) {
-            subscribers.insert(key.to_string(), datum);
-        }
-    } else {
-        subscribers.insert(key.to_string(), datum);
-    }
-}
-
-#[doc(hidden)]
-fn set_max_data(subscribers: &mut Subscribers, data: Subscribers) {
-    for (key, datum) in data {
-        set_max_datum(subscribers, &key, datum);
-    }
 }
 
 #[doc(hidden)]
@@ -73,29 +62,18 @@ fn matches_singlelevel(topic_filter: String, topic_name: String) -> bool {
 
 #[doc(hidden)]
 fn set_matching_subscribers(
-    singlelevel_subscribers: &mut Subscribers,
-    topic_name: &str,
+    topic_name: Option<&str>,
     singlelevel_subscriptions: &Subscriptions,
-) {
-    for (topic_filter, subscribers) in singlelevel_subscriptions {
-        if matches_singlelevel(topic_filter.to_string(), topic_name.to_string()) {
-            set_max_data(singlelevel_subscribers, subscribers.clone());
+) -> Subscribers {
+    let mut matching = HashMap::new();
+    if let Some(topic) = topic_name {
+        for (topic_filter, subscribers) in singlelevel_subscriptions {
+            if matches_singlelevel(topic_filter.to_string(), topic.to_string()) {
+                matching.extend(subscribers.clone());
+            }
         }
     }
-}
-
-#[doc(hidden)]
-fn remove_matching_subscriptions(
-    singlelevel_subscribers: &mut Subscriptions,
-    topic_name: &str,
-    client_id: &str,
-) {
-    if let Some(subscribers) = singlelevel_subscribers.get_mut(topic_name) {
-        subscribers.remove(client_id);
-        if subscribers.is_empty() {
-            singlelevel_subscribers.remove(topic_name);
-        }
-    };
+    matching
 }
 
 #[doc(hidden)]
@@ -107,7 +85,6 @@ fn remove_subscriber(singlelevel_subscribers: &mut Subscriptions, client_id: &st
 }
 
 const SEP: &str = "/";
-const NO_TOPIC: &str = "# NO_TOPIC #"; // This is mqtt invalid, no packet should have this topic filter
 const MULTILEVEL_WILDCARD: &str = "#";
 const SINGLELEVEL_WILDCARD: &str = "+";
 const UNMATCH_WILDCARD: &str = "$";
@@ -159,7 +136,7 @@ impl TopicHandler {
             let data = SubscriptionData {
                 qos: topic_filter.qos(),
             };
-            subscribe_rec(&self.root, topic_filter.name(), client_id, data)?;
+            subscribe_rec(&self.root, Some(topic_filter.name()), client_id, data)?;
         }
 
         Ok(None)
@@ -173,14 +150,7 @@ impl TopicHandler {
     ) -> Result<(), TopicHandlerError> {
         let full_topic = packet.topic_name();
 
-        pub_rec(
-            &self.root,
-            full_topic,
-            sender,
-            packet,
-            &mut HashMap::new(),
-            true,
-        )?;
+        pub_rec(&self.root, Some(full_topic), sender, packet, true)?;
 
         Ok(())
     }
@@ -192,7 +162,7 @@ impl TopicHandler {
         client_id: &str,
     ) -> Result<(), TopicHandlerError> {
         for topic_name in packet.topic_filters() {
-            unsubscribe_rec(&self.root, topic_name, client_id)?;
+            unsubscribe_rec(&self.root, Some(topic_name), client_id)?;
         }
         Ok(())
     }
@@ -207,212 +177,180 @@ impl TopicHandler {
     }
 }
 
+fn starts_with_unmatch(topic_name: Option<&str>) -> bool {
+    if let Some(name) = topic_name {
+        return name.starts_with(UNMATCH_WILDCARD);
+    }
+    false
+}
+
 // Lo tuve que hacer recursivo porque sino era un caos el tema de mantener todos los
 // locks desbloqueados, ya que no los podia dropear porque perdia las referencias internas
 fn pub_rec(
     node: &Topic,
-    topic_name: &str,
+    topic_name: Option<&str>,
     sender: Sender<Message>,
     packet: &Publish,
-    multilevel_subscribers: &mut Subscribers,
     is_root: bool,
 ) -> Result<(), TopicHandlerError> {
-    if !is_root && !topic_name.starts_with(UNMATCH_WILDCARD) {
+    let mut matching = HashMap::new();
+    if !(is_root && starts_with_unmatch(topic_name)) {
         // Agregar los subscribers multinivel de esta hoja
-        let mlsubs = node.multilevel_subscribers.read()?;
-        set_max_data(multilevel_subscribers, mlsubs.clone());
-        set_matching_subscribers(
-            multilevel_subscribers,
-            topic_name,
-            node.singlelevel_subscriptions.read()?.deref(),
-        );
+        matching =
+            set_matching_subscribers(topic_name, node.singlelevel_subscriptions.read()?.deref());
+
+        matching.extend(node.multilevel_subscribers.read()?.clone());
     }
 
-    match topic_name.split_once(SEP) {
-        // Aca se le puede agregar tratamiento especial para *, #, etc.
-        Some((topic_name, rest)) => {
-            let subtopics = node.subtopics.read()?;
-            if let Some(subtopic) = subtopics.get(topic_name) {
-                pub_rec(
-                    subtopic,
-                    rest,
-                    sender,
-                    packet,
-                    multilevel_subscribers,
-                    false,
-                )?;
-            } else if !multilevel_subscribers.is_empty() {
-                pub_rec(
-                    &Topic::new(),
-                    NO_TOPIC,
-                    sender,
-                    packet,
-                    multilevel_subscribers,
-                    false,
-                )?;
-            }
-        }
-        None => {
-            if topic_name != NO_TOPIC {
-                // ANTEULTIMA HOJA
+    if topic_name.is_none() {
+        matching.extend(node.subscribers.read()?.clone());
+    }
 
-                let subtopics = node.subtopics.read()?;
+    for (id, data) in matching {
+        let mut to_be_sent = packet.clone();
+        to_be_sent.set_max_qos(data.qos);
+        sender.send(Message {
+            client_id: id.to_string(),
+            packet: to_be_sent,
+        })?;
+    }
 
-                if let Some(subtopic) = subtopics.get(topic_name) {
-                    pub_rec(
-                        subtopic,
-                        NO_TOPIC,
-                        sender,
-                        packet,
-                        multilevel_subscribers,
-                        false,
-                    )?;
-                } else if !multilevel_subscribers.is_empty() {
-                    pub_rec(
-                        &Topic::new(),
-                        NO_TOPIC,
-                        sender,
-                        packet,
-                        multilevel_subscribers,
-                        false,
-                    )?;
-                }
-            } else {
-                // ULTIIMA HOJA
-                let subscribers = node.subscribers.read()?;
-                set_max_data(multilevel_subscribers, subscribers.clone());
-                drop(subscribers);
-
-                for (id, data) in multilevel_subscribers.iter() {
-                    let mut to_be_sent = packet.clone();
-                    to_be_sent.set_max_qos(data.qos);
-                    sender.send(Message {
-                        client_id: id.to_string(),
-                        packet: to_be_sent,
-                    })?;
-                }
-            }
+    if let Some(topic) = topic_name {
+        let (current, rest) = split(topic);
+        let subtopics = node.subtopics.read()?;
+        if let Some(node) = subtopics.get(current) {
+            pub_rec(node, rest, sender, packet, false)?;
         }
     }
 
     Ok(())
 }
 
-fn subscribe_rec(
+fn add_singlelevel_subscription(
     node: &Topic,
-    topic_name: &str,
+    topic: String,
+    user_id: &str,
+    data: SubscriptionData,
+) -> Result<(), TopicHandlerError> {
+    let mut singlelevel_subscriptions = node.singlelevel_subscriptions.write()?;
+
+    let singlelevel_subscribers = singlelevel_subscriptions
+        .entry(topic)
+        .or_insert_with(HashMap::new); // warning: use of `or_insert` followed by a function call
+
+    singlelevel_subscribers.insert(user_id.to_string(), data);
+    Ok(())
+}
+
+fn handle_sub_level(
+    node: &Topic,
+    topic: &str,
     user_id: &str,
     sub_data: SubscriptionData,
 ) -> Result<(), TopicHandlerError> {
-    match topic_name.split_once(SEP) {
-        Some((topic_name, rest)) => {
-            // Wildcard SingleLevel (+)
-            if topic_name == SINGLELEVEL_WILDCARD {
-                let topic_filter = topic_name.to_string() + SEP + rest;
-                let mut singlelevel_subscriptions = node.singlelevel_subscriptions.write()?;
-                #[allow(clippy::or_fun_call)]
-                let singlelevel_subscribers = singlelevel_subscriptions
-                    .entry(topic_filter)
-                    .or_insert(HashMap::new()); // warning: use of `or_insert` followed by a function call
-
-                set_max_datum(singlelevel_subscribers, user_id, sub_data);
-                return Ok(());
-            }
-
+    let (current, rest) = split(topic);
+    match (current, rest) {
+        (SINGLELEVEL_WILDCARD, Some(rest)) => {
+            return add_singlelevel_subscription(
+                node,
+                current.to_string() + SEP + rest,
+                user_id,
+                sub_data,
+            );
+        }
+        (MULTILEVEL_WILDCARD, _) => {
+            let mut multilevel_subscribers = node.multilevel_subscribers.write()?;
+            multilevel_subscribers.insert(user_id.to_string(), sub_data);
+            return Ok(());
+        }
+        _ => {
             let mut subtopics = node.subtopics.read()?;
-
             // Insercion de nuevo nodo
-            if subtopics.get(topic_name).is_none() {
+            if subtopics.get(current).is_none() {
                 drop(subtopics); //lo tengo que pedir en modo write y si esta leyendo no va a poder
                 let mut wr_subtopics = node.subtopics.write()?;
                 let subtopic = Topic::new();
-                wr_subtopics.insert(topic_name.to_string(), subtopic);
+                wr_subtopics.insert(current.to_string(), subtopic);
                 drop(wr_subtopics);
                 subtopics = node.subtopics.read()?;
             }
 
             // En principio siempre tiene que entrar a este if, pero lo pongo para no unwrappear
-            if let Some(subtopic) = subtopics.get(topic_name) {
+            if let Some(subtopic) = subtopics.get(current) {
                 subscribe_rec(subtopic, rest, user_id, sub_data)?;
             }
         }
-        None => {
-            if topic_name != NO_TOPIC {
-                // ANTEULTIMA HOJA
-                // Wildcard MultiLevel (#)
-                if topic_name == MULTILEVEL_WILDCARD {
-                    let mut multilevel_subscribers = node.multilevel_subscribers.write()?;
-                    multilevel_subscribers.insert(user_id.to_string(), sub_data);
-                    return Ok(());
-                }
-
-                let mut subtopics = node.subtopics.read()?;
-                // Insercion de nuevo nodo
-                // TODO: Refactor - este codigo se repite
-                if subtopics.get(topic_name).is_none() {
-                    drop(subtopics); //lo tengo que pedir en modo write y si esta leyendo no va a poder
-                    let mut wr_subtopics = node.subtopics.write()?;
-                    let subtopic = Topic::new();
-                    wr_subtopics.insert(topic_name.to_string(), subtopic);
-                    drop(wr_subtopics);
-                    subtopics = node.subtopics.read()?;
-                }
-
-                if let Some(subtopic) = subtopics.get(topic_name) {
-                    subscribe_rec(subtopic, NO_TOPIC, user_id, sub_data)?;
-                }
-            } else {
-                // ULTIIMA HOJA
-                node.subscribers
-                    .write()?
-                    .insert(user_id.to_string(), sub_data);
-            }
-        }
     }
-
     Ok(())
 }
 
-fn unsubscribe_rec(node: &Topic, topic_name: &str, user_id: &str) -> Result<(), TopicHandlerError> {
-    match topic_name.split_once(SEP) {
-        // Aca se le puede agregar tratamiento especial para *, #, etc.
-        Some((topic_name, rest)) => {
-            if topic_name == SINGLELEVEL_WILDCARD {
-                let topic_filter = topic_name.to_string() + SEP + rest;
-                let mut singlelevel_subscriptions = node.singlelevel_subscriptions.write()?;
-                remove_matching_subscriptions(
-                    &mut singlelevel_subscriptions,
-                    &topic_filter,
-                    user_id,
-                );
-                return Ok(());
-            }
-
-            let subtopics = node.subtopics.read()?;
-
-            if let Some(subtopic) = subtopics.get(topic_name) {
-                unsubscribe_rec(subtopic, rest, user_id)?;
-            }
+fn subscribe_rec(
+    node: &Topic,
+    topic_name: Option<&str>,
+    user_id: &str,
+    sub_data: SubscriptionData,
+) -> Result<(), TopicHandlerError> {
+    match topic_name {
+        Some(topic) => {
+            handle_sub_level(node, topic, user_id, sub_data)?;
         }
         None => {
-            if topic_name != NO_TOPIC {
-                // ANTE ULTIMA HOJA
+            node.subscribers
+                .write()?
+                .insert(user_id.to_string(), sub_data);
+        }
+    }
+    Ok(())
+}
 
-                if topic_name == MULTILEVEL_WILDCARD {
+#[doc(hidden)]
+fn remove_singlelevel_subscription(
+    node: &Topic,
+    topic: String,
+    user_id: &str,
+) -> Result<(), TopicHandlerError> {
+    let mut singlelevel_subscriptions = node.singlelevel_subscriptions.write()?;
+    if let Some(subscribers) = singlelevel_subscriptions.get_mut(&topic) {
+        subscribers.remove(user_id);
+        if subscribers.is_empty() {
+            singlelevel_subscriptions.remove(&topic);
+        }
+    };
+    Ok(())
+}
+
+fn unsubscribe_rec(
+    node: &Topic,
+    topic_name: Option<&str>,
+    user_id: &str,
+) -> Result<(), TopicHandlerError> {
+    match topic_name {
+        Some(topic) => {
+            let (current, rest) = split(topic);
+            match (current, rest) {
+                (SINGLELEVEL_WILDCARD, Some(rest)) => {
+                    return remove_singlelevel_subscription(
+                        node,
+                        current.to_string() + SEP + rest,
+                        user_id,
+                    );
+                }
+                (MULTILEVEL_WILDCARD, _) => {
                     let mut multilevel_subscribers = node.multilevel_subscribers.write()?;
                     multilevel_subscribers.remove(user_id);
                     return Ok(());
                 }
+                _ => {
+                    let subtopics = node.subtopics.read()?;
 
-                let subtopics = node.subtopics.read()?;
-
-                if let Some(subtopic) = subtopics.get(topic_name) {
-                    unsubscribe_rec(subtopic, NO_TOPIC, user_id)?;
+                    if let Some(subtopic) = subtopics.get(current) {
+                        unsubscribe_rec(subtopic, rest, user_id)?;
+                    }
                 }
-            } else {
-                // ULTIMA HOJA
-                node.subscribers.write()?.remove(user_id);
             }
+        }
+        None => {
+            node.subscribers.write()?.remove(user_id);
         }
     }
 
@@ -471,7 +409,6 @@ mod tests {
 
     use packets::qos::QoSLevel;
     use packets::subscribe::Subscribe;
-    use packets::topic::Topic;
     use packets::traits::MQTTDecoding;
     use packets::unsubscribe::Unsubscribe;
     use packets::{publish::Publish, utf8::Field};
@@ -713,120 +650,122 @@ mod tests {
         assert!(receiver.recv().is_err());
     }
 
-    #[test]
-    fn test_multilevel_wildcard_two_subscribe_one_publish() {
-        let topic1 = Topic::new("colors/#", QoSLevel::QoSLevel0).unwrap();
-        let topic2 = Topic::new("colors/primary/blue", QoSLevel::QoSLevel0).unwrap();
-        let subscribe = Subscribe::new(vec![topic1, topic2], 123);
+    /* Tests previos de una funcionalidad no obligatoria
+    ([MQTT-3.3.5-1]) Al final decidimos enviar una copia por suscripción
+       #[test]
+       fn test_multilevel_wildcard_two_subscribe_one_publish() {
+           let topic1 = Topic::new("colors/#", QoSLevel::QoSLevel0).unwrap();
+           let topic2 = Topic::new("colors/primary/blue", QoSLevel::QoSLevel0).unwrap();
+           let subscribe = Subscribe::new(vec![topic1, topic2], 123);
 
-        let publish = Publish::new(
-            false,
-            QoSLevel::QoSLevel1,
-            false,
-            "colors/primary/blue",
-            "#0000FF",
-            Some(123),
-        )
-        .unwrap();
+           let publish = Publish::new(
+               false,
+               QoSLevel::QoSLevel1,
+               false,
+               "colors/primary/blue",
+               "#0000FF",
+               Some(123),
+           )
+           .unwrap();
 
-        let handler = super::TopicHandler::new();
-        let (sender, receiver) = channel();
+           let handler = super::TopicHandler::new();
+           let (sender, receiver) = channel();
 
-        handler.subscribe(&subscribe, "user").unwrap();
-        handler.publish(&publish, sender).unwrap();
+           handler.subscribe(&subscribe, "user").unwrap();
+           handler.publish(&publish, sender).unwrap();
 
-        let message = receiver.recv().unwrap();
-        assert_eq!(message.client_id, "user");
-        assert_eq!(message.packet.topic_name(), "colors/primary/blue");
-        assert_eq!(message.packet.payload(), Some(&"#0000FF".to_string()));
+           let message = receiver.recv().unwrap();
+           assert_eq!(message.client_id, "user");
+           assert_eq!(message.packet.topic_name(), "colors/primary/blue");
+           assert_eq!(message.packet.payload(), Some(&"#0000FF".to_string()));
 
-        assert!(receiver.recv().is_err());
-    }
+           assert!(receiver.recv().is_err());
+       }
 
-    #[test]
-    fn test_multilevel_wildcard_max_qos_1() {
-        let topic1 = Topic::new("colors/#", QoSLevel::QoSLevel1).unwrap();
-        let topic2 = Topic::new("colors/primary/blue", QoSLevel::QoSLevel0).unwrap();
-        let subscribe = Subscribe::new(vec![topic1, topic2], 123);
-        let publish = Publish::new(
-            false,
-            QoSLevel::QoSLevel1,
-            false,
-            "colors/primary/blue",
-            "#0000FF",
-            Some(123),
-        )
-        .unwrap();
-        let handler = super::TopicHandler::new();
-        let (sender, receiver) = channel();
+       #[test]
+       fn test_multilevel_wildcard_max_qos_1() {
+           let topic1 = Topic::new("colors/#", QoSLevel::QoSLevel1).unwrap();
+           let topic2 = Topic::new("colors/primary/blue", QoSLevel::QoSLevel0).unwrap();
+           let subscribe = Subscribe::new(vec![topic1, topic2], 123);
+           let publish = Publish::new(
+               false,
+               QoSLevel::QoSLevel1,
+               false,
+               "colors/primary/blue",
+               "#0000FF",
+               Some(123),
+           )
+           .unwrap();
+           let handler = super::TopicHandler::new();
+           let (sender, receiver) = channel();
 
-        handler.subscribe(&subscribe, "user").unwrap();
-        handler.publish(&publish, sender).unwrap();
+           handler.subscribe(&subscribe, "user").unwrap();
+           handler.publish(&publish, sender).unwrap();
 
-        let message = receiver.recv().unwrap();
-        assert_eq!(message.client_id, "user");
-        assert_eq!(message.packet.topic_name(), "colors/primary/blue");
-        assert_eq!(message.packet.qos(), QoSLevel::QoSLevel1);
+           let message = receiver.recv().unwrap();
+           assert_eq!(message.client_id, "user");
+           assert_eq!(message.packet.topic_name(), "colors/primary/blue");
+           assert_eq!(message.packet.qos(), QoSLevel::QoSLevel1);
 
-        assert!(receiver.recv().is_err());
-    }
+           assert!(receiver.recv().is_err());
+       }
 
-    #[test]
-    fn test_multilevel_wildcard_max_qos_2() {
-        let topic1 = Topic::new("colors/#", QoSLevel::QoSLevel0).unwrap();
-        let topic2 = Topic::new("colors/primary/blue", QoSLevel::QoSLevel1).unwrap();
-        let subscribe = Subscribe::new(vec![topic1, topic2], 123);
-        let publish = Publish::new(
-            false,
-            QoSLevel::QoSLevel1,
-            false,
-            "colors/primary/blue",
-            "#0000FF",
-            Some(123),
-        )
-        .unwrap();
-        let handler = super::TopicHandler::new();
-        let (sender, receiver) = channel();
+       #[test]
+       fn test_multilevel_wildcard_max_qos_2() {
+           let topic1 = Topic::new("colors/#", QoSLevel::QoSLevel0).unwrap();
+           let topic2 = Topic::new("colors/primary/blue", QoSLevel::QoSLevel1).unwrap();
+           let subscribe = Subscribe::new(vec![topic1, topic2], 123);
+           let publish = Publish::new(
+               false,
+               QoSLevel::QoSLevel1,
+               false,
+               "colors/primary/blue",
+               "#0000FF",
+               Some(123),
+           )
+           .unwrap();
+           let handler = super::TopicHandler::new();
+           let (sender, receiver) = channel();
 
-        handler.subscribe(&subscribe, "user").unwrap();
-        handler.publish(&publish, sender).unwrap();
+           handler.subscribe(&subscribe, "user").unwrap();
+           handler.publish(&publish, sender).unwrap();
 
-        let message = receiver.recv().unwrap();
-        assert_eq!(message.client_id, "user");
-        assert_eq!(message.packet.topic_name(), "colors/primary/blue");
-        assert_eq!(message.packet.qos(), QoSLevel::QoSLevel1);
+           let message = receiver.recv().unwrap();
+           assert_eq!(message.client_id, "user");
+           assert_eq!(message.packet.topic_name(), "colors/primary/blue");
+           assert_eq!(message.packet.qos(), QoSLevel::QoSLevel1);
 
-        assert!(receiver.recv().is_err());
-    }
+           assert!(receiver.recv().is_err());
+       }
 
-    #[test]
-    fn test_multilevel_wildcard_max_qos_3() {
-        let topic1 = Topic::new("colors/#", QoSLevel::QoSLevel1).unwrap();
-        let topic2 = Topic::new("colors/primary/blue", QoSLevel::QoSLevel1).unwrap();
-        let subscribe = Subscribe::new(vec![topic1, topic2], 123);
-        let publish = Publish::new(
-            false,
-            QoSLevel::QoSLevel0,
-            false,
-            "colors/primary/blue",
-            "#0000FF",
-            None,
-        )
-        .unwrap();
-        let handler = super::TopicHandler::new();
-        let (sender, receiver) = channel();
+       #[test]
+       fn test_multilevel_wildcard_max_qos_3() {
+           let topic1 = Topic::new("colors/#", QoSLevel::QoSLevel1).unwrap();
+           let topic2 = Topic::new("colors/primary/blue", QoSLevel::QoSLevel1).unwrap();
+           let subscribe = Subscribe::new(vec![topic1, topic2], 123);
+           let publish = Publish::new(
+               false,
+               QoSLevel::QoSLevel0,
+               false,
+               "colors/primary/blue",
+               "#0000FF",
+               None,
+           )
+           .unwrap();
+           let handler = super::TopicHandler::new();
+           let (sender, receiver) = channel();
 
-        handler.subscribe(&subscribe, "user").unwrap();
-        handler.publish(&publish, sender).unwrap();
+           handler.subscribe(&subscribe, "user").unwrap();
+           handler.publish(&publish, sender).unwrap();
 
-        let message = receiver.recv().unwrap();
-        assert_eq!(message.client_id, "user");
-        assert_eq!(message.packet.topic_name(), "colors/primary/blue");
-        assert_eq!(message.packet.qos(), QoSLevel::QoSLevel0);
+           let message = receiver.recv().unwrap();
+           assert_eq!(message.client_id, "user");
+           assert_eq!(message.packet.topic_name(), "colors/primary/blue");
+           assert_eq!(message.packet.qos(), QoSLevel::QoSLevel0);
 
-        assert!(receiver.recv().is_err());
-    }
-
+           assert!(receiver.recv().is_err());
+       }
+    */
     #[test]
     fn test_unsubscribe_multilevel_stop_sending_messages_to_client() {
         let subscribe = build_subscribe("topic/auto/#");
@@ -1109,7 +1048,6 @@ mod tests {
     }
 
     #[test]
-    #[should_panic] // topic starting with $ are no longer allowed
     fn test_topic_starting_with_dolar_sign_recieve() {
         let subscribe = build_subscribe("$SYS/info"); // PANICS HERE
         let publish = build_publish("$SYS/info", "ERROR");

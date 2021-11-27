@@ -64,13 +64,6 @@ impl Topic {
             ));
         }
 
-        if name.starts_with('$') {
-            return Err(PacketError::new_kind(
-                "Topic name cannot start with $",
-                ErrorKind::InvalidTopicName,
-            ));
-        }
-
         Ok(())
     }
 }
