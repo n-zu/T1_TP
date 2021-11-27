@@ -1048,7 +1048,7 @@ mod tests {
     }
 
     #[test]
-    fn test_topic_starting_with_dolar_sign_recieve() {
+    fn test_topic_starting_with_dollar_sign_recieve() {
         let subscribe = build_subscribe("$SYS/info"); // PANICS HERE
         let publish = build_publish("$SYS/info", "ERROR");
 
@@ -1067,7 +1067,7 @@ mod tests {
     }
 
     #[test]
-    fn test_topic_starting_with_dolar_sign_not_recieve_singlelevel_wildcard() {
+    fn test_topic_starting_with_dollar_sign_not_recieve_singlelevel_wildcard() {
         let subscribe = build_subscribe("+/info");
         let publish = build_publish("$SYS/info", "ERROR");
 
@@ -1082,7 +1082,7 @@ mod tests {
     }
 
     #[test]
-    fn test_topic_starting_with_dolar_sign_not_recieve_multilevel_wildcard() {
+    fn test_topic_starting_with_dollar_sign_not_recieve_multilevel_wildcard() {
         let subscribe = build_subscribe("#/info");
         let publish = build_publish("$SYS/info", "ERROR");
 
