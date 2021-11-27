@@ -1,15 +1,12 @@
 mod login;
 
-use std::{collections::HashMap, sync::Mutex};
+use std::{collections::HashMap, net::SocketAddr, sync::Mutex};
 
-use packets::{
-    connack::{Connack, ConnackReturnCode},
-    publish::Publish,
-};
+use packets::{connack::ConnackReturnCode, connect::Connect, publish::Publish};
 use tracing::{debug, warn};
 
 use crate::{
-    client::Client,
+    client::{Client, Session},
     server::{server_error::ServerErrorKind, ClientId, ClientIdArg, ServerError, ServerResult},
 };
 
@@ -17,9 +14,10 @@ type Username = String;
 const GENERIC_ID_SUFFIX: &str = "__CLIENT__";
 
 pub struct ClientsManager {
-    clients: HashMap<String, Mutex<Client>>,
+    clients: HashMap<ClientId, Mutex<Client>>,
     /// client_id - username
     taken_ids: HashMap<ClientId, Username>,
+    current_addrs: HashMap<ClientId, SocketAddr>,
     accounts_path: String,
     generic_ids_counter: u32,
 }
@@ -31,6 +29,8 @@ pub struct DisconnectInfo {
 
 pub struct ConnectInfo {
     pub id: ClientId,
+    pub session_present: bool,
+    pub return_code: ConnackReturnCode,
     pub takeover_last_will: Option<Publish>,
 }
 
@@ -39,6 +39,7 @@ impl ClientsManager {
         Self {
             clients: HashMap::new(),
             taken_ids: HashMap::new(),
+            current_addrs: HashMap::new(),
             accounts_path: accounts_path.to_owned(),
             generic_ids_counter: 0,
         }
@@ -76,11 +77,22 @@ impl ClientsManager {
     pub fn finish_session(
         &mut self,
         id: &ClientIdArg,
+        session: Session,
         gracefully: bool,
     ) -> ServerResult<DisconnectInfo> {
-        let publish_last_will = self.get_client_property(id, |mut client| {
-            client.disconnect(gracefully)
-        })?;
+        // Chequeo si ya fue desconectado por el proceso
+        // de Client Take-Over
+        if let Some(old_addr) = self.current_addrs.get(id) {
+            if session.addr() != *old_addr {
+                return Ok(DisconnectInfo {
+                    publish_last_will: None,
+                    clean_session: false,
+                });
+            }
+        }
+
+        let publish_last_will =
+            self.get_client_property(id, |mut client| client.disconnect(gracefully))?;
         let clean_session;
         // Si la funcion anterior no devolvio error, entonces existe el cliente
         if self
@@ -117,7 +129,7 @@ impl ClientsManager {
 
     pub fn send_publish(&self, id: &ClientIdArg, publish: Publish) -> ServerResult<()> {
         self.client_do(id, |mut client| {
-            client.send_publish(publish);
+            client.send_publish(publish)?;
             Ok(())
         })
     }
@@ -136,8 +148,8 @@ impl ClientsManager {
         Ok(())
     }
 
-    fn check_credentials(&mut self, client: &Client) -> ServerResult<()> {
-        if client.id().starts_with(GENERIC_ID_SUFFIX) {
+    fn check_credentials(&mut self, connect: &Connect) -> ServerResult<()> {
+        if connect.client_id().starts_with(GENERIC_ID_SUFFIX) {
             return Err(ServerError::new_kind(
                 &format!(
                     "IDs que empiezan con {} estan reservadas por el servidor",
@@ -147,10 +159,10 @@ impl ClientsManager {
             ));
         }
 
-        if let Some(user_name) = client.user_name() {
+        if let Some(user_name) = connect.user_name() {
             let password = login::search_password(&self.accounts_path, user_name)?;
-            if password == *client.password().unwrap_or(&String::new()) {
-                self.check_taken_ids(client.id(), user_name)
+            if password == *connect.password().unwrap_or(&String::new()) {
+                self.check_taken_ids(connect.client_id(), user_name)
             } else {
                 Err(ServerError::new_kind(
                     "Contraseña incorrecta",
@@ -172,32 +184,45 @@ impl ClientsManager {
         generic_id
     }
 
-    fn process_client_empty_id(&mut self, client: &mut Client) -> ServerResult<()> {
-        if !client.clean_session() {
-            client.send_packet(Connack::new(false, ConnackReturnCode::IdentifierRejected))?;
+    fn process_client_empty_id(&mut self, connect: &mut Connect) -> ServerResult<()> {
+        if !connect.clean_session() {
             Err(ServerError::new_kind(
                 "Clientes con id vacia deben tener clean session en true",
-                ServerErrorKind::ProtocolViolation,
+                ServerErrorKind::ConnectionRefused(ConnackReturnCode::IdentifierRejected),
             ))
         } else {
             let id = self.new_generic_id();
-            client.set_id(&id)?;
+            connect.set_id(id);
             Ok(())
         }
     }
 
-    fn new_session_unchecked(&mut self, mut client: Client) -> ServerResult<ConnectInfo> {
-        if client.id().is_empty() {
-            self.process_client_empty_id(&mut client)?;
+    fn new_session_unchecked(
+        &mut self,
+        session: &Session,
+        mut connect: Connect,
+    ) -> ServerResult<ConnectInfo> {
+        if connect.client_id().is_empty() {
+            self.process_client_empty_id(&mut connect)?;
         }
-        let id = client.id().to_owned();
+        let id = connect.client_id().to_owned();
 
         let mut takeover_last_will = None;
+        let session_present;
+        let return_code;
+        let addr = session.addr();
+
         // Hay una sesion_presente en el servidor con la misma ID
         if let Some(old_client) = self.clients.get_mut(&id) {
-            client.send_packet(Connack::new(true, ConnackReturnCode::Accepted))?;
-            takeover_last_will = old_client.lock()?.reconnect(client)?;
+            takeover_last_will = old_client
+                .get_mut()?
+                .reconnect(connect, session.try_clone()?)?;
+            session_present = true;
+            return_code = ConnackReturnCode::Accepted;
         } else {
+            let mut client = Client::new(connect);
+            client.connect(session.try_clone()?)?;
+
             self.taken_ids.insert(
                 id.to_owned(),
                 client
@@ -205,38 +230,49 @@ impl ClientsManager {
                     .expect("Se esperaba un user_name")
                     .to_owned(),
             );
-            client.send_packet(Connack::new(false, ConnackReturnCode::Accepted))?;
             self.client_add(client);
+            session_present = false;
+            return_code = ConnackReturnCode::Accepted;
         }
+        self.current_addrs.insert(id.to_owned(), addr);
         Ok(ConnectInfo {
             id,
+            session_present,
+            return_code,
             takeover_last_will,
         })
     }
 
-    pub fn new_session(&mut self, mut client: Client) -> ServerResult<ConnectInfo> {
-        match self.check_credentials(&client) {
-            Ok(()) => self.new_session_unchecked(client),
+    pub fn new_session(
+        &mut self,
+        session: &Session,
+        connect: Connect,
+    ) -> ServerResult<ConnectInfo> {
+        match self.check_credentials(&connect) {
+            Ok(()) => self.new_session_unchecked(session, connect),
             Err(err) if err.kind() == ServerErrorKind::ClientNotInWhitelist => {
-                warn!("<{}>: Usuario invalido", client.id());
-                client.send_packet(Connack::new(false, ConnackReturnCode::NotAuthorized))?;
-                Err(err)
+                warn!("<{}>: Usuario invalido", connect.client_id());
+                Err(ServerError::new_kind(
+                    "Usuario invalido",
+                    ServerErrorKind::ConnectionRefused(ConnackReturnCode::NotAuthorized),
+                ))
             }
             Err(err) if err.kind() == ServerErrorKind::InvalidPassword => {
-                warn!("<{}>: Contraseña invalida", client.id());
-                client.send_packet(Connack::new(
-                    false,
-                    ConnackReturnCode::BadUserNameOrPassword,
-                ))?;
-                Err(err)
+                warn!("<{}>: Contraseña invalida", connect.client_id());
+                Err(ServerError::new_kind(
+                    &err.to_string(),
+                    ServerErrorKind::ConnectionRefused(ConnackReturnCode::BadUserNameOrPassword),
+                ))
             }
             Err(err) if err.kind() == ServerErrorKind::TakenID => {
                 warn!(
                     "<{}>: La ID ya se encuentra en uso en el servidor",
-                    client.id()
+                    connect.client_id()
                 );
-                client.send_packet(Connack::new(false, ConnackReturnCode::IdentifierRejected))?;
-                Err(err)
+                Err(ServerError::new_kind(
+                    &err.to_string(),
+                    ServerErrorKind::ConnectionRefused(ConnackReturnCode::IdentifierRejected),
+                ))
             }
             Err(err) => Err(err),
         }

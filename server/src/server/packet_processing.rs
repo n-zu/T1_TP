@@ -1,3 +1,7 @@
+use packets::pingresp::PingResp;
+
+use crate::client::Session;
+
 use super::*;
 
 impl Server {
@@ -23,10 +27,10 @@ impl Server {
         Ok(())
     }
 
-    fn process_packet_given_control_byte(
+    fn process_packet_given_control_byte<T: Read>(
         self: &Arc<Self>,
         control_byte: u8,
-        stream: &mut TcpStream,
+        stream: &mut T,
         id: &ClientIdArg,
     ) -> ServerResult<PacketType> {
         let packet_type = PacketType::try_from(control_byte)?;
@@ -34,9 +38,9 @@ impl Server {
             PacketType::Publish => {
                 let publish = Publish::read_from(stream, control_byte)?;
                 if let Some(packet_id) = publish.packet_id() {
-                    self.clients_manager
-                        .read()?
-                        .client_do(id, |mut client| client.send_packet(Puback::new(packet_id)?))?;
+                    self.clients_manager.read()?.client_do(id, |mut client| {
+                        client.send_packet(&Puback::new(packet_id)?)
+                    })?;
                 }
                 self.to_threadpool(|server, id| server.handle_publish(publish, id), id)?;
             }
@@ -58,7 +62,7 @@ impl Server {
                 let _packet = PingReq::read_from(stream, control_byte)?;
                 self.clients_manager
                     .read()?
-                    .client_do(id, |mut client| client.send_pingresp())?;
+                    .client_do(id, |mut client| client.send_packet(&PingResp::new()))?;
             }
             PacketType::Disconnect => {
                 let _packet = Disconnect::read_from(stream, control_byte)?;
@@ -73,9 +77,9 @@ impl Server {
         Ok(packet_type)
     }
 
-    pub fn process_packet(
+    pub fn process_packet<T: Read>(
         self: &Arc<Self>,
-        stream: &mut TcpStream,
+        stream: &mut T,
         id: &ClientIdArg,
     ) -> ServerResult<PacketType> {
         let mut control_byte_buff = [0u8; 1];
@@ -133,12 +137,12 @@ impl Server {
         subscribe.set_max_qos(QoSLevel::QoSLevel1);
         self.clients_manager
             .read()?
-            .client_do(id, |mut client| client.send_suback(subscribe.response()?))?;
+            .client_do(id, |mut client| client.send_packet(&subscribe.response()?))?;
 
         if let Some(retained_messages) = self.topic_handler.subscribe(&subscribe, id)? {
             self.clients_manager.read()?.client_do(id, |mut client| {
                 for retained in retained_messages {
-                    client.send_publish(retained);
+                    client.send_publish(retained)?;
                 }
                 Ok(())
             })?;
@@ -151,23 +155,17 @@ impl Server {
         let packet_id = unsubscribe.packet_id();
         self.topic_handler.unsubscribe(unsubscribe, id)?;
         self.clients_manager.read()?.client_do(id, |mut client| {
-            client.send_packet(Unsuback::new(packet_id)?)?;
+            client.send_packet(&Unsuback::new(packet_id)?)?;
             Ok(())
         })?;
         Ok(())
     }
 
-    pub fn wait_for_connect(
-        &self,
-        stream: &mut TcpStream,
-        addr: SocketAddr,
-    ) -> ServerResult<Client> {
-        match Connect::new_from_zero(stream) {
-            Ok(packet) => {
-                info!("<{}>: Recibido CONNECT", addr);
-                let mut client = Client::new(packet);
-                client.connect(stream.try_clone()?)?;
-                Ok(client)
+    pub fn wait_for_connect(&self, session: &mut Session) -> ServerResult<Connect> {
+        match Connect::new_from_zero(session.stream()) {
+            Ok(connect) => {
+                info!("<{}>: Recibido CONNECT", session.addr());
+                Ok(connect)
             }
             Err(err) => Err(ServerError::from(err)),
         }

@@ -87,4 +87,12 @@ impl Connect {
     pub fn keep_alive(&self) -> u16 {
         self.keep_alive
     }
+
+    /// Set the client Id if it is None
+    /// If not None, it silently does nothing
+    pub fn set_id(&mut self, id: String) {
+        if self.client_id.is_empty() {
+            self.client_id = id;
+        }
+    }
 }
