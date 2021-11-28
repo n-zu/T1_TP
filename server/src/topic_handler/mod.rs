@@ -248,16 +248,17 @@ fn handle_sub_level(
     user_id: &str,
     sub_data: SubscriptionData,
 ) -> Result<(), TopicHandlerError> {
+    if topic.starts_with(SINGLELEVEL_WILDCARD) {
+        return add_singlelevel_subscription(
+            node,
+            topic.to_string(),
+            user_id,
+            sub_data,
+        );
+    }
+
     let (current, rest) = split(topic);
     match (current, rest) {
-        (SINGLELEVEL_WILDCARD, Some(rest)) => {
-            return add_singlelevel_subscription(
-                node,
-                current.to_string() + SEP + rest,
-                user_id,
-                sub_data,
-            );
-        }
         (MULTILEVEL_WILDCARD, _) => {
             let mut multilevel_subscribers = node.multilevel_subscribers.write()?;
             multilevel_subscribers.insert(user_id.to_string(), sub_data);
@@ -405,48 +406,27 @@ fn remove_client_rec(node: &Topic, user_id: &str) -> Result<(), TopicHandlerErro
 
 #[cfg(test)]
 mod tests {
-    use std::{collections::HashSet, io::Cursor, sync::mpsc::channel};
+    use std::{collections::HashSet, sync::mpsc::channel};
 
     use packets::qos::QoSLevel;
     use packets::subscribe::Subscribe;
     use packets::topic::Topic;
-    use packets::traits::MQTTDecoding;
     use packets::unsubscribe::Unsubscribe;
-    use packets::{publish::Publish, utf8::Field};
+    use packets::{publish::Publish};
 
     use crate::topic_handler::matches_singlelevel;
 
     fn build_publish(topic: &str, message: &str) -> Publish {
-        let mut bytes = Vec::new();
-        bytes.extend(Field::new_from_string(topic).unwrap().encode());
-        bytes.extend([0, 1]); // identifier
-        bytes.extend(Field::new_from_string(message).unwrap().encode());
-        bytes.insert(0, bytes.len() as u8);
-        let header = 0b00110010u8; // QoS level 1, dup false, retain false
-        Publish::read_from(&mut Cursor::new(bytes), header).unwrap()
+        Publish::new(false, QoSLevel::QoSLevel1, false, topic, message, Some(123)).unwrap()
     }
 
     fn build_subscribe(topic: &str) -> Subscribe {
-        let mut bytes: Vec<u8> = Vec::new();
-        bytes.extend([0, 5]); // identifier
-        bytes.extend(Field::new_from_string(topic).unwrap().encode());
-        bytes.push(0); // QoS level 0
-
-        bytes.insert(0, bytes.len() as u8);
-        let control_byte = 0b10000010;
-        Subscribe::read_from(&mut Cursor::new(bytes), control_byte).unwrap()
+        Subscribe::new(vec![Topic::new(topic, QoSLevel::QoSLevel0).unwrap()], 123)
     }
 
     fn build_unsubscribe(topic: &str) -> Unsubscribe {
-        let mut bytes: Vec<u8> = Vec::new();
-        bytes.extend([0, 5]); // identifier
-        bytes.extend(Field::new_from_string(topic).unwrap().encode());
-
-        bytes.insert(0, bytes.len() as u8);
-        let header = 0b10100010;
-        Unsubscribe::read_from(&mut Cursor::new(bytes), header).unwrap()
+        Unsubscribe::new(123, vec![Topic::new(topic, QoSLevel::QoSLevel0).unwrap()]).unwrap()
     }
-
     #[test]
     fn test_one_subscribe_one_publish_single_level_topic() {
         let subscribe = build_subscribe("topic");
@@ -868,6 +848,10 @@ mod tests {
             "top/+//#".to_string(),
             "top/sub//green/#00FF00".to_string()
         ));
+        assert!(matches_singlelevel(
+            "+".to_string(),
+            "fdelu".to_string()
+        ));
     }
 
     #[test]
@@ -1123,7 +1107,7 @@ mod tests {
 
     #[test]
     fn test_topic_starting_with_dollar_sign_not_recieve_multilevel_wildcard() {
-        let subscribe = build_subscribe("#/info");
+        let subscribe = build_subscribe("#");
         let publish = build_publish("$SYS/info", "ERROR");
 
         let handler = super::TopicHandler::new();
@@ -1134,5 +1118,35 @@ mod tests {
         handler.publish(&publish, sender).unwrap();
 
         assert!(receiver.recv().is_err());
+    }
+
+    #[test]
+    fn test_single_wildcard_only_should_match() {
+        let subscribe = build_subscribe("+");
+        let publish = build_publish("hola", ":D");
+
+        let handler = super::TopicHandler::new();
+        let (sender, receiver) = channel();
+
+        handler.subscribe(&subscribe, "admin").unwrap();
+
+        handler.publish(&publish, sender).unwrap();
+
+        assert_eq!(receiver.recv().unwrap().packet.payload(), Some(&":D".to_string()));
+    }
+
+    #[test]
+    fn test_single_wildcard_only_should_match_multilevel() {
+        let subscribe = build_subscribe("f/+");
+        let publish = build_publish("f/hola", ":D");
+
+        let handler = super::TopicHandler::new();
+        let (sender, receiver) = channel();
+
+        handler.subscribe(&subscribe, "admin").unwrap();
+
+        handler.publish(&publish, sender).unwrap();
+
+        assert_eq!(receiver.recv().unwrap().packet.payload(), Some(&":D".to_string()));
     }
 }

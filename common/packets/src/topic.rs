@@ -78,7 +78,6 @@ impl Topic {
                 != name.matches("/+").count())
                 || (name.matches('+').count()
                     - if name.starts_with("+/") { 1 } else { 0 }
-                    - if name.ends_with("/+") { 1 } else { 0 }
                     != name.matches("/+").count()))
         {
             return Err(PacketError::new_kind(
@@ -150,5 +149,7 @@ mod tests {
         let _ = Topic::new("_/+/+//#", QoSLevel::QoSLevel0).unwrap();
 
         let _ = Topic::new("+/+/+/#", QoSLevel::QoSLevel0).unwrap();
+
+        let _ = Topic::new("+/+/+/+", QoSLevel::QoSLevel0).unwrap();
     }
 }
