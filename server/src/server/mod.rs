@@ -75,7 +75,7 @@ pub struct Server {
 impl Server {
     /// Creates a new Server
     pub fn new(config: Config, threadpool_size: usize) -> Arc<Self> {
-        info!("Iniciando servidor en localhost:{}", config.port());
+        info!("Servidor iniciado en localhost:{}", config.port());
         Arc::new(Self {
             clients_manager: RwLock::new(ClientsManager::new(config.accounts_path())),
             config,

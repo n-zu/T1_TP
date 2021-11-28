@@ -1,7 +1,8 @@
+use gtk::prelude::ContainerExt;
 use gtk::{
-    prelude::{BuilderExtManual, DialogExt, LabelExt, StackExt, WidgetExt},
-    Box, Builder, Button, ButtonsType, DialogFlags, Label, MessageDialog, MessageType, Stack,
-    Window,
+    prelude::{BuilderExtManual, DialogExt, EntryExt, LabelExt, StackExt, SwitchExt, WidgetExt},
+    Box, Builder, Button, ButtonsType, DialogFlags, Entry, Label, ListBox, MessageDialog,
+    MessageType, Stack, Switch, Window,
 };
 
 /// Icons of the status bar
@@ -72,6 +73,27 @@ pub(crate) trait InterfaceUtils {
             label.set_text(text);
         } else {
             info_box.set_visible(false);
+        }
+    }
+
+    /// Sets a given text to a Entry label
+    fn set_text_to_entry_box(&self, box_id: &str, text: &str) {
+        let entry: Entry = self.builder().object(box_id).unwrap();
+        entry.set_text(text);
+    }
+
+    /// Sets a given state to a Switch label
+    fn set_state_to_switch_box(&self, switch_id: &str, new_state: bool) {
+        let entry: Switch = self.builder().object(switch_id).unwrap();
+        entry.set_active(new_state);
+    }
+
+    /// Removes all the children from a given ListBox label
+    fn remove_all_children_from_listbox(&self, list_box_id: &str) {
+        let subscription_list: ListBox = self.builder().object(list_box_id).unwrap();
+        let widgets = subscription_list.children();
+        for widget in widgets {
+            subscription_list.remove(&widget);
         }
     }
 }

@@ -1,3 +1,5 @@
+use crate::qos::QoSLevel;
+
 use crate::{
     packet_error::{ErrorKind, PacketError},
     traits::{MQTTDecoding, MQTTEncoding},
@@ -72,10 +74,7 @@ fn test_valid_unsubscribe_packet_with_one_topic() {
     let mut stream = Cursor::new(v);
     let result = Unsubscribe::read_from(&mut stream, control_byte).unwrap();
     assert_eq!(result.packet_id(), 1u16);
-    assert_eq!(
-        *result.topic_filters(),
-        vec!["temperatura/uruguay".to_string()]
-    );
+    assert_eq!(result.topic_filters()[0].name(), "temperatura/uruguay");
 }
 
 #[test]
@@ -93,17 +92,14 @@ fn test_valid_unsubscribe_packet_with_two_topics() {
     let mut stream = Cursor::new(v);
     let result = Unsubscribe::read_from(&mut stream, control_byte).unwrap();
     let expected_id = 1u16;
-    let expected_topic_filters = vec![
-        "temperatura/uruguay".to_string(),
-        "temperatura/argentina".to_string(),
-    ];
     assert_eq!(result.packet_id(), expected_id);
-    assert_eq!(*result.topic_filters(), expected_topic_filters);
+    assert_eq!(result.topic_filters()[0].name(), "temperatura/uruguay");
+    assert_eq!(result.topic_filters()[1].name(), "temperatura/argentina");
 }
 
 #[test]
 fn unsubscribe_packet_with_packet_id_0_should_raise_protocol_error() {
-    let topics = vec!["temperatura/Argentina".to_string()];
+    let topics = vec![Topic::new("temperatura/Argentina", QoSLevel::QoSLevel0).unwrap()];
     let result = Unsubscribe::new(0, topics).unwrap_err();
     let expected_error = PacketError::new_kind(MSG_INVALID_PACKET_ID, ErrorKind::InvalidProtocol);
     assert_eq!(result, expected_error)
@@ -111,7 +107,7 @@ fn unsubscribe_packet_with_packet_id_0_should_raise_protocol_error() {
 
 #[test]
 fn valid_unsubscribe_packet_with_id_1_and_one_topic() {
-    let topics = vec!["temperatura/Argentina".to_string()];
+    let topics = vec![Topic::new("temperatura/Argentina", QoSLevel::QoSLevel0).unwrap()];
     let result = Unsubscribe::new(1, topics).unwrap().encode().unwrap();
     let mut topic_encoded = Field::new_from_string("temperatura/Argentina")
         .unwrap()
@@ -129,8 +125,8 @@ fn valid_unsubscribe_packet_with_id_1_and_one_topic() {
 #[test]
 fn valid_unsubscribe_packet_with_id_5_and_two_topic() {
     let topics = vec![
-        "temperatura/Argentina".to_string(),
-        "temperatura/Uruguay".to_string(),
+        Topic::new("temperatura/Argentina", QoSLevel::QoSLevel0).unwrap(),
+        Topic::new("temperatura/Uruguay", QoSLevel::QoSLevel0).unwrap(),
     ];
     let result = Unsubscribe::new(5, topics).unwrap().encode().unwrap();
     let mut topic_encoded_arg = Field::new_from_string("temperatura/Argentina")
@@ -151,21 +147,6 @@ fn valid_unsubscribe_packet_with_id_5_and_two_topic() {
 }
 
 #[test]
-fn unsubscribe_packet_can_have_empty_string_as_topic_filter() {
-    let topics = vec!["".to_string()];
-    let result = Unsubscribe::new(1, topics).unwrap().encode().unwrap();
-    let mut topic_encoded = Field::new_from_string("").unwrap().encode();
-    let mut expected: Vec<u8> = vec![
-        CONTROL_TYPE_UNSUBSCRIBE,
-        4, // remaining length
-        0,
-        1, // packet id
-    ];
-    expected.append(&mut topic_encoded);
-    assert_eq!(result, expected);
-}
-
-#[test]
 fn client_unsubscribe_packet_can_have_empty_topic_filter() {
     let topics = vec![];
     let result = Unsubscribe::new(1, topics).unwrap().encode().unwrap();
@@ -180,7 +161,7 @@ fn client_unsubscribe_packet_can_have_empty_topic_filter() {
 
 #[test]
 fn test_returns_same_identifier() {
-    let topics = vec!["temperatura/Argentina".to_string()];
+    let topics = vec![Topic::new("temperatura/Argentina", QoSLevel::QoSLevel0).unwrap()];
     let packet = Unsubscribe::new(123, topics).unwrap();
     assert_eq!(packet.packet_id(), 123);
 }
