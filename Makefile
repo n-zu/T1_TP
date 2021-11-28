@@ -1,19 +1,7 @@
-all: fmt test clippy
+TARGETS = client server common/packets common/threadpool
 
-fmt:
-	(cd client; cargo fmt)
-	(cd server; cargo fmt)
-	(cd common/packets; cargo fmt)
-	(cd common/threadpool; cargo fmt)
+all: fmt test clippy;
 
-test:
-	(cd client; cargo test)
-	(cd server; cargo test)
-	(cd common/packets; cargo test)
-	(cd common/threadpool; cargo test)
+%:
+	$(foreach t, $(TARGETS), (cd $(t); cargo $@);)
 
-clippy:
-	(cd client; cargo clippy)
-	(cd server; cargo clippy)
-	(cd common/packets; cargo clippy)
-	(cd common/threadpool; cargo clippy)
