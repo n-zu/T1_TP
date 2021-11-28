@@ -517,7 +517,11 @@ mod tests {
 
     #[test]
     fn test_unsubscribe() {
-        let unsubscribe = Unsubscribe::new(123, vec!["car/wheels".to_string()]).unwrap();
+        let unsubscribe = Unsubscribe::new(
+            123,
+            vec![Topic::new("car/wheels", QoSLevel::QoSLevel0).unwrap()],
+        )
+        .unwrap();
         let bytes = unsubscribe.encode().unwrap();
 
         let stream = Cursor::new();
@@ -552,7 +556,11 @@ mod tests {
 
     #[test]
     fn test_unsubscribe_fail() {
-        let unsubscribe = Unsubscribe::new(123, vec!["car/wheels".to_string()]).unwrap();
+        let unsubscribe = Unsubscribe::new(
+            123,
+            vec![Topic::new("car/wheels", QoSLevel::QoSLevel0).unwrap()],
+        )
+        .unwrap();
         let bytes = unsubscribe.encode().unwrap();
 
         let stream = Cursor::new();

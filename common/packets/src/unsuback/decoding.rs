@@ -25,7 +25,10 @@ impl MQTTDecoding for Unsuback {
         let mut remaining_bytes = packet_reader::read_remaining_bytes(bytes)?;
         let packet_id = Self::read_packet_id(&mut remaining_bytes);
         Self::verify_packet_id(&packet_id)?;
-        Ok(Self { packet_id })
+        Ok(Self {
+            packet_id,
+            topics: Vec::new(),
+        })
     }
 }
 

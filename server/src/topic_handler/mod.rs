@@ -162,7 +162,7 @@ impl TopicHandler {
         client_id: &str,
     ) -> Result<(), TopicHandlerError> {
         for topic_name in packet.topic_filters() {
-            unsubscribe_rec(&self.root, Some(topic_name), client_id)?;
+            unsubscribe_rec(&self.root, Some(topic_name.name()), client_id)?;
         }
         Ok(())
     }

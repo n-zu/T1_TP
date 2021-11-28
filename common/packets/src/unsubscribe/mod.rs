@@ -1,3 +1,5 @@
+use crate::topic::Topic;
+
 mod decoding;
 mod encoding;
 #[cfg(test)]
@@ -19,7 +21,7 @@ const MSG_AT_LEAST_ONE_CHAR_LONG_TOPIC_FILTER: &str =
 /// Unsubscribe packet struct
 pub struct Unsubscribe {
     packet_id: u16,
-    topic_filters: Vec<String>,
+    topic_filters: Vec<Topic>,
 }
 
 impl Unsubscribe {
@@ -29,7 +31,7 @@ impl Unsubscribe {
     }
 
     /// Gets topic filters from current Unsubscribe packet
-    pub fn topic_filters(&self) -> &Vec<String> {
-        &self.topic_filters
+    pub fn topic_filters(&self) -> Vec<Topic> {
+        self.topic_filters.clone()
     }
 }

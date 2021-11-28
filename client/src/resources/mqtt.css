@@ -1,3 +1,9 @@
-.greenBg {
-    background: #005826;
+#connect_btn {
+    background: green;
+    font-weight: bold;
+}
+
+#disconnect_btn {
+    background: red;
+    font-weight: bold;
 }
