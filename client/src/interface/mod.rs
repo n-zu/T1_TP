@@ -11,6 +11,7 @@ use crate::client::{Client, ClientError};
 
 use gtk::prelude::{ComboBoxTextExt, SwitchExt};
 
+use gtk::glib::GString;
 use gtk::{
     prelude::{BuilderExtManual, ButtonExt, EntryExt, TextBufferExt},
     Builder, Button, Entry, Switch, TextBuffer,
@@ -148,8 +149,8 @@ impl Controller {
         let keep_alive_entry: Entry = self.builder.object("con_ka").unwrap();
         let clean_session_switch: Switch = self.builder.object("con_cs").unwrap();
         let last_will_retain_switch: Switch = self.builder.object("con_lw_ret").unwrap();
-        let last_will_topic_entry: TextBuffer = self.builder.object("con_lw_txtbuffer").unwrap();
-        let last_will_msg_entry: Entry = self.builder.object("con_lw_msg").unwrap();
+        let last_will_topic_entry: Entry = self.builder.object("con_lw_top").unwrap();
+        let last_will_msg_entry: TextBuffer = self.builder.object("con_lw_txtbuffer").unwrap();
         let last_will_qos_entry: ComboBoxText = self.builder.object("con_lw_qos").unwrap();
 
         // Get the values from the entries
@@ -163,15 +164,15 @@ impl Controller {
         let client_id = id_entry.text().to_string();
         let clean_session = clean_session_switch.is_active();
         let last_will_retain = last_will_retain_switch.is_active();
-        let mut last_will_topic = String::new();
-        if let Some(str) = last_will_topic_entry.text(
-            &last_will_topic_entry.start_iter(),
-            &last_will_topic_entry.end_iter(),
-            false,
-        ) {
-            last_will_topic = str.to_string();
-        }
-        let last_will_msg = last_will_msg_entry.text().to_string();
+        let last_will_topic = last_will_topic_entry.text().to_string();
+        let last_will_msg = last_will_msg_entry
+            .text(
+                &last_will_msg_entry.start_iter(),
+                &last_will_msg_entry.end_iter(),
+                false,
+            )
+            .unwrap_or_else(|| GString::from(""))
+            .to_string();
         let last_will_qos = last_will_qos_entry
             .active_text()
             .unwrap()
