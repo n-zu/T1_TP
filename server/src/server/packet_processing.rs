@@ -4,7 +4,10 @@ use crate::client::Session;
 
 use super::*;
 
-impl Server {
+impl<S> Server<S>
+where
+S: BidirectionalStream
+{
     fn to_threadpool<F>(self: &Arc<Self>, action: F, id: &ClientIdArg) -> ServerResult<()>
     where
         F: FnOnce(Arc<Self>, &ClientId) -> ServerResult<()> + Send + 'static,
@@ -32,16 +35,12 @@ impl Server {
         control_byte: u8,
         stream: &mut T,
         id: &ClientIdArg,
-    ) -> ServerResult<PacketType> {
+    ) -> ServerResult<PacketType>
+    {
         let packet_type = PacketType::try_from(control_byte)?;
         match packet_type {
             PacketType::Publish => {
                 let publish = Publish::read_from(stream, control_byte)?;
-                if let Some(packet_id) = publish.packet_id() {
-                    self.clients_manager.read()?.client_do(id, |mut client| {
-                        client.send_packet(&Puback::new(packet_id)?)
-                    })?;
-                }
                 self.to_threadpool(|server, id| server.handle_publish(publish, id), id)?;
             }
             PacketType::Puback => {
@@ -77,11 +76,12 @@ impl Server {
         Ok(packet_type)
     }
 
-    pub fn process_packet<T: Read>(
+    pub fn process_packet(
         self: &Arc<Self>,
-        stream: &mut T,
+        stream: &mut Session<S, ThreadId>,
         id: &ClientIdArg,
-    ) -> ServerResult<PacketType> {
+    ) -> ServerResult<PacketType>
+    {
         let mut control_byte_buff = [0u8; 1];
         match stream.read_exact(&mut control_byte_buff) {
             Ok(_) => {
@@ -114,6 +114,12 @@ impl Server {
     ) -> ServerResult<()> {
         debug!("<{}>: enviando PUBLISH", id);
         publish.set_max_qos(QoSLevel::QoSLevel1);
+        if let Some(packet_id) = publish.packet_id() {
+            self.clients_manager.read()?.client_do(id, |mut client| {
+                client.send_packet(&Puback::new(packet_id)?)
+            })?;
+        }
+        
         let (sender, receiver) = mpsc::channel();
         let sv_copy = self.clone();
         let handler: JoinHandle<ServerResult<()>> = thread::spawn(move || {
@@ -161,16 +167,6 @@ impl Server {
         Ok(())
     }
 
-    pub fn wait_for_connect(&self, session: &mut Session) -> ServerResult<Connect> {
-        match Connect::new_from_zero(session.stream()) {
-            Ok(connect) => {
-                info!("<{}>: Recibido CONNECT", session.addr());
-                Ok(connect)
-            }
-            Err(err) => Err(ServerError::from(err)),
-        }
-    }
-
     pub fn send_last_will(
         self: &Arc<Self>,
         publish: Publish,
@@ -178,5 +174,20 @@ impl Server {
     ) -> ServerResult<()> {
         debug!("<{}> Enviando LAST WILL", id);
         self.handle_publish(publish, id)
+    }
+}
+
+impl<S> Server<S>
+where S: BidirectionalStream
+{
+    pub fn wait_for_connect(&self, session: &mut Session<S, ThreadId>) -> ServerResult<Connect>
+    {
+        match Connect::new_from_zero(session) {
+            Ok(connect) => {
+                info!("<{:?}>: Recibido CONNECT", session.id());
+                Ok(connect)
+            }
+            Err(err) => Err(ServerError::from(err)),
+        }
     }
 }

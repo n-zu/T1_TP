@@ -1,23 +1,19 @@
 mod login;
 
-use std::{collections::HashMap, net::SocketAddr, sync::Mutex};
+use std::{collections::HashMap, io::Write, sync::Mutex};
 
 use packets::{connack::ConnackReturnCode, connect::Connect, publish::Publish};
 use tracing::{debug, warn};
 
-use crate::{
-    client::{Client, Session},
-    server::{server_error::ServerErrorKind, ClientId, ClientIdArg, ServerError, ServerResult},
-};
+use crate::{client::{BidirectionalStream, Client, Id, Session}, server::{server_error::ServerErrorKind, ClientId, ClientIdArg, ServerError, ServerResult}};
 
 type Username = String;
 const GENERIC_ID_SUFFIX: &str = "__CLIENT__";
 
-pub struct ClientsManager {
-    clients: HashMap<ClientId, Mutex<Client>>,
-    /// client_id - username
+pub struct ClientsManager<S, I> {
+    clients: HashMap<ClientId, Mutex<Client<S>>>,
     taken_ids: HashMap<ClientId, Username>,
-    current_addrs: HashMap<ClientId, SocketAddr>,
+    current_addrs: HashMap<ClientId, I>,
     accounts_path: String,
     generic_ids_counter: u32,
 }
@@ -34,7 +30,11 @@ pub struct ConnectInfo {
     pub takeover_last_will: Option<Publish>,
 }
 
-impl ClientsManager {
+impl<S, I> ClientsManager<S, I>
+where
+S: BidirectionalStream,
+I: Clone + Copy + std::hash::Hash + Eq
+{
     pub fn new(accounts_path: &str) -> Self {
         Self {
             clients: HashMap::new(),
@@ -47,8 +47,9 @@ impl ClientsManager {
 
     pub fn client_do<F>(&self, id: &ClientIdArg, action: F) -> ServerResult<()>
     where
-        F: FnOnce(std::sync::MutexGuard<'_, Client>) -> ServerResult<()>,
-    {
+        F: FnOnce(std::sync::MutexGuard<'_, Client<S>>) -> ServerResult<()>,
+        S: Write
+        {
         match self.clients.get(id) {
             Some(client) => {
                 action(client.lock()?)?;
@@ -63,7 +64,7 @@ impl ClientsManager {
 
     pub fn get_client_property<F, T>(&self, id: &ClientIdArg, action: F) -> ServerResult<T>
     where
-        F: FnOnce(std::sync::MutexGuard<'_, Client>) -> ServerResult<T>,
+        F: FnOnce(std::sync::MutexGuard<'_, Client<S>>) -> ServerResult<T>,
     {
         match self.clients.get(id) {
             Some(client) => action(client.lock()?),
@@ -77,13 +78,14 @@ impl ClientsManager {
     pub fn finish_session(
         &mut self,
         id: &ClientIdArg,
-        session: Session,
+        session: Session<S, I>,
         gracefully: bool,
-    ) -> ServerResult<DisconnectInfo> {
+    ) -> ServerResult<DisconnectInfo>
+    {
         // Chequeo si ya fue desconectado por el proceso
         // de Client Take-Over
         if let Some(old_addr) = self.current_addrs.get(id) {
-            if session.addr() != *old_addr {
+            if session.id() != *old_addr {
                 return Ok(DisconnectInfo {
                     publish_last_will: None,
                     clean_session: false,
@@ -115,7 +117,7 @@ impl ClientsManager {
         })
     }
 
-    fn client_add(&mut self, client: Client) -> Option<Mutex<Client>> {
+    fn client_add(&mut self, client: Client<S>) -> Option<Mutex<Client<S>>> {
         self.clients
             .insert(client.id().to_owned(), Mutex::new(client))
     }
@@ -199,9 +201,10 @@ impl ClientsManager {
 
     fn new_session_unchecked(
         &mut self,
-        session: &Session,
+        session: &Session<S, I>,
         mut connect: Connect,
-    ) -> ServerResult<ConnectInfo> {
+    ) -> ServerResult<ConnectInfo>
+    {
         if connect.client_id().is_empty() {
             self.process_client_empty_id(&mut connect)?;
         }
@@ -210,18 +213,18 @@ impl ClientsManager {
         let mut takeover_last_will = None;
         let session_present;
         let return_code;
-        let addr = session.addr();
+        let session_id = session.id();
 
         // Hay una sesion_presente en el servidor con la misma ID
         if let Some(old_client) = self.clients.get_mut(&id) {
             takeover_last_will = old_client
                 .get_mut()?
-                .reconnect(connect, session.try_clone()?)?;
+                .reconnect(connect, session.stream().try_clone().unwrap())?;
             session_present = true;
             return_code = ConnackReturnCode::Accepted;
         } else {
             let mut client = Client::new(connect);
-            client.connect(session.try_clone()?)?;
+            client.connect(session.stream().try_clone().unwrap())?;
 
             self.taken_ids.insert(
                 id.to_owned(),
@@ -234,7 +237,7 @@ impl ClientsManager {
             session_present = false;
             return_code = ConnackReturnCode::Accepted;
         }
-        self.current_addrs.insert(id.to_owned(), addr);
+        self.current_addrs.insert(id.to_owned(), session_id);
         Ok(ConnectInfo {
             id,
             session_present,
@@ -245,9 +248,10 @@ impl ClientsManager {
 
     pub fn new_session(
         &mut self,
-        session: &Session,
+        session: &Session<S, I>,
         connect: Connect,
-    ) -> ServerResult<ConnectInfo> {
+    ) -> ServerResult<ConnectInfo> 
+    {
         match self.check_credentials(&connect) {
             Ok(()) => self.new_session_unchecked(session, connect),
             Err(err) if err.kind() == ServerErrorKind::ClientNotInWhitelist => {
@@ -278,7 +282,8 @@ impl ClientsManager {
         }
     }
 
-    pub fn finish_all_sessions(&mut self, gracefully: bool) -> ServerResult<()> {
+    pub fn finish_all_sessions(&mut self, gracefully: bool) -> ServerResult<()>
+    {
         for (id, client) in &self.clients {
             debug!("<{}>: Desconectando", id);
             client.lock()?.disconnect(gracefully)?;

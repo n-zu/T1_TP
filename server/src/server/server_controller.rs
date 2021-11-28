@@ -20,7 +20,7 @@ impl ServerController {
     fn shutdown(&mut self) -> ServerResult<()> {
         self.shutdown_sender.send(())?;
         match self.handle.take().unwrap().join() {
-            Ok(()) => debug!("El thread del servidor fue joineado normalmente (sin panic)"),
+            Ok(()) => debug!("El thread del servidor fue joineado normalmente"),
             Err(err) => debug!("El thread del servidor fue joineado con panic: {:?}", err),
         }
         Ok(())

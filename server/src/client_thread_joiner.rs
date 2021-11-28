@@ -1,21 +1,16 @@
-use std::{
-    collections::HashMap,
-    net::SocketAddr,
-    sync::mpsc::{self, Receiver, Sender},
-    thread::{self, JoinHandle},
-};
+use std::{collections::HashMap, sync::mpsc::{self, Receiver, Sender}, thread::{self, JoinHandle, ThreadId}};
 
 use tracing::{debug, error};
 
 use crate::server::{ServerError, ServerResult};
 
 struct ThreadInfo {
-    addr: SocketAddr,
+    id: ThreadId,
     handle: JoinHandle<()>,
 }
 
 pub struct ClientThreadJoiner {
-    handles: Option<HashMap<SocketAddr, JoinHandle<()>>>,
+    handles: Option<HashMap<ThreadId, JoinHandle<()>>>,
     finished_sender: Option<Sender<ThreadInfo>>,
     joiner_thread_handle: Option<JoinHandle<()>>,
 }
@@ -32,16 +27,16 @@ impl ClientThreadJoiner {
         }
     }
 
-    pub fn add_thread(&mut self, addr: SocketAddr, handle: JoinHandle<()>) -> ServerResult<()> {
+    pub fn add_thread(&mut self, id: ThreadId, handle: JoinHandle<()>) -> ServerResult<()> {
         if let Some(_prev_handle) = self
             .handles
             .as_mut()
             .expect("Handles es None")
-            .insert(addr, handle)
+            .insert(id, handle)
         {
             Err(ServerError::new_msg(&format!(
-                "Se agrego un handle con SocketAddr repetida ({})",
-                addr
+                "Se agrego un handle con Id repetido ({:?})",
+                id
             )))
         } else {
             Ok(())
@@ -52,28 +47,28 @@ impl ClientThreadJoiner {
         for thread_info in receiver {
             match thread_info.handle.join() {
                 Ok(()) => debug!(
-                    "Thread de Address {} termino de forma esperada",
-                    thread_info.addr
+                    "{:?} termino de forma esperada",
+                    thread_info.id
                 ),
                 Err(err) => error!(
-                    "Thread de Address {} termino en panic: {:?}",
-                    thread_info.addr, err
+                    "{:?} termino en panic: {:?}",
+                    thread_info.id, err
                 ),
             }
         }
     }
 
-    pub fn finished(&mut self, addr: SocketAddr) -> ServerResult<()> {
+    pub fn finished(&mut self, id: ThreadId) -> ServerResult<()> {
         if let Some(handle) = self
             .handles
             .as_mut()
             .expect("Handles es None")
-            .remove(&addr)
+            .remove(&id)
         {
             self.finished_sender
                 .as_ref()
                 .expect("finished_sender es None")
-                .send(ThreadInfo { addr, handle })
+                .send(ThreadInfo { id, handle })
                 .expect("Error de sender");
             Ok(())
         } else {
@@ -86,11 +81,11 @@ impl ClientThreadJoiner {
 
 impl Drop for ClientThreadJoiner {
     fn drop(&mut self) {
-        for (addr, handle) in self.handles.take().expect("handles es None") {
+        for (id, handle) in self.handles.take().expect("handles es None") {
             self.finished_sender
                 .as_ref()
                 .expect("finished_sender es None")
-                .send(ThreadInfo { addr, handle })
+                .send(ThreadInfo { id, handle })
                 .expect("Error de sender");
         }
         drop(
@@ -106,7 +101,7 @@ impl Drop for ClientThreadJoiner {
         {
             error!("Thread de ClientThreadJoiner termino en panic: {:?}", err);
         } else {
-            debug!("Thread de ClientThreadJoiner fue joineado normalmente (sin panic)")
+            debug!("Thread de ClientThreadJoiner fue joineado normalmente")
         }
     }
 }

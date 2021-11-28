@@ -1,9 +1,4 @@
-use std::{
-    io::{self, Write},
-    net::{Shutdown, SocketAddr, TcpStream},
-    time::Duration,
-    vec,
-};
+use std::{io::{self, Read, Write}, net::{Shutdown, TcpStream}, time::Duration, vec};
 
 use packets::{connect::Connect, qos::QoSLevel, traits::MQTTEncoding};
 use packets::{puback::Puback, publish::Publish};
@@ -11,49 +6,71 @@ use tracing::{debug, info};
 
 use crate::server::{server_error::ServerErrorKind, ClientId, ServerError, ServerResult};
 
+pub trait Id {
+    type T;
+    fn id(&self) -> Self::T;
+}
+
+#[derive(Debug)]
+pub struct StreamError {
+
+}
+
+pub trait BidirectionalStream: Read + Write + Send + Sync + 'static {
+    fn try_clone(&self) -> Result<Self, StreamError> where Self: Sized;
+
+    fn close(&mut self) -> io::Result<()>;
+
+    fn change_read_timeout(&mut self, dur: Option<Duration>) -> io::Result<()>;
+
+    fn change_write_timeout(&mut self, dur: Option<Duration>) -> io::Result<()>;
+}
+
+impl BidirectionalStream for TcpStream {
+    fn try_clone(&self) -> Result<Self, StreamError> where Self: Sized {
+        if let Ok(copy) = self.try_clone() {
+            Ok(copy)
+        } else {
+            Err(StreamError{})
+        }
+    }
+
+    fn close(&mut self) -> io::Result<()> {
+        self.shutdown(Shutdown::Both)
+    }
+
+    fn change_read_timeout(&mut self, dur: Option<Duration>) -> io::Result<()> {
+        self.set_read_timeout(dur)
+    }
+
+    fn change_write_timeout(&mut self, dur: Option<Duration>) -> io::Result<()> {
+        self.set_write_timeout(dur)
+    }
+}
+
 /// Information related to the current session of
 /// the client
-pub struct Session {
-    addr: SocketAddr,
-    stream: TcpStream,
+pub struct Session<S, I> {
+    id: I,
+    stream: S,
 }
 
-impl Session {
-    pub fn new(addr: SocketAddr, stream: TcpStream) -> Self {
-        Self { addr, stream }
+impl<S, I> Session<S, I> {
+    pub fn stream(&self) -> &S {
+        &self.stream
     }
-
-    pub fn addr(&self) -> SocketAddr {
-        self.addr
-    }
-
-    pub fn stream(&mut self) -> &mut TcpStream {
+    pub fn stream_mut(&mut self) -> &mut S {
         &mut self.stream
     }
+}
 
-    pub fn try_clone(&self) -> ServerResult<Self> {
-        Ok(Self {
-            addr: self.addr,
-            stream: self.stream.try_clone()?,
-        })
-    }
-
-    pub fn set_read_timeout(&mut self, time: Option<Duration>) -> io::Result<()> {
-        self.stream.set_read_timeout(time)
+impl<S: io::Read, I> io::Read for Session<S, I> {
+    fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
+        self.stream.read(buf)
     }
 }
 
-/// Represents the state of a client on the server
-pub struct Client {
-    /// Id of the client
-    id: ClientId,
-    session: Option<Session>,
-    connect: Connect,
-    /// Unacknowledge packets
-    unacknowledged: Vec<Publish>,
-}
-
-impl io::Write for Session {
+impl<S: io::Write, I> io::Write for Session<S, I> {
     fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
         self.stream.write(buf)
     }
@@ -63,10 +80,35 @@ impl io::Write for Session {
     }
 }
 
-impl io::Write for Client {
+impl<S, I: Clone + Copy> Id for Session<S, I> {
+    type T = I;
+
+    fn id(&self) -> Self::T {
+        self.id
+    }
+}
+
+impl<S, I> Session<S, I>
+{
+    pub fn new(id: I, stream: S) -> Self {
+        Self { id, stream }
+    }
+}
+
+/// Represents the state of a client on the server
+pub struct Client<S> {
+    /// Id of the client
+    id: ClientId,
+    stream: Option<S>,
+    connect: Connect,
+    /// Unacknowledge packets
+    unacknowledged: Vec<Publish>,
+}
+
+impl<S: io::Write> io::Write for Client<S> {
     fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
-        if let Some(session) = &mut self.session {
-            session.write(buf)
+        if let Some(stream) = &mut self.stream {
+            stream.write(buf)
         } else {
             Err(io::Error::new(
                 io::ErrorKind::NotConnected,
@@ -76,8 +118,8 @@ impl io::Write for Client {
     }
 
     fn flush(&mut self) -> io::Result<()> {
-        if let Some(session) = &mut self.session {
-            session.stream.flush()
+        if let Some(stream) = &mut self.stream {
+            stream.flush()
         } else {
             Err(io::Error::new(
                 io::ErrorKind::NotConnected,
@@ -87,19 +129,22 @@ impl io::Write for Client {
     }
 }
 
-impl Client {
+impl<S> Client<S>
+where
+S: BidirectionalStream
+{
     pub fn new(connect: Connect) -> Self {
         Self {
             id: connect.client_id().to_owned(),
-            session: None,
+            stream: None,
             connect,
             unacknowledged: vec![],
         }
     }
 
-    pub fn connect(&mut self, session: Session) -> ServerResult<()> {
-        if self.session.is_none() {
-            self.session = Some(session);
+    pub fn connect(&mut self, stream: S) -> ServerResult<()> {
+        if self.stream.is_none() {
+            self.stream = Some(stream);
             Ok(())
         } else {
             Err(ServerError::new_msg("Cliente ya conectado"))
@@ -111,12 +156,23 @@ impl Client {
     }
 
     pub fn connected(&self) -> bool {
-        self.session.is_some()
+        self.stream.is_some()
     }
 
-    pub fn disconnect(&mut self, gracefully: bool) -> ServerResult<Option<Publish>> {
-        if let Some(session) = self.session.take() {
-            session.stream.shutdown(Shutdown::Both)?;
+    pub fn send_packet<T: MQTTEncoding>(&mut self, packet: &T) -> ServerResult<()>
+    {
+        self.write_all(&packet.encode()?)?;
+        Ok(())
+    }
+
+    pub fn clean_session(&self) -> bool {
+        *self.connect.clean_session()
+    }
+
+    pub fn disconnect(&mut self, gracefully: bool) -> ServerResult<Option<Publish>>
+    {
+        if let Some(mut stream) = self.stream.take() {
+            stream.close()?;
             if gracefully {
                 Ok(None)
             } else if let Some(last_will) = self.connect.last_will().take() {
@@ -145,20 +201,12 @@ impl Client {
         }
     }
 
-    pub fn send_packet<T: MQTTEncoding>(&mut self, packet: &T) -> ServerResult<()> {
-        self.write_all(&packet.encode()?)?;
-        Ok(())
-    }
-
-    pub fn clean_session(&self) -> bool {
-        *self.connect.clean_session()
-    }
-
     pub fn reconnect(
         &mut self,
         new_connect: Connect,
-        new_session: Session,
-    ) -> ServerResult<Option<Publish>> {
+        new_stream: S,
+    ) -> ServerResult<Option<Publish>>
+    {
         if self.id != new_connect.client_id() {
             return Err(ServerError::new_kind(
                 &format!(
@@ -175,7 +223,7 @@ impl Client {
         }
 
         let last_will = self.disconnect(false)?;
-        self.session = Some(new_session);
+        self.stream = Some(new_stream);
         self.connect = new_connect;
         Ok(last_will)
     }
@@ -199,7 +247,10 @@ impl Client {
         Ok(())
     }
 
-    pub fn send_unacknowledged(&mut self) -> ServerResult<()> {
+    pub fn send_unacknowledged(&mut self) -> ServerResult<()>
+        where
+        S: Write
+    {
         for publish in self.unacknowledged.iter() {
             debug!(
                 "<{}>: Reenviando paquete con id <{}>",
@@ -208,10 +259,7 @@ impl Client {
                     .packet_id()
                     .expect("Se esperaba un paquete con identificador (QoS > 0)")
             );
-            self.session
-                .as_mut()
-                .unwrap()
-                .write_all(&publish.encode()?)?;
+            self.stream.as_mut().unwrap().write_all(&publish.encode()?)?;
         }
         Ok(())
     }
@@ -221,7 +269,10 @@ impl Client {
         self.unacknowledged.push(publish);
     }
 
-    pub fn send_publish(&mut self, publish: Publish) -> ServerResult<()> {
+    pub fn send_publish(&mut self, publish: Publish) -> ServerResult<()>
+        where
+        S: Write
+    {
         if self.connected() {
             self.send_packet(&publish)?;
             if publish.qos() == QoSLevel::QoSLevel1 {
