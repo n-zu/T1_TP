@@ -99,4 +99,43 @@ fn test_disconnect() {
     let _ = Disconnect::read_from(&mut stream, buf[0]).unwrap();
 }
 
-// mas tests posibles: conexion con error, el servidor se dropea y manda algun error, publicaciones basicas
+#[test]
+fn test_failed_connection() {
+    let mut server = ServerMock::new();
+    let connect = ConnectBuilder::new("id", 0, true).unwrap().build().unwrap();
+    let observer = ObserverMock::new();
+    let _client = Client::new(
+        &format!("localhost:{}", server.port),
+        observer.clone(),
+        connect,
+    )
+    .unwrap();
+    let connack = Connack::new(false, ConnackReturnCode::BadUserNameOrPassword);
+    let (_s, _) = server.accept_connection(connack);
+
+    thread::sleep(Duration::from_millis(500));
+    let msgs = observer.messages.lock().unwrap();
+    assert!(matches!(msgs[0], Message::Connected(Err(_))));
+}
+
+#[test]
+fn test_server_closed() {
+    let mut server = ServerMock::new();
+    let connect = ConnectBuilder::new("id", 0, true).unwrap().build().unwrap();
+    let observer = ObserverMock::new();
+    let _client = Client::new(
+        &format!("localhost:{}", server.port),
+        observer.clone(),
+        connect,
+    )
+    .unwrap();
+    let connack = Connack::new(false, ConnackReturnCode::Accepted);
+    let (s, _) = server.accept_connection(connack);
+    drop(server);
+    drop(s);
+
+    thread::sleep(Duration::from_millis(500));
+    let msgs = observer.messages.lock().unwrap();
+    // Tiene que ser el segundo mensaje, el primero es el connected
+    assert!(matches!(msgs[1], Message::InternalError(_)));
+}
