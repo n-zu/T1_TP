@@ -119,7 +119,7 @@ mod tests {
     #[test]
     fn test_invalid_topic_name_singlelevel_wildcard() {
         let topic = Topic::new("hello/+", QoSLevel::QoSLevel0);
-        assert!(topic.is_err());
+        assert!(topic.is_ok());
 
         let topic = Topic::new("hello+/rs", QoSLevel::QoSLevel0);
         assert!(topic.is_err());
