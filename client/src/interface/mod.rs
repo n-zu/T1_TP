@@ -395,7 +395,7 @@ impl Controller {
         self.set_text_to_entry_box("con_psw", "");
         self.set_text_to_entry_box("con_ka", "0");
         self.set_text_to_entry_box("con_lw_top", "");
-        self.set_text_to_entry_box("con_lw_msg", "");
+        self.set_buffer_to_text_buffer("con_lw_txtbuffer", "");
         self.set_state_to_switch_box("con_cs", false);
         self.set_state_to_switch_box("con_lw_ret", false);
     }
@@ -407,6 +407,7 @@ impl Controller {
         self.set_state_to_switch_box("pub_ret", false);
         self.set_text_to_entry_box("sub_top", "top/sub");
         self.set_text_to_entry_box("unsub_top", "top/sub");
+        self.set_buffer_to_text_buffer("pub_mg_txtbuffer", "");
         self.remove_all_children_from_listbox("sub_subs");
         self.remove_all_children_from_listbox("sub_msgs");
     }

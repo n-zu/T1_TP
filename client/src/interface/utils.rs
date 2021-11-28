@@ -1,8 +1,11 @@
 use gtk::prelude::ContainerExt;
 use gtk::{
-    prelude::{BuilderExtManual, DialogExt, EntryExt, LabelExt, StackExt, SwitchExt, WidgetExt},
+    prelude::{
+        BuilderExtManual, DialogExt, EntryExt, LabelExt, StackExt, SwitchExt, TextBufferExt,
+        WidgetExt,
+    },
     Box, Builder, Button, ButtonsType, DialogFlags, Entry, Label, ListBox, MessageDialog,
-    MessageType, Stack, Switch, Window,
+    MessageType, Stack, Switch, TextBuffer, Window,
 };
 
 /// Icons of the status bar
@@ -86,6 +89,11 @@ pub(crate) trait InterfaceUtils {
     fn set_state_to_switch_box(&self, switch_id: &str, new_state: bool) {
         let entry: Switch = self.builder().object(switch_id).unwrap();
         entry.set_active(new_state);
+    }
+
+    fn set_buffer_to_text_buffer(&self, text_buffer_id: &str, text: &str) {
+        let text_buffer: TextBuffer = self.builder().object(text_buffer_id).unwrap();
+        text_buffer.set_text(text);
     }
 
     /// Removes all the children from a given ListBox label
