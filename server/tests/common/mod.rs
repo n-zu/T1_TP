@@ -47,8 +47,8 @@ fn build_config(port: u32) -> Config {
 }
 
 pub fn connect_client(
-    keep_alive: u16,
-    clean_session: bool,
+    mut builder: ConnectBuilder,
+    set_auth: bool,
     port: u32,
     read_connack: bool,
 ) -> TcpStream {
@@ -60,10 +60,11 @@ pub fn connect_client(
         .set_read_timeout(Some(Duration::from_secs(30)))
         .unwrap();
 
-    let mut connect_builder = ConnectBuilder::new("id", keep_alive, clean_session).unwrap();
-    connect_builder = connect_builder.user_name("user").unwrap();
-    connect_builder = connect_builder.password("pass").unwrap();
-    let connect = connect_builder.build().unwrap();
+    if set_auth {
+        builder = builder.user_name("user").unwrap();
+        builder = builder.password("pass").unwrap();
+    }
+    let connect = builder.build().unwrap();
     stream.write_all(&connect.encode().unwrap()).unwrap();
 
     if read_connack {
