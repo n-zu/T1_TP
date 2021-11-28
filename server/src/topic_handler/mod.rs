@@ -64,8 +64,8 @@ fn matches_singlelevel(topic_filter: String, topic_name: String) -> bool {
 fn set_matching_subscribers(
     topic_name: Option<&str>,
     singlelevel_subscriptions: &Subscriptions,
-) -> Subscribers {
-    let mut matching = HashMap::new();
+) -> Vec::<(String,SubscriptionData)> {
+    let mut matching = Vec::new();
     if let Some(topic) = topic_name {
         for (topic_filter, subscribers) in singlelevel_subscriptions {
             if matches_singlelevel(topic_filter.to_string(), topic.to_string()) {
@@ -193,7 +193,7 @@ fn pub_rec(
     packet: &Publish,
     is_root: bool,
 ) -> Result<(), TopicHandlerError> {
-    let mut matching = HashMap::new();
+    let mut matching = Vec::new();
     if !(is_root && starts_with_unmatch(topic_name)) {
         // Agregar los subscribers multinivel de esta hoja
         matching =
@@ -409,6 +409,7 @@ mod tests {
 
     use packets::qos::QoSLevel;
     use packets::subscribe::Subscribe;
+    use packets::topic::Topic;
     use packets::traits::MQTTDecoding;
     use packets::unsubscribe::Unsubscribe;
     use packets::{publish::Publish, utf8::Field};
@@ -650,8 +651,11 @@ mod tests {
         assert!(receiver.recv().is_err());
     }
 
-    /* Tests previos de una funcionalidad no obligatoria
-    ([MQTT-3.3.5-1]) Al final decidimos enviar una copia por suscripción
+    /* 
+    // Tests previos de una funcionalidad no obligatoria. Al final decidimos enviar una copia por suscripción.
+    // 829 [MQTT-3.3.5-1]. In addition, the Server MAY deliver further copies of the message, one for each
+    // 830 additional matching subscription and respecting the subscription’s QoS in each case.
+
        #[test]
        fn test_multilevel_wildcard_two_subscribe_one_publish() {
            let topic1 = Topic::new("colors/#", QoSLevel::QoSLevel0).unwrap();
@@ -766,6 +770,42 @@ mod tests {
            assert!(receiver.recv().is_err());
        }
     */
+    #[test]
+    fn test_deliver_copies_for_each_subscription () {
+        let topic1 = Topic::new("colors/#", QoSLevel::QoSLevel1).unwrap();
+        let topic2 = Topic::new("colors/primary/blue", QoSLevel::QoSLevel0).unwrap();
+        let topic3 = Topic::new("colors/+/blue", QoSLevel::QoSLevel0).unwrap();
+        let subscribe = Subscribe::new(vec![topic1, topic2, topic3], 123);
+        let publish = Publish::new(
+            false,
+            QoSLevel::QoSLevel1,
+            false,
+            "colors/primary/blue",
+            "#0000FF",
+            Some(123),
+        )
+        .unwrap();
+        let handler = super::TopicHandler::new();
+        let (sender, receiver) = channel();
+
+        handler.subscribe(&subscribe, "user").unwrap();
+        handler.publish(&publish, sender).unwrap();
+
+        let message = receiver.recv().unwrap();
+        assert_eq!(message.client_id, "user");
+        assert_eq!(message.packet.topic_name(), "colors/primary/blue");
+        
+        let message = receiver.recv().unwrap();
+        assert_eq!(message.client_id, "user");
+        assert_eq!(message.packet.topic_name(), "colors/primary/blue");
+        
+        let message = receiver.recv().unwrap();
+        assert_eq!(message.client_id, "user");
+        assert_eq!(message.packet.topic_name(), "colors/primary/blue");
+
+        assert!(receiver.recv().is_err());
+    }
+
     #[test]
     fn test_unsubscribe_multilevel_stop_sending_messages_to_client() {
         let subscribe = build_subscribe("topic/auto/#");
