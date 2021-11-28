@@ -76,8 +76,7 @@ impl Topic {
         if !(name.eq("+"))
             && ((name.matches('+').count() - if name.starts_with("+/") { 1 } else { 0 }
                 != name.matches("/+").count())
-                || (name.matches('+').count()
-                    - if name.starts_with("+/") { 1 } else { 0 }
+                || (name.matches('+').count() - if name.starts_with("+/") { 1 } else { 0 }
                     != name.matches("/+").count()))
         {
             return Err(PacketError::new_kind(

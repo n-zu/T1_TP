@@ -64,7 +64,7 @@ fn matches_singlelevel(topic_filter: String, topic_name: String) -> bool {
 fn set_matching_subscribers(
     topic_name: Option<&str>,
     singlelevel_subscriptions: &Subscriptions,
-) -> Vec::<(String,SubscriptionData)> {
+) -> Vec<(String, SubscriptionData)> {
     let mut matching = Vec::new();
     if let Some(topic) = topic_name {
         for (topic_filter, subscribers) in singlelevel_subscriptions {
@@ -249,12 +249,7 @@ fn handle_sub_level(
     sub_data: SubscriptionData,
 ) -> Result<(), TopicHandlerError> {
     if topic.starts_with(SINGLELEVEL_WILDCARD) {
-        return add_singlelevel_subscription(
-            node,
-            topic.to_string(),
-            user_id,
-            sub_data,
-        );
+        return add_singlelevel_subscription(node, topic.to_string(), user_id, sub_data);
     }
 
     let (current, rest) = split(topic);
@@ -408,11 +403,11 @@ fn remove_client_rec(node: &Topic, user_id: &str) -> Result<(), TopicHandlerErro
 mod tests {
     use std::{collections::HashSet, sync::mpsc::channel};
 
+    use packets::publish::Publish;
     use packets::qos::QoSLevel;
     use packets::subscribe::Subscribe;
     use packets::topic::Topic;
     use packets::unsubscribe::Unsubscribe;
-    use packets::{publish::Publish};
 
     use crate::topic_handler::matches_singlelevel;
 
@@ -631,7 +626,7 @@ mod tests {
         assert!(receiver.recv().is_err());
     }
 
-    /* 
+    /*
     // Tests previos de una funcionalidad no obligatoria. Al final decidimos enviar una copia por suscripción.
     // 829 [MQTT-3.3.5-1]. In addition, the Server MAY deliver further copies of the message, one for each
     // 830 additional matching subscription and respecting the subscription’s QoS in each case.
@@ -751,7 +746,7 @@ mod tests {
        }
     */
     #[test]
-    fn test_deliver_copies_for_each_subscription () {
+    fn test_deliver_copies_for_each_subscription() {
         let topic1 = Topic::new("colors/#", QoSLevel::QoSLevel1).unwrap();
         let topic2 = Topic::new("colors/primary/blue", QoSLevel::QoSLevel0).unwrap();
         let topic3 = Topic::new("colors/+/blue", QoSLevel::QoSLevel0).unwrap();
@@ -774,11 +769,11 @@ mod tests {
         let message = receiver.recv().unwrap();
         assert_eq!(message.client_id, "user");
         assert_eq!(message.packet.topic_name(), "colors/primary/blue");
-        
+
         let message = receiver.recv().unwrap();
         assert_eq!(message.client_id, "user");
         assert_eq!(message.packet.topic_name(), "colors/primary/blue");
-        
+
         let message = receiver.recv().unwrap();
         assert_eq!(message.client_id, "user");
         assert_eq!(message.packet.topic_name(), "colors/primary/blue");
@@ -848,10 +843,7 @@ mod tests {
             "top/+//#".to_string(),
             "top/sub//green/#00FF00".to_string()
         ));
-        assert!(matches_singlelevel(
-            "+".to_string(),
-            "fdelu".to_string()
-        ));
+        assert!(matches_singlelevel("+".to_string(), "fdelu".to_string()));
     }
 
     #[test]
@@ -1132,7 +1124,10 @@ mod tests {
 
         handler.publish(&publish, sender).unwrap();
 
-        assert_eq!(receiver.recv().unwrap().packet.payload(), Some(&":D".to_string()));
+        assert_eq!(
+            receiver.recv().unwrap().packet.payload(),
+            Some(&":D".to_string())
+        );
     }
 
     #[test]
@@ -1147,6 +1142,9 @@ mod tests {
 
         handler.publish(&publish, sender).unwrap();
 
-        assert_eq!(receiver.recv().unwrap().packet.payload(), Some(&":D".to_string()));
+        assert_eq!(
+            receiver.recv().unwrap().packet.payload(),
+            Some(&":D".to_string())
+        );
     }
 }
