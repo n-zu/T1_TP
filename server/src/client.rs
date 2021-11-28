@@ -1,8 +1,9 @@
 use std::{io::{self, Read, Write}, net::{Shutdown, TcpStream}, time::Duration, vec};
 
-use packets::{connect::Connect, qos::QoSLevel, traits::MQTTEncoding};
-use packets::{puback::Puback, publish::Publish};
-use tracing::{debug, info};
+use packets::{connect::Connect, pingresp::PingResp, qos::QoSLevel, traits::MQTTEncoding};
+use packets::{puback::Puback, publish::Publish, suback::Suback};
+use tracing::{debug, error, info};
+use tracing_subscriber::field::debug;
 
 use crate::server::{server_error::ServerErrorKind, ClientId, ServerError, ServerResult};
 

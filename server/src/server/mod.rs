@@ -32,12 +32,21 @@ use packets::qos::QoSLevel;
 
 use crate::{client::{BidirectionalStream, Id, Session}, client_thread_joiner::ClientThreadJoiner, clients_manager::{ClientsManager, ConnectInfo, DisconnectInfo}, config::Config, server::server_error::ServerErrorKind, topic_handler::{Message, TopicHandler}};
 
-use self::server_controller::ServerController;
+pub use self::server_controller::ServerController;
 
 pub type ServerResult<T> = Result<T, ServerError>;
 pub type ClientId = String;
 // Se necesita para que Clippy lo detecte como slice
 pub type ClientIdArg = str;
+
+pub enum Packet {
+    Publish(Publish),
+    Puback(Puback),
+    Subscribe(Subscribe),
+    Unsubscribe(Unsubscribe),
+    PingReq(PingReq),
+    Disconnect(Disconnect),
+}
 
 /// Represents a Server that complies with the
 /// MQTT V3.1.1 protocol

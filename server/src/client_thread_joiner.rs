@@ -15,6 +15,12 @@ pub struct ClientThreadJoiner {
     joiner_thread_handle: Option<JoinHandle<()>>,
 }
 
+impl Default for ClientThreadJoiner {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl ClientThreadJoiner {
     pub fn new() -> ClientThreadJoiner {
         let (sender, receiver) = mpsc::channel();
