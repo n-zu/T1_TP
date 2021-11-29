@@ -2,23 +2,30 @@ use std::convert::TryFrom;
 use std::{rc::Rc, sync::Mutex};
 
 mod client_observer;
+mod subscription_list;
 mod utils;
-use crate::{client::ClientError, interface::client_observer::ClientObserver};
 
-use crate::client::Client;
+use crate::interface::client_observer::ClientObserver;
 
-use gtk::prelude::SwitchExt;
+use crate::client::{Client, ClientError};
+
+use gtk::prelude::{ComboBoxTextExt, SwitchExt};
+
+use gtk::glib::GString;
 use gtk::{
     prelude::{BuilderExtManual, ButtonExt, EntryExt, TextBufferExt},
     Builder, Button, Entry, Switch, TextBuffer,
 };
+use gtk::{ComboBoxText, ListBox};
 use packets::connect::{Connect, ConnectBuilder, LastWill};
-use packets::subscribe::Subscribe;
 use packets::topic::Topic;
 
 use packets::publish::Publish;
 use packets::qos::QoSLevel;
+use packets::subscribe::Subscribe;
+use packets::unsubscribe::Unsubscribe;
 
+use self::subscription_list::SubscriptionList;
 use self::utils::{Icon, InterfaceUtils};
 
 /// Controller for the client. It both creates the
@@ -59,6 +66,7 @@ impl Controller {
     }
 
     #[doc(hidden)]
+    /// Sets up the connect button
     fn setup_connect(self: &Rc<Self>) {
         let cont_clone = self.clone();
         let connect: Button = self.builder.object("con_btn").unwrap();
@@ -68,6 +76,7 @@ impl Controller {
     }
 
     #[doc(hidden)]
+    /// Sets up the subscribe button
     fn setup_subscribe(self: &Rc<Self>) {
         let cont_clone = self.clone();
         let subscribe: Button = self.builder.object("sub_btn").unwrap();
@@ -86,6 +95,7 @@ impl Controller {
     }
 
     #[doc(hidden)]
+    /// Sets up the disconnect button
     fn setup_disconnect(self: &Rc<Self>) {
         let cont_clone = self.clone();
         let disconnect: Button = self.builder.object("discon_btn").unwrap();
@@ -95,15 +105,18 @@ impl Controller {
     }
 
     #[doc(hidden)]
+    /// Sets up the unsubscribe button
     fn setup_unsubscribe(self: &Rc<Self>) {
-        let _cont_clone = self.clone();
-        /*let unsubscribe: Button = self.builder.object("unsub_btn").unwrap();
+        let cont_clone = self.clone();
+        let unsubscribe: Button = self.builder.object("unsub_btn").unwrap();
         unsubscribe.connect_clicked(move |button: &Button| {
             cont_clone.handle_unsubscribe(button);
-        });*/ //TODO
+        });
     }
 
     #[doc(hidden)]
+    /// Retrieves all the necessary input data from the UI in order to create and connect
+    /// a new Client
     fn _connect(&self) -> Result<(), ClientError> {
         let address_entry: Entry = self.builder.object("con_host").unwrap();
         let port_entry: Entry = self.builder.object("con_port").unwrap();
@@ -114,7 +127,10 @@ impl Controller {
         );
 
         let connect = self._create_connect_packet()?;
-        let observer = ClientObserver::new(self.builder.clone());
+        let sub_box: ListBox = self.builder.object("sub_subs").unwrap();
+        let unsub_entry: Entry = self.builder.object("unsub_top").unwrap();
+        let subs_list = SubscriptionList::new(sub_box, unsub_entry);
+        let observer = ClientObserver::new(self.builder.clone(), subs_list);
         let client = Client::new(&full_addr, observer, connect)?;
 
         self.connection_info(Some(&format!("Conectado a {}", full_addr)));
@@ -124,6 +140,7 @@ impl Controller {
     }
 
     #[doc(hidden)]
+    /// Creates a new CONNECT packet given the input data from the UI
     fn _create_connect_packet(&self) -> Result<Connect, ClientError> {
         // Get the entries from the interface
         let id_entry: Entry = self.builder.object("con_cli").unwrap();
@@ -133,8 +150,8 @@ impl Controller {
         let clean_session_switch: Switch = self.builder.object("con_cs").unwrap();
         let last_will_retain_switch: Switch = self.builder.object("con_lw_ret").unwrap();
         let last_will_topic_entry: Entry = self.builder.object("con_lw_top").unwrap();
-        let last_will_msg_entry: Entry = self.builder.object("con_lw_msg").unwrap();
-        let last_will_qos_entry: Entry = self.builder.object("con_lw_qos_entry").unwrap();
+        let last_will_msg_entry: TextBuffer = self.builder.object("con_lw_txtbuffer").unwrap();
+        let last_will_qos_entry: ComboBoxText = self.builder.object("con_lw_qos").unwrap();
 
         // Get the values from the entries
         let user_name = user_entry.text().to_string();
@@ -148,12 +165,20 @@ impl Controller {
         let clean_session = clean_session_switch.is_active();
         let last_will_retain = last_will_retain_switch.is_active();
         let last_will_topic = last_will_topic_entry.text().to_string();
-        let last_will_msg = last_will_msg_entry.text().to_string();
+        let last_will_msg = last_will_msg_entry
+            .text(
+                &last_will_msg_entry.start_iter(),
+                &last_will_msg_entry.end_iter(),
+                false,
+            )
+            .unwrap_or_else(|| GString::from(""))
+            .to_string();
         let last_will_qos = last_will_qos_entry
-            .text()
+            .active_text()
+            .unwrap()
             .to_string()
             .parse::<u8>()
-            .unwrap_or(0);
+            .unwrap();
 
         // Create the connect builder
         let mut connect_builder = ConnectBuilder::new(&client_id, keep_alive, clean_session)?;
@@ -182,6 +207,7 @@ impl Controller {
     /// Tries to connect the client to the
     /// server with the given inputs, and sets
     /// up the ClientObserver
+    #[doc(hidden)]
     fn handle_connect(&self, _: &Button) {
         self.icon(Icon::Loading);
         self.status_message("Conectando...");
@@ -194,14 +220,21 @@ impl Controller {
     }
 
     #[doc(hidden)]
+    /// Retrieves all the necessary input data from the UI in order to create and send
+    /// a new SUBSCRIBE packet
     fn _subscribe(&self) -> Result<(), ClientError> {
         let topic_entry: Entry = self.builder.object("sub_top").unwrap();
-        let qos_entry: Entry = self.builder.object("sub_qos_entry").unwrap();
-        let qos = qos_entry.text().to_string().parse::<u8>().unwrap_or(0);
+        let qos_entry: ComboBoxText = self.builder.object("sub_qos").unwrap();
+        let qos = qos_entry
+            .active_text()
+            .unwrap()
+            .to_string()
+            .parse::<u8>()
+            .unwrap();
 
         let topic = Topic::new(&topic_entry.text().to_string(), QoSLevel::try_from(qos)?)?;
 
-        let packet = Subscribe::new(vec![topic], 0);
+        let packet = Subscribe::new(vec![topic], rand::random());
 
         if let Some(client) = self.client.lock()?.as_mut() {
             client.subscribe(packet)?;
@@ -213,9 +246,10 @@ impl Controller {
     }
 
     /// Listener of the Subscribe button
-    /// Tries to build a subscribe packet
+    /// Tries to build a SUBSCRIBE packet
     /// and send it to the server with the
     /// given inputs
+    #[doc(hidden)]
     fn handle_subscribe(&self, _: &Button) {
         self.sensitive(false);
         self.status_message("Suscribiendose...");
@@ -228,11 +262,20 @@ impl Controller {
     }
 
     #[doc(hidden)]
+    /// Retrieves all the necessary input data from the UI in order to create and send
+    /// a new PUBLISH packet
     fn _publish(&self) -> Result<(), ClientError> {
         let topic_entry: Entry = self.builder.object("pub_top").unwrap();
-        let qos_entry: Entry = self.builder.object("pub_qos_entry").unwrap();
+        let qos_entry: ComboBoxText = self.builder.object("pub_qos").unwrap();
         let retain_switch: Switch = self.builder.object("pub_ret").unwrap();
-        let qos = QoSLevel::try_from(qos_entry.text().to_string().parse::<u8>().unwrap_or(0))?;
+        let qos = QoSLevel::try_from(
+            qos_entry
+                .active_text()
+                .unwrap()
+                .to_string()
+                .parse::<u8>()
+                .unwrap(),
+        )?;
         let mut id = None;
         if qos != QoSLevel::QoSLevel0 {
             id = Some(rand::random());
@@ -261,9 +304,10 @@ impl Controller {
     }
 
     /// Listener of the Publish button
-    /// Tries to build a publish packet
+    /// Tries to build a PUBLISH packet
     /// and send it to the server with the
     /// given inputs
+    #[doc(hidden)]
     fn handle_publish(&self, _: &Button) {
         self.sensitive(false);
         self.status_message("Publicando...");
@@ -276,6 +320,7 @@ impl Controller {
     }
 
     #[doc(hidden)]
+    /// Drops the internal Client
     fn _disconnect(&self) -> Result<(), ClientError> {
         self.client.lock()?.take();
         Ok(())
@@ -285,11 +330,13 @@ impl Controller {
     /// Tries to disconnect the client and
     /// allow the user to connect to another
     /// server
+    #[doc(hidden)]
     fn handle_disconnect(&self, _: &Button) {
         if let Err(err) = self._disconnect() {
             self.icon(Icon::Error);
             self.status_message(&format!("Error desconectando: {}", err));
         } else {
+            self.reset_ui();
             self.show_connect_menu();
             self.icon(Icon::Ok);
             self.status_message("Desconectado");
@@ -298,16 +345,28 @@ impl Controller {
     }
 
     #[doc(hidden)]
+    /// Retrieves all the necessary input data from the UI in order to create and send
+    /// a new SUBSCRIBE packet
     fn _unsubscribe(&self) -> Result<(), ClientError> {
-        // TODO
+        let topic_entry: Entry = self.builder.object("unsub_top").unwrap();
+        let text = vec![Topic::new(
+            &topic_entry.text().to_string(),
+            QoSLevel::QoSLevel0,
+        )?];
+        let unsubscribe = Unsubscribe::new(rand::random(), text)?;
+        if let Some(client) = self.client.lock()?.as_mut() {
+            client.unsubscribe(unsubscribe)?;
+        } else {
+            return Err(ClientError::new("No hay una conexión activa"));
+        }
         Err(ClientError::new("No implementado"))
     }
 
     /// Listener of the Unsubscribe button
-    /// Tries to build an unsubscribe packet
+    /// Tries to build an UNSUBSCRIBE packet
     /// and send it to the server with the
     /// given inputs
-    #[allow(dead_code)]
+    #[doc(hidden)]
     fn handle_unsubscribe(&self, _: &Button) {
         self.sensitive(false);
         self.status_message("Desuscribiendose...");
@@ -317,5 +376,39 @@ impl Controller {
             self.status_message(&format!("No se pudo desuscribir: {}", e));
             self.icon(Icon::Error);
         }
+    }
+
+    /// Resets both connection and connected screen to theirs default state
+    #[doc(hidden)]
+    fn reset_ui(&self) {
+        self.reset_connection_screen();
+        self.reset_connected_screen();
+    }
+
+    /// Resets connection screen to its default state
+    #[doc(hidden)]
+    fn reset_connection_screen(&self) {
+        self.set_text_to_entry_box("con_host", "localhost");
+        self.set_text_to_entry_box("con_port", "1883");
+        self.set_text_to_entry_box("con_cli", "default_client");
+        self.set_text_to_entry_box("con_usr", "");
+        self.set_text_to_entry_box("con_psw", "");
+        self.set_text_to_entry_box("con_ka", "0");
+        self.set_text_to_entry_box("con_lw_top", "");
+        self.set_buffer_to_text_buffer("con_lw_txtbuffer", "");
+        self.set_state_to_switch_box("con_cs", false);
+        self.set_state_to_switch_box("con_lw_ret", false);
+    }
+
+    /// Resets connected screen to its default state
+    #[doc(hidden)]
+    fn reset_connected_screen(&self) {
+        self.set_text_to_entry_box("pub_top", "top/sub");
+        self.set_state_to_switch_box("pub_ret", false);
+        self.set_text_to_entry_box("sub_top", "top/sub");
+        self.set_text_to_entry_box("unsub_top", "top/sub");
+        self.set_buffer_to_text_buffer("pub_mg_txtbuffer", "");
+        self.remove_all_children_from_listbox("sub_subs");
+        self.remove_all_children_from_listbox("sub_msgs");
     }
 }

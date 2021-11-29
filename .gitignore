@@ -16,3 +16,5 @@ desktop.ini
 server/logs/*
 *.glade~
 *#*.glade#
+*.xml~
+*#*.xml#

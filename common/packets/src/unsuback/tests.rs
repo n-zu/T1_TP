@@ -26,7 +26,6 @@ fn test_control_packet_type_other_than_11_should_raise_invalid_control_packet_ty
     let control_packet_type_buffer = [0b1111u8; 1];
     let mut stream = Cursor::new(control_packet_type_buffer);
     let result = Unsuback::read_from(&mut stream, control_byte).unwrap_err();
-    println!("MENSAJE: {}", result.to_string());
     assert_eq!(result.kind(), ErrorKind::InvalidControlPacketType);
 }
 
@@ -36,9 +35,9 @@ fn test_valid_unsuback_packet_with_packet_id_1() {
     let remaining_length = 2;
     let data_buffer: Vec<u8> = vec![remaining_length, 0, 1];
     let mut stream = Cursor::new(data_buffer);
-    let expected = Unsuback { packet_id: 1 };
+    let expected_id = 1;
     let result = Unsuback::read_from(&mut stream, control_byte).unwrap();
-    assert_eq!(expected, result);
+    assert_eq!(expected_id, result.packet_id());
 }
 
 #[test]

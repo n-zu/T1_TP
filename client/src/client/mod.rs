@@ -81,6 +81,48 @@ impl<T: Observer> Client<T> {
         Ok(ret)
     }
 
+    /// Sends the given SUBSCRIBE packet to the server. The Client then either returns
+    /// Err(ClientError) or Ok(()). In the latter case, the result of the operation
+    /// is sent to the Observer with a Subscribed() message.
+    pub fn subscribe(&mut self, subscribe: Subscribe) -> Result<(), ClientError> {
+        let sender = self.sender.clone();
+
+        self.thread_pool.spawn(move || {
+            sender.send_subscribe(subscribe);
+        })?;
+
+        Ok(())
+    }
+
+    /// Sends the given UNSUBSCRIBE packet to the server. The Client then either returns
+    /// Err(ClientError) or Ok(()). In the latter case, the result of the operation
+    /// is sent to the Observer with a Unsubscribed() message.
+    pub fn unsubscribe(&mut self, unsubscribe: Unsubscribe) -> Result<(), ClientError> {
+        let sender = self.sender.clone();
+
+        self.thread_pool.spawn(move || {
+            sender.send_unsubscribe(unsubscribe);
+        })?;
+
+        Ok(())
+    }
+
+    /// Sends the given publish packet to the server. The Client then either returns
+    /// Err(ClientError) or Ok(()). In the latter case, the result of the operation
+    /// is sent to the Observer with a Published() message. If the QoS of the packet
+    /// is QoSLevel1, not receiving the corresponding PUBACK packet will result in an
+    /// Error. If it succeeds, it sends a Published(Ok(None)) message if the packet
+    /// had QoSLevel0 or Published(Ok(Some())) with the corresponding PUBACK if the
+    /// packet had QoSLevel1. Behaviour is undefined for QoSLevel2.
+    pub fn publish(&mut self, publish: Publish) -> Result<(), ClientError> {
+        let sender = self.sender.clone();
+        self.thread_pool.spawn(move || {
+            sender.send_publish(publish);
+        })?;
+
+        Ok(())
+    }
+
     #[doc(hidden)]
     fn connect(
         &mut self,
@@ -143,48 +185,6 @@ impl<T: Observer> Client<T> {
                 sender.send_pingreq();
             }
         }
-    }
-
-    /// Sends the given SUBSCRIBE packet to the server. The Client then either returns
-    /// Err(ClientError) or Ok(()). In the latter case, the result of the operation
-    /// is sent to the Observer with a Subscribed() message.
-    pub fn subscribe(&mut self, subscribe: Subscribe) -> Result<(), ClientError> {
-        let sender = self.sender.clone();
-
-        self.thread_pool.spawn(move || {
-            sender.send_subscribe(subscribe);
-        })?;
-
-        Ok(())
-    }
-
-    /// Sends the given UNSUBSCRIBE packet to the server. The Client then either returns
-    /// Err(ClientError) or Ok(()). In the latter case, the result of the operation
-    /// is sent to the Observer with a Unsubscribed() message.
-    pub fn unsubscribe(&mut self, unsubscribe: Unsubscribe) -> Result<(), ClientError> {
-        let sender = self.sender.clone();
-
-        self.thread_pool.spawn(move || {
-            sender.send_unsubscribe(unsubscribe);
-        })?;
-
-        Ok(())
-    }
-
-    /// Sends the given publish packet to the server. The Client then either returns
-    /// Err(ClientError) or Ok(()). In the latter case, the result of the operation
-    /// is sent to the Observer with a Published() message. If the QoS of the packet
-    /// is QoSLevel1, not receiving the corresponding PUBACK packet will result in an
-    /// Error. If it succeeds, it sends a Published(Ok(None)) message if the packet
-    /// had QoSLevel0 or Published(Ok(Some())) with the corresponding PUBACK if the
-    /// packet had QoSLevel1. Behaviour is undefined for QoSLevel2.
-    pub fn publish(&mut self, publish: Publish) -> Result<(), ClientError> {
-        let sender = self.sender.clone();
-        self.thread_pool.spawn(move || {
-            sender.send_publish(publish);
-        })?;
-
-        Ok(())
     }
 }
 
