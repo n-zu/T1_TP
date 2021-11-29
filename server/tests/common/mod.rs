@@ -7,13 +7,13 @@ use rand::Rng;
 use server::*;
 use std::{
     io::{Cursor, Read, Write},
-    net::TcpStream,
+    net::{TcpListener, TcpStream},
     time::Duration,
 };
 
 pub fn start_server() -> (ServerController, u32) {
     let mut port = random_port();
-    let mut server = Server::new(build_config(port), 20);
+    let mut server = Server::<_, TcpListener>::new(build_config(port), 20);
     for _ in 0..50 {
         // Intento crear el servidor bindeando a 50 puertos al azar
         if let Ok(controller) = server.run() {

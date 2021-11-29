@@ -1,100 +1,16 @@
-use std::{io::{self, Read, Write}, net::{Shutdown, TcpStream}, time::Duration, vec};
+use std::{
+    io::{self, Write},
+    vec,
+};
 
-use packets::{connect::Connect, pingresp::PingResp, qos::QoSLevel, traits::MQTTEncoding};
-use packets::{puback::Puback, publish::Publish, suback::Suback};
-use tracing::{debug, error, info};
-use tracing_subscriber::field::debug;
+use packets::{connect::Connect, qos::QoSLevel, traits::MQTTEncoding};
+use packets::{puback::Puback, publish::Publish};
+use tracing::{debug, info};
 
-use crate::server::{server_error::ServerErrorKind, ClientId, ServerError, ServerResult};
-
-pub trait Id {
-    type T;
-    fn id(&self) -> Self::T;
-}
-
-#[derive(Debug)]
-pub struct StreamError {
-
-}
-
-pub trait BidirectionalStream: Read + Write + Send + Sync + 'static {
-    fn try_clone(&self) -> Result<Self, StreamError> where Self: Sized;
-
-    fn close(&mut self) -> io::Result<()>;
-
-    fn change_read_timeout(&mut self, dur: Option<Duration>) -> io::Result<()>;
-
-    fn change_write_timeout(&mut self, dur: Option<Duration>) -> io::Result<()>;
-}
-
-impl BidirectionalStream for TcpStream {
-    fn try_clone(&self) -> Result<Self, StreamError> where Self: Sized {
-        if let Ok(copy) = self.try_clone() {
-            Ok(copy)
-        } else {
-            Err(StreamError{})
-        }
-    }
-
-    fn close(&mut self) -> io::Result<()> {
-        self.shutdown(Shutdown::Both)
-    }
-
-    fn change_read_timeout(&mut self, dur: Option<Duration>) -> io::Result<()> {
-        self.set_read_timeout(dur)
-    }
-
-    fn change_write_timeout(&mut self, dur: Option<Duration>) -> io::Result<()> {
-        self.set_write_timeout(dur)
-    }
-}
-
-/// Information related to the current session of
-/// the client
-pub struct Session<S, I> {
-    id: I,
-    stream: S,
-}
-
-impl<S, I> Session<S, I> {
-    pub fn stream(&self) -> &S {
-        &self.stream
-    }
-    pub fn stream_mut(&mut self) -> &mut S {
-        &mut self.stream
-    }
-}
-
-impl<S: io::Read, I> io::Read for Session<S, I> {
-    fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
-        self.stream.read(buf)
-    }
-}
-
-impl<S: io::Write, I> io::Write for Session<S, I> {
-    fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
-        self.stream.write(buf)
-    }
-
-    fn flush(&mut self) -> io::Result<()> {
-        self.stream.flush()
-    }
-}
-
-impl<S, I: Clone + Copy> Id for Session<S, I> {
-    type T = I;
-
-    fn id(&self) -> Self::T {
-        self.id
-    }
-}
-
-impl<S, I> Session<S, I>
-{
-    pub fn new(id: I, stream: S) -> Self {
-        Self { id, stream }
-    }
-}
+use crate::{
+    server::{server_error::ServerErrorKind, ClientId, ServerError, ServerResult},
+    traits::BidirectionalStream,
+};
 
 /// Represents the state of a client on the server
 pub struct Client<S> {
@@ -132,7 +48,7 @@ impl<S: io::Write> io::Write for Client<S> {
 
 impl<S> Client<S>
 where
-S: BidirectionalStream
+    S: BidirectionalStream,
 {
     pub fn new(connect: Connect) -> Self {
         Self {
@@ -160,8 +76,7 @@ S: BidirectionalStream
         self.stream.is_some()
     }
 
-    pub fn send_packet<T: MQTTEncoding>(&mut self, packet: &T) -> ServerResult<()>
-    {
+    pub fn send_packet<T: MQTTEncoding>(&mut self, packet: &T) -> ServerResult<()> {
         self.write_all(&packet.encode()?)?;
         Ok(())
     }
@@ -170,8 +85,7 @@ S: BidirectionalStream
         *self.connect.clean_session()
     }
 
-    pub fn disconnect(&mut self, gracefully: bool) -> ServerResult<Option<Publish>>
-    {
+    pub fn disconnect(&mut self, gracefully: bool) -> ServerResult<Option<Publish>> {
         if let Some(mut stream) = self.stream.take() {
             stream.close()?;
             if gracefully {
@@ -206,8 +120,7 @@ S: BidirectionalStream
         &mut self,
         new_connect: Connect,
         new_stream: S,
-    ) -> ServerResult<Option<Publish>>
-    {
+    ) -> ServerResult<Option<Publish>> {
         if self.id != new_connect.client_id() {
             return Err(ServerError::new_kind(
                 &format!(
@@ -249,8 +162,8 @@ S: BidirectionalStream
     }
 
     pub fn send_unacknowledged(&mut self) -> ServerResult<()>
-        where
-        S: Write
+    where
+        S: Write,
     {
         for publish in self.unacknowledged.iter() {
             debug!(
@@ -260,7 +173,10 @@ S: BidirectionalStream
                     .packet_id()
                     .expect("Se esperaba un paquete con identificador (QoS > 0)")
             );
-            self.stream.as_mut().unwrap().write_all(&publish.encode()?)?;
+            self.stream
+                .as_mut()
+                .unwrap()
+                .write_all(&publish.encode()?)?;
         }
         Ok(())
     }
@@ -271,8 +187,8 @@ S: BidirectionalStream
     }
 
     pub fn send_publish(&mut self, publish: Publish) -> ServerResult<()>
-        where
-        S: Write
+    where
+        S: Write,
     {
         if self.connected() {
             self.send_packet(&publish)?;

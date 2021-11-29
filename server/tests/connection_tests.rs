@@ -116,3 +116,51 @@ fn test_pings_should_disconnect() {
     thread::sleep(Duration::from_millis(1600));
     assert_eq!(stream.read(&mut control).unwrap(), 0);
 }
+
+#[test]
+fn test_takeover_should_close_previous_connection() {
+    let (_s, port) = start_server();
+    let builder_1 = ConnectBuilder::new("id", 1, true).unwrap();
+    let builder_2 = ConnectBuilder::new("id", 1, true).unwrap();
+
+    let mut control = [0u8];
+    let mut stream_1 = connect_client(builder_1, true, port, true);
+    connect_client(builder_2, true, port, true);
+
+    assert_eq!(stream_1.read(&mut control).unwrap(), 0);
+}
+
+#[test]
+fn test_takeover_should_change_keep_alive() {
+    let (_s, port) = start_server();
+    let builder_1 = ConnectBuilder::new("id", 60, true).unwrap();
+    let builder_2 = ConnectBuilder::new("id", 1, true).unwrap();
+
+    let mut control = [0u8];
+    let mut _stream_2 = connect_client(builder_1, true, port, true);
+    let mut stream_2 = connect_client(builder_2, true, port, true);
+
+    thread::sleep(Duration::from_millis(1600));
+    assert_eq!(stream_2.read(&mut control).unwrap(), 0);
+}
+
+#[test]
+fn test_takeover_only_works_with_same_username() {
+    let (_s, port) = start_server();
+    let builder_1 = ConnectBuilder::new("id", 60, true).unwrap();
+    let builder_2 = ConnectBuilder::new("id", 1, true)
+        .unwrap()
+        .user_name("foo")
+        .unwrap()
+        .password("bar")
+        .unwrap();
+
+    let mut control = [0u8];
+    let mut _stream_1 = connect_client(builder_1, true, port, true);
+    let mut stream_2 = connect_client(builder_2, false, port, false);
+
+    stream_2.read_exact(&mut control).unwrap();
+    let err = Connack::read_from(&mut stream_2, control[0]).unwrap_err();
+
+    assert_eq!(err.kind(), ErrorKind::IdentifierRejected);
+}

@@ -255,3 +255,46 @@ fn test_last_will() {
     assert_eq!(recv_publish.topic_name(), "topic");
     assert_eq!(recv_publish.payload(), Some(&"message".to_string()));
 }
+
+#[test]
+fn test_takeover_should_change_clean_session() {
+    let (_s, port) = start_server();
+    // Me conecto con clean_session false y me suscribo a topic
+    // Me reconecto con clean_session true y LastWill en topic con QoS 1
+    // Me desconecto ungracefully para que se mande el LastWill
+    // Me vuelvo a conectar
+    // Si se cambio el clean_session, no deberia recibir el LastWill porque la
+    // segunda conexion fue con clean_session en true
+    let builder_1 = ConnectBuilder::new("id", 1, false).unwrap();
+    let builder_2 = ConnectBuilder::new("id", 1, true)
+        .unwrap()
+        .last_will(LastWill::new(
+            "topic".to_owned(),
+            "no deberia llegar".to_owned(),
+            QoSLevel1,
+            false,
+        ));
+    let builder_3 = ConnectBuilder::new("id", 1, false).unwrap();
+
+    let subscribe = Subscribe::new(vec![Topic::new("topic", QoSLevel1).unwrap()], 123);
+
+    let mut control = [0u8];
+    let mut stream_1 = connect_client(builder_1, true, port, true);
+    stream_1
+        .write_all(&mut subscribe.encode().unwrap())
+        .unwrap();
+    stream_1.read_exact(&mut control).unwrap();
+    Suback::read_from(&mut stream_1, control[0]).unwrap();
+
+    let stream_2 = connect_client(builder_2, true, port, true);
+    drop(stream_2);
+
+    let mut stream_3 = connect_client(builder_3, true, port, true);
+    stream_3
+        .set_read_timeout(Some(Duration::from_millis(1500)))
+        .unwrap();
+    assert_eq!(
+        stream_3.read_exact(&mut control).unwrap_err().kind(),
+        std::io::ErrorKind::WouldBlock
+    );
+}

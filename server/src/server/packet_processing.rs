@@ -1,12 +1,11 @@
 use packets::pingresp::PingResp;
 
-use crate::client::Session;
-
 use super::*;
 
-impl<S> Server<S>
+impl<S, A> Server<S, A>
 where
-S: BidirectionalStream
+    S: BidirectionalStream,
+    A: ClientAccepter<S> + Sized + Send + Sync + 'static,
 {
     fn to_threadpool<F>(self: &Arc<Self>, action: F, id: &ClientIdArg) -> ServerResult<()>
     where
@@ -35,8 +34,7 @@ S: BidirectionalStream
         control_byte: u8,
         stream: &mut T,
         id: &ClientIdArg,
-    ) -> ServerResult<PacketType>
-    {
+    ) -> ServerResult<PacketType> {
         let packet_type = PacketType::try_from(control_byte)?;
         match packet_type {
             PacketType::Publish => {
@@ -78,10 +76,9 @@ S: BidirectionalStream
 
     pub fn process_packet(
         self: &Arc<Self>,
-        stream: &mut Session<S, ThreadId>,
+        stream: &mut ConnectionStream<S, ThreadId>,
         id: &ClientIdArg,
-    ) -> ServerResult<PacketType>
-    {
+    ) -> ServerResult<PacketType> {
         let mut control_byte_buff = [0u8; 1];
         match stream.read_exact(&mut control_byte_buff) {
             Ok(_) => {
@@ -100,6 +97,7 @@ S: BidirectionalStream
     fn publish_dispatcher_loop(&self, receiver: Receiver<Message>) -> ServerResult<()> {
         for message in receiver {
             let id = message.client_id.clone();
+            debug!("Enviando PUBLISH a <{}>", id);
             self.clients_manager
                 .read()?
                 .send_publish(&id, message.packet)?;
@@ -107,19 +105,7 @@ S: BidirectionalStream
         Ok(())
     }
 
-    fn handle_publish(
-        self: &Arc<Self>,
-        mut publish: Publish,
-        id: &ClientIdArg,
-    ) -> ServerResult<()> {
-        debug!("<{}>: enviando PUBLISH", id);
-        publish.set_max_qos(QoSLevel::QoSLevel1);
-        if let Some(packet_id) = publish.packet_id() {
-            self.clients_manager.read()?.client_do(id, |mut client| {
-                client.send_packet(&Puback::new(packet_id)?)
-            })?;
-        }
-        
+    fn broadcast_publish(self: &Arc<Self>, publish: Publish) -> ServerResult<()> {
         let (sender, receiver) = mpsc::channel();
         let sv_copy = self.clone();
         let handler: JoinHandle<ServerResult<()>> = thread::spawn(move || {
@@ -136,6 +122,21 @@ S: BidirectionalStream
         } else {
             Ok(())
         }
+    }
+
+    fn handle_publish(
+        self: &Arc<Self>,
+        mut publish: Publish,
+        id: &ClientIdArg,
+    ) -> ServerResult<()> {
+        debug!("<{}>: Procesando PUBLISH", id);
+        publish.set_max_qos(QoSLevel::QoSLevel1);
+        if let Some(packet_id) = publish.packet_id() {
+            self.clients_manager.read()?.client_do(id, |mut client| {
+                client.send_packet(&Puback::new(packet_id)?)
+            })?;
+        }
+        self.broadcast_publish(publish)
     }
 
     fn handle_subscribe(&self, mut subscribe: Subscribe, id: &ClientIdArg) -> ServerResult<()> {
@@ -169,22 +170,28 @@ S: BidirectionalStream
 
     pub fn send_last_will(
         self: &Arc<Self>,
-        publish: Publish,
+        mut publish: Publish,
         id: &ClientIdArg,
     ) -> ServerResult<()> {
         debug!("<{}> Enviando LAST WILL", id);
-        self.handle_publish(publish, id)
+        publish.set_max_qos(QoSLevel::QoSLevel1);
+
+        self.broadcast_publish(publish)
     }
 }
 
-impl<S> Server<S>
-where S: BidirectionalStream
+impl<S, A> Server<S, A>
+where
+    S: BidirectionalStream,
+    A: ClientAccepter<S> + Sized + Send + Sync + 'static,
 {
-    pub fn wait_for_connect(&self, session: &mut Session<S, ThreadId>) -> ServerResult<Connect>
-    {
-        match Connect::new_from_zero(session) {
+    pub fn wait_for_connect(
+        &self,
+        connection_stream: &mut ConnectionStream<S, ThreadId>,
+    ) -> ServerResult<Connect> {
+        match Connect::new_from_zero(connection_stream) {
             Ok(connect) => {
-                info!("<{:?}>: Recibido CONNECT", session.id());
+                info!("<{:?}>: Recibido CONNECT", connection_stream.id());
                 Ok(connect)
             }
             Err(err) => Err(ServerError::from(err)),

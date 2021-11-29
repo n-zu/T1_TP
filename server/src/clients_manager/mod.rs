@@ -5,7 +5,12 @@ use std::{collections::HashMap, io::Write, sync::Mutex};
 use packets::{connack::ConnackReturnCode, connect::Connect, publish::Publish};
 use tracing::{debug, warn};
 
-use crate::{client::{BidirectionalStream, Client, Id, Session}, server::{server_error::ServerErrorKind, ClientId, ClientIdArg, ServerError, ServerResult}};
+use crate::{
+    client::Client,
+    connection_stream::ConnectionStream,
+    server::{server_error::ServerErrorKind, ClientId, ClientIdArg, ServerError, ServerResult},
+    traits::{BidirectionalStream, Id},
+};
 
 type Username = String;
 const GENERIC_ID_SUFFIX: &str = "__CLIENT__";
@@ -32,8 +37,8 @@ pub struct ConnectInfo {
 
 impl<S, I> ClientsManager<S, I>
 where
-S: BidirectionalStream,
-I: Clone + Copy + std::hash::Hash + Eq
+    S: BidirectionalStream,
+    I: Clone + Copy + std::hash::Hash + Eq,
 {
     pub fn new(accounts_path: &str) -> Self {
         Self {
@@ -48,8 +53,8 @@ I: Clone + Copy + std::hash::Hash + Eq
     pub fn client_do<F>(&self, id: &ClientIdArg, action: F) -> ServerResult<()>
     where
         F: FnOnce(std::sync::MutexGuard<'_, Client<S>>) -> ServerResult<()>,
-        S: Write
-        {
+        S: Write,
+    {
         match self.clients.get(id) {
             Some(client) => {
                 action(client.lock()?)?;
@@ -78,14 +83,13 @@ I: Clone + Copy + std::hash::Hash + Eq
     pub fn finish_session(
         &mut self,
         id: &ClientIdArg,
-        session: Session<S, I>,
+        connection_stream: ConnectionStream<S, I>,
         gracefully: bool,
-    ) -> ServerResult<DisconnectInfo>
-    {
+    ) -> ServerResult<DisconnectInfo> {
         // Chequeo si ya fue desconectado por el proceso
         // de Client Take-Over
         if let Some(old_addr) = self.current_addrs.get(id) {
-            if session.id() != *old_addr {
+            if connection_stream.id() != *old_addr {
                 return Ok(DisconnectInfo {
                     publish_last_will: None,
                     clean_session: false,
@@ -189,7 +193,7 @@ I: Clone + Copy + std::hash::Hash + Eq
     fn process_client_empty_id(&mut self, connect: &mut Connect) -> ServerResult<()> {
         if !connect.clean_session() {
             Err(ServerError::new_kind(
-                "Clientes con id vacia deben tener clean session en true",
+                "Clientes con id vacia deben tener clean connection_stream en true",
                 ServerErrorKind::ConnectionRefused(ConnackReturnCode::IdentifierRejected),
             ))
         } else {
@@ -201,10 +205,9 @@ I: Clone + Copy + std::hash::Hash + Eq
 
     fn new_session_unchecked(
         &mut self,
-        session: &Session<S, I>,
+        connection_stream: &ConnectionStream<S, I>,
         mut connect: Connect,
-    ) -> ServerResult<ConnectInfo>
-    {
+    ) -> ServerResult<ConnectInfo> {
         if connect.client_id().is_empty() {
             self.process_client_empty_id(&mut connect)?;
         }
@@ -213,18 +216,18 @@ I: Clone + Copy + std::hash::Hash + Eq
         let mut takeover_last_will = None;
         let session_present;
         let return_code;
-        let session_id = session.id();
+        let session_id = connection_stream.id();
 
         // Hay una sesion_presente en el servidor con la misma ID
         if let Some(old_client) = self.clients.get_mut(&id) {
             takeover_last_will = old_client
                 .get_mut()?
-                .reconnect(connect, session.stream().try_clone().unwrap())?;
+                .reconnect(connect, connection_stream.stream().try_clone().unwrap())?;
             session_present = true;
             return_code = ConnackReturnCode::Accepted;
         } else {
             let mut client = Client::new(connect);
-            client.connect(session.stream().try_clone().unwrap())?;
+            client.connect(connection_stream.stream().try_clone().unwrap())?;
 
             self.taken_ids.insert(
                 id.to_owned(),
@@ -248,12 +251,11 @@ I: Clone + Copy + std::hash::Hash + Eq
 
     pub fn new_session(
         &mut self,
-        session: &Session<S, I>,
+        connection_stream: &ConnectionStream<S, I>,
         connect: Connect,
-    ) -> ServerResult<ConnectInfo> 
-    {
+    ) -> ServerResult<ConnectInfo> {
         match self.check_credentials(&connect) {
-            Ok(()) => self.new_session_unchecked(session, connect),
+            Ok(()) => self.new_session_unchecked(connection_stream, connect),
             Err(err) if err.kind() == ServerErrorKind::ClientNotInWhitelist => {
                 warn!("<{}>: Usuario invalido", connect.client_id());
                 Err(ServerError::new_kind(
@@ -282,8 +284,7 @@ I: Clone + Copy + std::hash::Hash + Eq
         }
     }
 
-    pub fn finish_all_sessions(&mut self, gracefully: bool) -> ServerResult<()>
-    {
+    pub fn finish_all_sessions(&mut self, gracefully: bool) -> ServerResult<()> {
         for (id, client) in &self.clients {
             debug!("<{}>: Desconectando", id);
             client.lock()?.disconnect(gracefully)?;

@@ -1,4 +1,8 @@
-use std::{collections::HashMap, sync::mpsc::{self, Receiver, Sender}, thread::{self, JoinHandle, ThreadId}};
+use std::{
+    collections::HashMap,
+    sync::mpsc::{self, Receiver, Sender},
+    thread::{self, JoinHandle, ThreadId},
+};
 
 use tracing::{debug, error};
 
@@ -52,25 +56,14 @@ impl ClientThreadJoiner {
     fn join_loop(receiver: Receiver<ThreadInfo>) {
         for thread_info in receiver {
             match thread_info.handle.join() {
-                Ok(()) => debug!(
-                    "{:?} termino de forma esperada",
-                    thread_info.id
-                ),
-                Err(err) => error!(
-                    "{:?} termino en panic: {:?}",
-                    thread_info.id, err
-                ),
+                Ok(()) => debug!("{:?} termino de forma esperada", thread_info.id),
+                Err(err) => error!("{:?} termino en panic: {:?}", thread_info.id, err),
             }
         }
     }
 
     pub fn finished(&mut self, id: ThreadId) -> ServerResult<()> {
-        if let Some(handle) = self
-            .handles
-            .as_mut()
-            .expect("Handles es None")
-            .remove(&id)
-        {
+        if let Some(handle) = self.handles.as_mut().expect("Handles es None").remove(&id) {
             self.finished_sender
                 .as_ref()
                 .expect("finished_sender es None")

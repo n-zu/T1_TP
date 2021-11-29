@@ -1,4 +1,5 @@
 use std::io::Read;
+use std::net::TcpListener;
 
 pub use crate::config::Config;
 pub use crate::server::{Server, ServerController, ServerInterface};
@@ -9,8 +10,10 @@ mod client;
 mod client_thread_joiner;
 mod clients_manager;
 mod config;
+mod connection_stream;
 mod server;
 mod topic_handler;
+mod traits;
 
 pub fn init() {
     let config = Config::new("config.txt").expect("Error cargando la configuracion");
@@ -25,7 +28,7 @@ pub fn init() {
     tracing::subscriber::set_global_default(subscriber).unwrap();
 
     let threadpool_size = 20;
-    let server = Server::new(config, threadpool_size);
+    let server = Server::<_, TcpListener>::new(config, threadpool_size);
     let _controller = server.run().unwrap();
 
     info!("Presione [ENTER] para detener la ejecucion del servidor");
