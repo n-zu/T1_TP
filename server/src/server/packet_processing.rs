@@ -173,7 +173,7 @@ where
         mut publish: Publish,
         id: &ClientIdArg,
     ) -> ServerResult<()> {
-        debug!("<{}> Enviando LAST WILL", id);
+        debug!("<{}>: Enviando LAST WILL", id);
         publish.set_max_qos(QoSLevel::QoSLevel1);
 
         self.broadcast_publish(publish)

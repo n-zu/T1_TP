@@ -14,6 +14,7 @@ mod connection_stream;
 mod server;
 mod topic_handler;
 mod traits;
+mod logging;
 
 pub fn init() {
     let config = Config::new("config.txt").expect("Error cargando la configuracion");

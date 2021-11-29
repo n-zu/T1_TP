@@ -3,10 +3,7 @@ use std::{
     sync::{mpsc::SendError, PoisonError},
 };
 
-use packets::{
-    connack::ConnackReturnCode,
-    packet_error::{ErrorKind, PacketError},
-};
+use packets::{connack::ConnackReturnCode, packet_error::{ErrorKind, PacketError}};
 use threadpool::ThreadPoolError;
 
 use crate::topic_handler::topic_handler_error::TopicHandlerError;

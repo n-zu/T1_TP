@@ -1,26 +1,14 @@
 #![allow(dead_code)]
 
-use std::{
-    convert::TryFrom,
-    io::{self, Read, Write},
-    net::{Shutdown, TcpListener, TcpStream},
-    sync::{
+use std::{convert::TryFrom, io::{self, Read, Write}, net::{Shutdown, SocketAddr, TcpListener, TcpStream, ToSocketAddrs}, sync::{
         mpsc::{self, Receiver},
         Arc, Mutex, RwLock,
-    },
-    thread::{self, JoinHandle, ThreadId},
-    time::Duration,
-};
+    }, thread::{self, JoinHandle, ThreadId}, time::Duration};
 
 use threadpool::ThreadPool;
 use tracing::{debug, error, info};
 
-use packets::{
-    connack::Connack,
-    connect::Connect,
-    disconnect::Disconnect,
-    traits::{MQTTDecoding, MQTTEncoding},
-};
+use packets::{connack::Connack, connect::Connect, disconnect::Disconnect, traits::{MQTTDecoding, MQTTEncoding}};
 use packets::{
     helpers::PacketType, pingreq::PingReq, puback::Puback, subscribe::Subscribe,
     unsuback::Unsuback, unsubscribe::Unsubscribe,
@@ -39,15 +27,7 @@ const ACCEPT_SLEEP_DUR: Duration = Duration::from_millis(100);
 use packets::publish::Publish;
 use packets::qos::QoSLevel;
 
-use crate::{
-    client_thread_joiner::ClientThreadJoiner,
-    clients_manager::{ClientsManager, ConnectInfo, DisconnectInfo},
-    config::Config,
-    connection_stream::ConnectionStream,
-    server::server_error::ServerErrorKind,
-    topic_handler::{Message, TopicHandler},
-    traits::{BidirectionalStream, ClientAccepter, Id, StreamError},
-};
+use crate::{client_thread_joiner::ClientThreadJoiner, clients_manager::{ClientsManager, ConnectInfo, DisconnectInfo}, config::Config, connection_stream::ConnectionStream, logging::{self, LogKind}, server::server_error::ServerErrorKind, topic_handler::{Message, TopicHandler}, traits::{BidirectionalStream, ClientAccepter, Id, StreamError}};
 
 pub use self::server_controller::ServerController;
 
@@ -130,7 +110,7 @@ where
 {
     /// Creates and returns a server in a valid state
     pub fn new(config: Config, threadpool_size: usize) -> Arc<Self> {
-        info!("Iniciando servidor en localhost: {}", config.port());
+        logging::log(LogKind::StartingServer(todo!(), config.port()));
         let client_accepter = A::new(config.port()).unwrap();
         Arc::new(Self {
             clients_manager: RwLock::new(ClientsManager::new(config.accounts_path())),
@@ -282,7 +262,7 @@ where
     fn manage_client(
         self: &Arc<Self>,
         mut connection_stream: ConnectionStream<S, ThreadId>,
-    ) -> ServerResult<()> {
+    ) -> ServerResult<ClientId> {
         match self.connect_client(&mut connection_stream) {
             Err(err) => match err.kind() {
                 ServerErrorKind::ConnectionRefused(return_code) => {
@@ -292,10 +272,11 @@ where
                         err.to_string()
                     );
                     connection_stream.write_all(&Connack::new(false, return_code).encode()?)?;
+                    Err(err)
                 }
                 _ => {
                     error!("Error inesperado: {}", err.to_string());
-                    return Err(err);
+                    Err(err)
                 }
             },
             Ok(connect_info) => {
@@ -321,9 +302,9 @@ where
                 if disconnect_info.clean_session {
                     self.topic_handler.remove_client(&connect_info.id)?;
                 }
+                Ok(connect_info.id)
             }
         }
-        Ok(())
     }
 
     /// Creates a new thread in which the client will be handled. Adds that
@@ -334,9 +315,9 @@ where
             let connection_stream = ConnectionStream::new(thread::current().id(), stream);
             let connection_stream_id = connection_stream.id();
             match sv_copy.manage_client(connection_stream) {
-                Ok(()) => debug!(
-                    "Cliente en thread <{:?}> procesado con exito",
-                    connection_stream_id
+                Ok(id) => debug!(
+                    "<{}>: Procesado con exito",
+                    id
                 ),
                 Err(err) => error!(
                     "Error procesando al cliente en thread <{:?}>: {}",
