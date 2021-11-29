@@ -178,9 +178,9 @@ fn test_will_flag() {
     let packet = Connect::read_from(&mut stream, CONNECT_CONTROL_BYTE).unwrap();
     let will = packet.last_will().unwrap();
 
-    assert!(will.retain);
-    assert_eq!(will.topic, "soyUnTopic");
-    assert_eq!(will.message, "soyUnMensaje");
+    assert!(will.retain_flag);
+    assert_eq!(will.topic_name, "soyUnTopic");
+    assert_eq!(will.topic_message, "soyUnMensaje");
 }
 
 #[test]
@@ -210,9 +210,9 @@ fn test_will_flag_username_password() {
     let packet = Connect::read_from(&mut stream, CONNECT_CONTROL_BYTE).unwrap();
     let will = packet.last_will().unwrap();
 
-    assert!(will.retain);
-    assert_eq!(will.topic, "soyUnTopic");
-    assert_eq!(will.message, "soyUnMensaje");
+    assert!(will.retain_flag);
+    assert_eq!(will.topic_name, "soyUnTopic");
+    assert_eq!(will.topic_message, "soyUnMensaje");
     assert_eq!(
         packet.user_name().unwrap(),
         "siAlguienLeeEstoFelicitaciones"

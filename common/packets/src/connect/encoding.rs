@@ -56,7 +56,7 @@ impl Connect {
             flags |= PASSWORD_PRESENT;
         }
         if let Some(last_will) = &self.last_will {
-            if last_will.retain {
+            if last_will.retain_flag {
                 flags |= WILL_RETAIN;
             }
 
@@ -76,8 +76,8 @@ impl Connect {
         let mut payload = vec![];
         payload.append(&mut Field::new_from_string(&self.client_id)?.encode());
         if let Some(last_will) = &self.last_will {
-            payload.append(&mut Field::new_from_string(&last_will.topic)?.encode());
-            payload.append(&mut Field::new_from_string(&last_will.message)?.encode());
+            payload.append(&mut Field::new_from_string(&last_will.topic_name)?.encode());
+            payload.append(&mut Field::new_from_string(&last_will.topic_message)?.encode());
         }
         if let Some(user_name) = &self.user_name {
             payload.append(&mut Field::new_from_string(user_name)?.encode());

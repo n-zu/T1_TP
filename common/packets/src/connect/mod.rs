@@ -25,19 +25,24 @@ const RESERVED_BITS: u8 = 0x0;
 
 #[derive(Debug)]
 pub struct LastWill {
-    pub retain: bool,
+    pub retain_flag: bool,
     pub qos: QoSLevel,
-    pub topic: String,
-    pub message: String,
+    pub topic_name: String,
+    pub topic_message: String,
 }
 
 impl LastWill {
-    pub fn new(topic: String, message: String, qos: QoSLevel, retain: bool) -> LastWill {
+    pub fn new(
+        topic_name: String,
+        topic_message: String,
+        qos: QoSLevel,
+        retain_flag: bool,
+    ) -> LastWill {
         LastWill {
-            retain,
+            retain_flag,
             qos,
-            topic,
-            message,
+            topic_name,
+            topic_message,
         }
     }
 }
@@ -81,5 +86,13 @@ impl Connect {
     /// Get a reference to the connect's keep alive.
     pub fn keep_alive(&self) -> u16 {
         self.keep_alive
+    }
+
+    /// Set the client Id if it is None
+    /// If not None, it silently does nothing
+    pub fn set_id(&mut self, id: String) {
+        if self.client_id.is_empty() {
+            self.client_id = id;
+        }
     }
 }

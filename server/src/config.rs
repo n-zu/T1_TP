@@ -8,11 +8,11 @@ use std::{
 /// Config struct contains information which is needed from a Server
 pub struct Config {
     /// Port to be connected
-    port: u16,
+    pub port: u16,
     /// Path to dump file
-    dump_path: String,
+    pub dump_path: String,
     /// Time interval between two consecutive dump
-    dump_time: u32,
+    pub dump_time: u32,
     /// Path to log file
     log_path: String,
     /// Path to file with accounts

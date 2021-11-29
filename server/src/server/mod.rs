@@ -2,25 +2,31 @@
 
 use std::{
     convert::TryFrom,
-    io::{self, Read},
-    net::{SocketAddr, TcpListener, TcpStream},
+    io::{self, Read, Write},
+    net::{Shutdown, TcpListener, TcpStream},
     sync::{
-        mpsc::{self, channel, Receiver},
+        mpsc::{self, Receiver},
         Arc, Mutex, RwLock,
     },
-    thread::{self, JoinHandle},
+    thread::{self, JoinHandle, ThreadId},
     time::Duration,
 };
 
 use threadpool::ThreadPool;
-use tracing::{debug, error, info, warn};
+use tracing::{debug, error, info};
 
-use packets::{connect::Connect, disconnect::Disconnect, traits::MQTTDecoding};
+use packets::{
+    connack::Connack,
+    connect::Connect,
+    disconnect::Disconnect,
+    traits::{MQTTDecoding, MQTTEncoding},
+};
 use packets::{
     helpers::PacketType, pingreq::PingReq, puback::Puback, subscribe::Subscribe,
     unsuback::Unsuback, unsubscribe::Unsubscribe,
 };
 
+mod packet_processing;
 mod server_controller;
 pub mod server_error;
 
@@ -34,406 +40,115 @@ use packets::publish::Publish;
 use packets::qos::QoSLevel;
 
 use crate::{
-    client::Client,
     client_thread_joiner::ClientThreadJoiner,
-    clients_manager::ClientsManager,
+    clients_manager::{ClientsManager, ConnectInfo, DisconnectInfo},
     config::Config,
+    connection_stream::ConnectionStream,
     server::server_error::ServerErrorKind,
     topic_handler::{Message, TopicHandler},
+    traits::{BidirectionalStream, ClientAccepter, Id, StreamError},
 };
 
-use self::server_controller::ServerController;
+pub use self::server_controller::ServerController;
 
 pub type ServerResult<T> = Result<T, ServerError>;
 pub type ClientId = String;
 // Se necesita para que Clippy lo detecte como slice
 pub type ClientIdArg = str;
 
-pub enum Packet {
-    Publish(Publish),
-    Puback(Puback),
-    Subscribe(Subscribe),
-    Unsubscribe(Unsubscribe),
-    PingReq(PingReq),
-    Disconnect(Disconnect),
-}
-
 /// Represents a Server that complies with the
 /// MQTT V3.1.1 protocol
-pub struct Server {
-    /// Clients connected to the server
-    clients_manager: RwLock<ClientsManager>,
+///
+/// A server runs on a separate thread from which it
+/// is invoked
+/// When a client connects, a new thread is created to
+/// handle it
+/// Every time a client sends a packet, it is read from
+/// the client thread and sent to a threadpool that
+/// processes it (exceptions to this rule are found in the
+/// description of the process_packet method)
+/// The shutdown of the server is controlled through a
+/// ServerController that sends a message to the server thread
+/// to stop it
+pub struct Server<S, A>
+where
+    S: BidirectionalStream,
+    A: ClientAccepter<S> + Sized + Send + Sync + 'static,
+{
+    /// Clients connected to the server.
+    ///
+    /// It handles the connection and disconnection of clients,
+    /// as well as credential verification.
+    ///
+    /// If a client has a clean connection_stream set to False, it is
+    /// responsible for saving their information even after
+    /// disconnection. If it has clean connection_stream set to True,
+    /// their data is deleted
+    clients_manager: RwLock<ClientsManager<S, ThreadId>>,
     /// Initial Server setup
     config: Config,
-    /// Manages the Publish / Subscribe tree
+    /// Manages the Publish / Subscribe tree.
+    ///
+    /// When a customer subscribes to a topic or publish a message,
+    /// all the information is stored in this handler. This includes
+    /// Quality of Service and handling of retained messages.
+    /// When it processes a Publish, the TopicHandler indicates to
+    /// the Server the clients to whom it should send it through a
+    /// MPSC channel. An independent thread receives the information
+    /// and sends the packets.
+    ///
+    /// The TopicHandler is not responsible for keeping the subscriptions
+    /// of users connected with clean connection_stream set to True. The
+    /// server is responsible to invoke remove_client() when the client
+    /// has clean connection_stream set to True.
     topic_handler: TopicHandler,
-    /// Vector with the handlers of the clients running in parallel
+    /// Manages the join of the threads that are created for each of the
+    /// clients. It does not interfere in the threads of the threadpool
+    /// or the Server thread.
+    ///
+    /// When a new client thread is created, it saves its JoinHandle
+    /// assosiationg it with the SockerAddr of the client that just
+    /// connected.
     client_thread_joiner: Mutex<ClientThreadJoiner>,
+    /// Threadpool used to process packets received from clients
+    /// The only ones that are not processed in the Threadpool
+    /// are the Connect and Disconnect packets.
     pool: Mutex<ThreadPool>,
+
+    client_accepter: A,
 }
 
-impl Server {
-    /// Creates a new Server
+pub trait ServerInterface {
+    fn new(config: Config, threadpool_size: usize) -> Arc<Self>;
+    fn run(self: Arc<Self>) -> io::Result<ServerController>;
+}
+
+impl<S, A> Server<S, A>
+where
+    S: BidirectionalStream,
+    A: ClientAccepter<S> + Sized + Send + Sync + 'static,
+{
+    /// Creates and returns a server in a valid state
     pub fn new(config: Config, threadpool_size: usize) -> Arc<Self> {
-        info!("Servidor iniciado en localhost:{}", config.port());
+        info!("Iniciando servidor en localhost: {}", config.port());
+        let client_accepter = A::new(config.port()).unwrap();
         Arc::new(Self {
             clients_manager: RwLock::new(ClientsManager::new(config.accounts_path())),
             config,
             topic_handler: TopicHandler::new(),
             client_thread_joiner: Mutex::new(ClientThreadJoiner::new()),
             pool: Mutex::new(ThreadPool::new(threadpool_size)),
+            client_accepter,
         })
     }
 
-    fn read_packet(&self, control_byte: u8, stream: &mut TcpStream) -> ServerResult<Packet> {
-        match PacketType::try_from(control_byte)? {
-            PacketType::Publish => {
-                let packet = Publish::read_from(stream, control_byte)?;
-                Ok(Packet::Publish(packet))
-            }
-            PacketType::Puback => {
-                let packet = Puback::read_from(stream, control_byte)?;
-                Ok(Packet::Puback(packet))
-            }
-            PacketType::Subscribe => {
-                let packet = Subscribe::read_from(stream, control_byte)?;
-                Ok(Packet::Subscribe(packet))
-            }
-            PacketType::Unsubscribe => {
-                let packet = Unsubscribe::read_from(stream, control_byte)?;
-                Ok(Packet::Unsubscribe(packet))
-            }
-            PacketType::PingReq => {
-                let packet = PingReq::read_from(stream, control_byte)?;
-                Ok(Packet::PingReq(packet))
-            }
-            PacketType::Disconnect => {
-                let packet = Disconnect::read_from(stream, control_byte)?;
-                Ok(Packet::Disconnect(packet))
-            }
-            _ => Err(ServerError::new_kind(
-                "Codigo de paquete inesperado",
-                ServerErrorKind::ProtocolViolation,
-            )),
-        }
-    }
-
-    fn receive_packet(&self, stream: &mut TcpStream) -> ServerResult<Packet> {
-        let mut control_byte_buff = [0u8; 1];
-        match stream.read_exact(&mut control_byte_buff) {
-            Ok(_) => Ok(self.read_packet(control_byte_buff[0], stream)?),
-            Err(error) if error.kind() == io::ErrorKind::UnexpectedEof => {
-                Err(ServerError::new_kind(
-                    "Cliente se desconecto sin avisar",
-                    ServerErrorKind::ClientDisconnected,
-                ))
-            }
-            Err(err) => Err(ServerError::from(err)),
-        }
-    }
-
-    fn publish_dispatcher_loop(&self, receiver: Receiver<Message>) -> ServerResult<()> {
-        for message in receiver {
-            debug!("<{}>: enviando PUBLISH", message.client_id);
-            let id = message.client_id.clone();
-            self.clients_manager
-                .read()?
-                .send_publish(&id, message.packet)?;
-        }
-        Ok(())
-    }
-
-    fn handle_publish(
-        self: &Arc<Self>,
-        mut publish: Publish,
-        id: &ClientIdArg,
-    ) -> ServerResult<()> {
-        info!("<{}> Recibido PUBLISH", id);
-        publish.set_max_qos(QoSLevel::QoSLevel1);
-        let (sender, receiver) = mpsc::channel();
-        let sv_copy = self.clone();
-        let handler: JoinHandle<ServerResult<()>> = thread::spawn(move || {
-            sv_copy.publish_dispatcher_loop(receiver)?;
-            Ok(())
-        });
-        self.topic_handler.publish(&publish, sender)?;
-        // QoSLevel1
-        if let Some(packet_id) = publish.packet_id() {
-            self.clients_manager.read()?.client_do(id, |mut client| {
-                client.send_packet(Puback::new(*packet_id)?)?;
-                Ok(())
-            })?;
-        }
-        if let Err(err) = handler.join() {
-            Err(ServerError::new_msg(&format!(
-                "Error en el thread de publish_dispatcher_loop: {:?}",
-                err
-            )))
-        } else {
-            Ok(())
-        }
-    }
-
-    fn handle_subscribe(&self, mut subscribe: Subscribe, id: &ClientIdArg) -> ServerResult<()> {
-        debug!("<{}>: Recibido SUBSCRIBE", id);
-        subscribe.set_max_qos(QoSLevel::QoSLevel1);
-        self.clients_manager
-            .read()?
-            .client_do(id, |mut client| client.send_suback(subscribe.response()?))?;
-
-        if let Some(retained_messages) = self.topic_handler.subscribe(&subscribe, id)? {
-            self.clients_manager.read()?.client_do(id, |mut client| {
-                for retained in retained_messages {
-                    client.send_publish(retained);
-                }
-                Ok(())
-            })?;
-        }
-        Ok(())
-    }
-
-    fn handle_unsubscribe(&self, unsubscribe: Unsubscribe, id: &ClientIdArg) -> ServerResult<()> {
-        debug!("<{}>: Recibido UNSUBSCRIBE", id);
-        let packet_id = unsubscribe.packet_id();
-        self.topic_handler.unsubscribe(unsubscribe, id)?;
-        self.clients_manager.read()?.client_do(id, |mut client| {
-            client.send_packet(Unsuback::new(packet_id)?)?;
-            Ok(())
-        })?;
-        Ok(())
-    }
-
-    pub fn handle_packet(self: &Arc<Self>, packet: Packet, id: &ClientIdArg) -> ServerResult<()> {
-        match packet {
-            Packet::Publish(packet) => self.handle_publish(packet, id),
-            Packet::Subscribe(subscribe) => self.handle_subscribe(subscribe, id),
-            Packet::Unsubscribe(unsubscribe) => self.handle_unsubscribe(unsubscribe, id),
-            Packet::PingReq(_pingreq) => self
-                .clients_manager
-                .read()?
-                .client_do(id, |mut client| client.send_pingresp()),
-            Packet::Puback(puback) => self
-                .clients_manager
-                .read()?
-                .client_do(id, |mut client| client.acknowledge(puback)),
-            Packet::Disconnect(_disconnect) => unreachable!(),
-        }
-    }
-
-    fn wait_for_connect(&self, stream: &mut TcpStream, addr: SocketAddr) -> ServerResult<Client> {
-        match Connect::new_from_zero(stream) {
-            Ok(packet) => {
-                info!("<{}> -> <{}>: Recibido CONNECT", addr, packet.client_id());
-                Ok(Client::new(packet, stream.try_clone()?))
-            }
-            Err(err) => Err(ServerError::from(err)),
-        }
-    }
-
-    fn connect_client(&self, stream: &mut TcpStream, addr: SocketAddr) -> ServerResult<String> {
-        info!("<{}>: Conectando", addr);
-        match self.wait_for_connect(stream, addr) {
-            Ok(client) => {
-                let id = client.id().to_owned();
-                let keep_alive = client.keep_alive();
-                if keep_alive == 0 {
-                    stream.set_read_timeout(None)?;
-                } else {
-                    stream.set_read_timeout(Some(CLIENT_READ_TIMEOUT))?;
-                }
-                self.clients_manager.write()?.new_session(client)?;
-                Ok(id)
-            }
-            Err(err) if err.kind() == ServerErrorKind::Timeout => {
-                error!("<{}>: timeout esperando CONNECT", addr);
-                Err(err)
-            }
-            Err(err) => {
-                error!(
-                    "Error recibiendo CONNECT de cliente <{}>: {}",
-                    addr,
-                    err.to_string()
-                );
-                return Err(ServerError::new_kind(
-                    &format!("Error de conexion: {}", err.to_string()),
-                    ServerErrorKind::ProtocolViolation,
-                ));
-            }
-        }
-    }
-
-    fn to_threadpool(self: &Arc<Self>, id: &ClientIdArg, packet: Packet) -> ServerResult<()> {
-        let sv_copy = self.clone();
-        let id_copy = id.to_owned();
-        self.pool
-            .lock()?
-            .spawn(move || match sv_copy.handle_packet(packet, &id_copy) {
-                Ok(()) => debug!(
-                    "ThreadPool: Paquete de cliente <{}> procesado con exito",
-                    id_copy
-                ),
-                Err(err) => error!(
-                    "ThreadPool: Error procesando paquete de cliente <{}>: {}",
-                    id_copy,
-                    err.to_string()
-                ),
-            })?;
-        Ok(())
-    }
-
-    fn client_loop(self: &Arc<Self>, id: String, mut stream: TcpStream) -> ServerResult<()> {
-        let mut timeout_counter = 0;
-        let client_keep_alive = self
-            .clients_manager
-            .read()?
-            .get_client_property(&id, |client| Ok(client.keep_alive()))?;
-
-        while self.clients_manager.read()?.is_connected(&id)? {
-            match self.receive_packet(&mut stream) {
-                Ok(packet) => {
-                    timeout_counter = 0;
-                    if let Packet::Disconnect(_disconnect) = packet {
-                        debug!("<{}>: Recibido DISCONNECT", id);
-                        self.clients_manager.write()?.finish_session(&id, true)?;
-                    } else {
-                        self.to_threadpool(&id, packet)?;
-                    }
-                }
-                Err(err) if err.kind() == ServerErrorKind::Timeout => {
-                    timeout_counter += 1;
-                    self.clients_manager.read()?.send_unacknowledged(&id)?;
-                }
-                Err(err) => {
-                    error!("<{}>: {}", id, err.to_string());
-                    self.clients_manager.write()?.finish_session(&id, false)?;
-                    break;
-                }
-            }
-            if timeout_counter > client_keep_alive {
-                error!("<{}>: Keep Alive timeout", id);
-                self.clients_manager.write()?.finish_session(&id, false)?;
-                break;
-            }
-        }
-        Ok(())
-    }
-
-    fn manage_client(
-        self: &Arc<Self>,
-        mut stream: TcpStream,
-        addr: SocketAddr,
-    ) -> ServerResult<()> {
-        match self.connect_client(&mut stream, addr) {
-            Err(err) => match err.kind() {
-                ServerErrorKind::ClientNotInWhitelist => {
-                    warn!("Addr {} - Intento de conexion con usuario invalido", addr);
-                }
-                ServerErrorKind::InvalidPassword => {
-                    warn!(
-                        "Addr {} - Intento de conexion con contraseña invalido",
-                        addr
-                    );
-                }
-                ServerErrorKind::ProtocolViolation => {
-                    error!(
-                        "Addr {} - Violacion de protocolo: {}",
-                        addr,
-                        err.to_string()
-                    );
-                    return Err(err);
-                }
-                _ => {
-                    error!("Error inesperado: {}", err.to_string());
-                    return Err(err);
-                }
-            },
-            Ok(id) => {
-                self.client_loop(id, stream)?;
-            }
-        }
-        Ok(())
-    }
-
-    fn accept_client(
-        self: &Arc<Self>,
-        listener: &TcpListener,
-    ) -> ServerResult<(TcpStream, SocketAddr)> {
-        loop {
-            match listener.accept() {
-                Err(error) if error.kind() == io::ErrorKind::WouldBlock => {
-                    thread::sleep(ACCEPT_SLEEP_DUR);
-                }
-                Err(error) => {
-                    error!("No se pudo aceptar conexion TCP: {}", error.to_string());
-                    return Err(ServerError::from(error));
-                }
-                Ok((stream, addr)) => {
-                    info!("Aceptada conexion TCP con {}", addr);
-                    stream.set_read_timeout(Some(CONNECTION_WAIT_TIMEOUT))?;
-                    return Ok((stream, addr));
-                }
-            }
-        }
-    }
-
-    fn run_client(self: &Arc<Self>, stream: TcpStream, addr: SocketAddr) -> ServerResult<()> {
-        let sv_copy = self.clone();
-        let handle = thread::spawn(move || {
-            match sv_copy.manage_client(stream, addr) {
-                Ok(()) => debug!("Cliente con Address {} procesado con exito", addr),
-                Err(err) => error!(
-                    "Error procesando al cliente con Address {}: {}",
-                    addr,
-                    err.to_string()
-                ),
-            }
-            sv_copy
-                .client_thread_joiner
-                .lock()
-                .expect("Lock envenenado")
-                .finished(addr)
-                .unwrap_or_else(|err| panic!("Error irrecuperable: {}", err.to_string()));
-        });
-        self.client_thread_joiner.lock()?.add(addr, handle);
-        Ok(())
-    }
-
-    //
-    fn server_loop(
-        self: Arc<Self>,
-        listener: TcpListener,
-        shutdown_receiver: Receiver<()>,
-    ) -> ServerResult<()> {
-        let mut recv_result = shutdown_receiver.try_recv();
-        while recv_result.is_err() {
-            match self.accept_client(&listener) {
-                Ok((stream, addr)) => {
-                    self.run_client(stream, addr)
-                        .unwrap_or_else(|err| error!("{}: Error - {}", addr, err.to_string()));
-                }
-                Err(err) => {
-                    error!("Error aceptando una nueva conexion: {}", err.to_string());
-                    break;
-                }
-            }
-            self.client_thread_joiner.lock()?.join_finished();
-            recv_result = shutdown_receiver.try_recv();
-        }
-        debug!("Apagando Servidor");
-        self.clients_manager.write()?.finish_all_sessions(false)?;
-        Ok(())
-    }
-
-    /// Run the server in a new thread
+    /// Run the server in a new thread.
+    ///
     /// Returns a ServerController that can be used to stop the server
     pub fn run(self: Arc<Self>) -> io::Result<ServerController> {
-        let listener = TcpListener::bind(format!("localhost:{}", self.config.port()))?;
-        listener.set_nonblocking(true)?;
-        let (shutdown_sender, shutdown_receiver) = channel();
-        let server = self;
-
+        let (shutdown_sender, shutdown_receiver) = mpsc::channel();
         let server_handle = thread::spawn(move || {
-            if let Err(err) = server.server_loop(listener, shutdown_receiver) {
+            if let Err(err) = self.server_loop(shutdown_receiver) {
                 error!(
                     "Error inesperado del servidor: {} - Se recomienda apagarlo",
                     err.to_string()
@@ -442,5 +157,292 @@ impl Server {
         });
         let server_controller = ServerController::new(shutdown_sender, server_handle);
         Ok(server_controller)
+    }
+
+    /// Receives the [Connect] packet from a client, connects it to the
+    /// server and sets its connection_stream read Timeout with the Keep Alive Timeout
+    /// provided by the client in the [Connect] packet.
+    /// *connection_stream* is the connection_stream of the client from which the packet is received
+    ///
+    /// It does not send the [Connack] packet.
+    ///
+    /// If the connection was successful, it returns [Ok(ConnectionInfo)] with
+    /// the necessary information to send the Connack, as well as the LastWill
+    /// [Publish] packet from the previous connection_stream, in case a Client Take-Over
+    /// type reconnection has ocurred.
+    ///
+    /// In case an error has ocurred, but a Connack must be sent (for example,
+    /// if the credentials are invalid), it returns an Error with kind
+    /// [ServerErrorKind::ConnectionRefused], with the return code that the Connack
+    /// must contain. If the error it returns is not of that kind, a Connack should
+    /// not be send.
+    fn connect_client(
+        self: &Arc<Self>,
+        connection_stream: &mut ConnectionStream<S, ThreadId>,
+    ) -> ServerResult<ConnectInfo> {
+        info!("<{:?}>: Conectando", connection_stream.id());
+        match self.wait_for_connect(connection_stream) {
+            Ok(connect) => {
+                connection_stream
+                    .stream_mut()
+                    .change_read_timeout(Some(CLIENT_READ_TIMEOUT))?;
+                let connect_info = self
+                    .clients_manager
+                    .write()?
+                    .new_session(connection_stream, connect)?;
+                Ok(connect_info)
+            }
+            Err(err) => {
+                return Err(ServerError::new_kind(
+                    &format!(
+                        "Error recibiendo CONNECT de cliente <{:?}>: {}",
+                        connection_stream.id(),
+                        err.to_string()
+                    ),
+                    ServerErrorKind::ProtocolViolation,
+                ));
+            }
+        }
+    }
+
+    // TODO: convertirlo en macro
+    fn log_processed_packet(&self, packet_type: PacketType, id: &ClientIdArg) {
+        match packet_type {
+            PacketType::Connect => debug!("<{}>: Procesado CONNECT", id),
+            PacketType::Publish => debug!("<{}>: Procesado PUBLISH", id),
+            PacketType::Puback => debug!("<{}>: Procesado PUBACK", id),
+            PacketType::Subscribe => debug!("<{}>: Procesado SUBSCRIBE", id),
+            PacketType::Unsubscribe => debug!("<{}>: Procesado UNSUBSCRIBE", id),
+            PacketType::PingReq => debug!("<{}>: Procesado PINGREQ", id),
+            PacketType::Disconnect => debug!("<{}>: Procesado DISCONNECT", id),
+            _ => unreachable!(),
+        }
+    }
+
+    /// Process a client until it disconnects. This includes receiving the
+    /// packets that the client send, processing them, sending the corresponding
+    /// acknowledgements, and finally disconnecting it. It does not publish the
+    /// LastWill packet in case of an ungracefully disconnection. It also does
+    /// not remove the data from the TopicHandler.
+    ///
+    /// Returns information related to the disconnection, as well as the
+    /// Last will [Publish] that, if it is not None, must be published.
+    fn client_loop(
+        self: &Arc<Self>,
+        id: &ClientIdArg,
+        mut connection_stream: ConnectionStream<S, ThreadId>,
+    ) -> ServerResult<DisconnectInfo> {
+        let mut timeout_counter = 0;
+        let keep_alive = self
+            .clients_manager
+            .read()?
+            .get_client_property(id, |client| Ok(client.keep_alive()))?;
+        let keep_alive = (1.5 * keep_alive as f32) as u32;
+
+        loop {
+            match self.process_packet(&mut connection_stream, id) {
+                Ok(packet_type) => {
+                    timeout_counter = 0;
+                    self.log_processed_packet(packet_type, id);
+                    if packet_type == PacketType::Disconnect {
+                        return self.clients_manager.write()?.finish_session(
+                            id,
+                            connection_stream,
+                            true,
+                        );
+                    }
+                }
+                Err(err) if err.kind() == ServerErrorKind::Timeout => {
+                    timeout_counter += 1;
+                    self.clients_manager.read()?.send_unacknowledged(id)?;
+                }
+                Err(err) => {
+                    error!("<{}>: {}", id, err.to_string());
+                    return self.clients_manager.write()?.finish_session(
+                        id,
+                        connection_stream,
+                        false,
+                    );
+                }
+            }
+            if keep_alive != 0 && timeout_counter > keep_alive {
+                error!("<{}>: Keep Alive timeout", id);
+                return self
+                    .clients_manager
+                    .write()?
+                    .finish_session(id, connection_stream, false);
+            }
+        }
+    }
+
+    /// It processes a client from when it is accepted by the server
+    /// (that is, it has not yet send the Connect packet) until it is
+    /// disconnected. Cleans all the client information in case the
+    /// client connects with *clean_session* set to True
+    fn manage_client(
+        self: &Arc<Self>,
+        mut connection_stream: ConnectionStream<S, ThreadId>,
+    ) -> ServerResult<()> {
+        match self.connect_client(&mut connection_stream) {
+            Err(err) => match err.kind() {
+                ServerErrorKind::ConnectionRefused(return_code) => {
+                    error!(
+                        "<{:?}>: Error de conexion: {}",
+                        connection_stream.id(),
+                        err.to_string()
+                    );
+                    connection_stream.write_all(&Connack::new(false, return_code).encode()?)?;
+                }
+                _ => {
+                    error!("Error inesperado: {}", err.to_string());
+                    return Err(err);
+                }
+            },
+            Ok(connect_info) => {
+                info!(
+                    "<{:?}> -> <{}>: Conectado",
+                    connection_stream.id(),
+                    connect_info.id
+                );
+                connection_stream.write_all(
+                    &Connack::new(connect_info.session_present, connect_info.return_code)
+                        .encode()?,
+                )?;
+                if let Some(last_will) = connect_info.takeover_last_will {
+                    self.send_last_will(last_will, &connect_info.id)?;
+                }
+
+                // En caso de que haya ocurrido una reconexion y el cliente
+                // tenia un last will, se publica
+                let disconnect_info = self.client_loop(&connect_info.id, connection_stream)?;
+                if let Some(last_will) = disconnect_info.publish_last_will {
+                    self.send_last_will(last_will, &connect_info.id)?;
+                }
+                if disconnect_info.clean_session {
+                    self.topic_handler.remove_client(&connect_info.id)?;
+                }
+            }
+        }
+        Ok(())
+    }
+
+    /// Creates a new thread in which the client will be handled. Adds that
+    /// thread to the list of threads pending to be joined
+    fn run_client(self: &Arc<Self>, stream: S) -> ServerResult<()> {
+        let sv_copy = self.clone();
+        let handle = thread::spawn(move || {
+            let connection_stream = ConnectionStream::new(thread::current().id(), stream);
+            let connection_stream_id = connection_stream.id();
+            match sv_copy.manage_client(connection_stream) {
+                Ok(()) => debug!(
+                    "Cliente en thread <{:?}> procesado con exito",
+                    connection_stream_id
+                ),
+                Err(err) => error!(
+                    "Error procesando al cliente en thread <{:?}>: {}",
+                    connection_stream_id,
+                    err.to_string()
+                ),
+            }
+            sv_copy
+                .client_thread_joiner
+                .lock()
+                .expect("Lock envenenado")
+                .finished(thread::current().id())
+                .unwrap_or_else(|err| panic!("Error irrecuperable: {}", err.to_string()));
+        });
+        self.client_thread_joiner
+            .lock()?
+            .add_thread(handle.thread().id(), handle)?;
+        Ok(())
+    }
+
+    /// Accepts clients and processes them as log as a shutdown signal is not
+    /// received from the [ServerController] corresponding to this server
+    fn server_loop(self: Arc<Self>, shutdown_receiver: Receiver<()>) -> ServerResult<()> {
+        let mut recv_result = shutdown_receiver.try_recv();
+        while recv_result.is_err() {
+            match self.accept_client() {
+                Ok(stream) => {
+                    // TODO: Agregar connection_stream.addr al mensaje de error
+                    self.run_client(stream)
+                        .unwrap_or_else(|err| error!("Error - {}", err.to_string()));
+                }
+                Err(err) if err.kind() == ServerErrorKind::Idle => {
+                    thread::sleep(ACCEPT_SLEEP_DUR);
+                }
+                Err(err) => {
+                    error!("Error aceptando una nueva conexion: {}", err.to_string());
+                    break;
+                }
+            }
+            recv_result = shutdown_receiver.try_recv();
+        }
+        debug!("Apagando Servidor");
+        self.clients_manager.write()?.finish_all_sessions(false)?;
+        Ok(())
+    }
+
+    /// Accepts a TCP connection and returns the stream corresponding to that
+    /// connection.
+    ///
+    /// If no connection has been received, it returns an error of kind
+    /// [ServerErrorKind::Idle]
+    fn accept_client(self: &Arc<Self>) -> ServerResult<S> {
+        match self.client_accepter.accept_client() {
+            Err(error) if error.kind() == io::ErrorKind::WouldBlock => {
+                Err(ServerError::new_kind("Idle", ServerErrorKind::Idle))
+            }
+            Err(error) => {
+                error!("No se pudo aceptar conexion TCP: {}", error.to_string());
+                Err(ServerError::from(error))
+            }
+            Ok(mut stream) => {
+                info!("Aceptada conexion TCP");
+                stream.change_read_timeout(Some(CONNECTION_WAIT_TIMEOUT))?;
+                Ok(stream)
+            }
+        }
+    }
+}
+
+impl BidirectionalStream for TcpStream {
+    fn try_clone(&self) -> Result<Self, StreamError>
+    where
+        Self: Sized,
+    {
+        if let Ok(copy) = self.try_clone() {
+            Ok(copy)
+        } else {
+            Err(StreamError {})
+        }
+    }
+
+    fn close(&mut self) -> io::Result<()> {
+        self.shutdown(Shutdown::Both)
+    }
+
+    fn change_read_timeout(&mut self, dur: Option<Duration>) -> io::Result<()> {
+        self.set_read_timeout(dur)
+    }
+
+    fn change_write_timeout(&mut self, dur: Option<Duration>) -> io::Result<()> {
+        self.set_write_timeout(dur)
+    }
+}
+
+impl ClientAccepter<TcpStream> for TcpListener {
+    fn new(port: u16) -> io::Result<Self>
+    where
+        Self: Sized,
+    {
+        let listener = Self::bind(format!("localhost:{}", port))?;
+        listener.set_nonblocking(true)?;
+        Ok(listener)
+    }
+
+    fn accept_client(&self) -> io::Result<TcpStream> {
+        let (stream, _addr) = self.accept()?;
+        Ok(stream)
     }
 }

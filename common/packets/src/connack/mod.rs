@@ -46,7 +46,7 @@ pub struct Connack {
     pub return_code: ConnackReturnCode,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ConnackReturnCode {
     Accepted,
     UnacceptableProtocolVersion,

@@ -1,43 +1,70 @@
 use std::{
     io::{self, Write},
-    net::TcpStream,
     vec,
 };
 
-use packets::{connect::Connect, pingresp::PingResp, qos::QoSLevel, traits::MQTTEncoding};
-use packets::{puback::Puback, publish::Publish, suback::Suback};
-use tracing::{debug, error, info};
+use packets::{connect::Connect, qos::QoSLevel, traits::MQTTEncoding};
+use packets::{puback::Puback, publish::Publish};
+use tracing::{debug, info};
 
-use crate::server::{ClientId, ServerError, ServerResult};
-
-#[derive(PartialEq)]
-pub enum ClientStatus {
-    Connected,
-    DisconnectedGracefully,
-    DisconnectedUngracefully,
-}
+use crate::{
+    server::{server_error::ServerErrorKind, ClientId, ServerError, ServerResult},
+    traits::BidirectionalStream,
+};
 
 /// Represents the state of a client on the server
-pub struct Client {
+pub struct Client<S> {
     /// Id of the client
     id: ClientId,
-    /// TCP connection to send packets to the client
-    stream: TcpStream,
-    /// Indicates if the client is currently connected
-    status: ClientStatus,
+    stream: Option<S>,
     connect: Connect,
     /// Unacknowledge packets
     unacknowledged: Vec<Publish>,
 }
 
-impl Client {
-    pub fn new(connect: Connect, stream: TcpStream) -> Self {
+impl<S: io::Write> io::Write for Client<S> {
+    fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
+        if let Some(stream) = &mut self.stream {
+            stream.write(buf)
+        } else {
+            Err(io::Error::new(
+                io::ErrorKind::NotConnected,
+                format!("Cliente <{}> desconectado", self.id),
+            ))
+        }
+    }
+
+    fn flush(&mut self) -> io::Result<()> {
+        if let Some(stream) = &mut self.stream {
+            stream.flush()
+        } else {
+            Err(io::Error::new(
+                io::ErrorKind::NotConnected,
+                format!("Cliente <{}> desconectado", self.id),
+            ))
+        }
+    }
+}
+
+impl<S> Client<S>
+where
+    S: BidirectionalStream,
+{
+    pub fn new(connect: Connect) -> Self {
         Self {
             id: connect.client_id().to_owned(),
-            stream,
-            status: ClientStatus::Connected,
+            stream: None,
             connect,
             unacknowledged: vec![],
+        }
+    }
+
+    pub fn connect(&mut self, stream: S) -> ServerResult<()> {
+        if self.stream.is_none() {
+            self.stream = Some(stream);
+            Ok(())
+        } else {
+            Err(ServerError::new_msg("Cliente ya conectado"))
         }
     }
 
@@ -46,38 +73,10 @@ impl Client {
     }
 
     pub fn connected(&self) -> bool {
-        self.status == ClientStatus::Connected
+        self.stream.is_some()
     }
 
-    fn send_last_will(&self) {
-        debug!("<{}>: Enviando last will (TODO)", self.id);
-    }
-
-    pub fn disconnect(&mut self, gracefully: bool) {
-        if gracefully {
-            self.status = ClientStatus::DisconnectedGracefully;
-        } else {
-            // En que casos se envia el last_will? gracefully o ungracefully?
-            self.status = ClientStatus::DisconnectedUngracefully;
-            self.send_last_will();
-        }
-    }
-
-    pub fn send_pingresp(&mut self) -> ServerResult<()> {
-        debug!("<{}> Enviando PINGRESP", self.id);
-        self.write_all(&PingResp::new().encode()?)?;
-        Ok(())
-    }
-
-    fn write_all(&mut self, buf: &[u8]) -> io::Result<()> {
-        if self.connected() {
-            self.stream.write_all(buf)
-        } else {
-            todo!()
-        }
-    }
-
-    pub fn send_packet(&mut self, packet: impl MQTTEncoding) -> ServerResult<()> {
+    pub fn send_packet<T: MQTTEncoding>(&mut self, packet: &T) -> ServerResult<()> {
         self.write_all(&packet.encode()?)?;
         Ok(())
     }
@@ -86,17 +85,61 @@ impl Client {
         *self.connect.clean_session()
     }
 
-    pub fn reconnect(&mut self, new_client: Client) -> ServerResult<()> {
-        if self.connected() {
-            error!("Se intento reconectar un usuario que ya esta conectado");
-            Err(ServerError::new_msg("Usuario ya conectado"))
-        } else {
-            info!("Reconectado <{}>", self.id);
-            self.stream = new_client.stream;
-            self.status = ClientStatus::Connected;
-            self.connect = new_client.connect;
-            Ok(())
+    pub fn disconnect(&mut self, gracefully: bool) -> ServerResult<Option<Publish>> {
+        if let Some(mut stream) = self.stream.take() {
+            stream.close()?;
+            if gracefully {
+                Ok(None)
+            } else if let Some(last_will) = self.connect.last_will().take() {
+                let packet_identifier: Option<u16>;
+                if last_will.qos != QoSLevel::QoSLevel0 {
+                    packet_identifier = Some(rand::random());
+                } else {
+                    packet_identifier = None;
+                }
+                let publish_last_will = Publish::new(
+                        false,
+                        last_will.qos,
+                        last_will.retain_flag,
+                        &last_will.topic_name,
+                        &last_will.topic_message,
+                        packet_identifier
+                    ).expect("Se esperaba un formato de Publish valido al crearlo con los datos del LastWill");
+                Ok(Some(publish_last_will))
+            } else {
+                Ok(None)
+            }
         }
+        // El cliente ya estaba desconectado
+        else {
+            Ok(None)
+        }
+    }
+
+    pub fn reconnect(
+        &mut self,
+        new_connect: Connect,
+        new_stream: S,
+    ) -> ServerResult<Option<Publish>> {
+        if self.id != new_connect.client_id() {
+            return Err(ServerError::new_kind(
+                &format!(
+                    "<{}>: Intento de reconexion con un cliente con id diferente ({})",
+                    self.id,
+                    new_connect.client_id()
+                ),
+                ServerErrorKind::Irrecoverable,
+            ));
+        }
+        info!("<{}>: Reconectando", self.id);
+        if *self.connect.clean_session() {
+            self.unacknowledged = vec![];
+        }
+
+        let last_will = self.disconnect(false)?;
+        self.stream = Some(new_stream);
+        self.connect = new_connect;
+        Ok(last_will)
     }
 
     pub fn keep_alive(&self) -> u16 {
@@ -107,27 +150,21 @@ impl Client {
         self.connect.user_name()
     }
 
-    pub fn password(&self) -> Option<&String> {
-        self.connect.password()
-    }
-
     pub fn acknowledge(&mut self, puback: Puback) -> ServerResult<()> {
         debug!("<{}>: Acknowledge {}", self.id, puback.packet_id());
         self.unacknowledged.retain(|publish| {
             puback.packet_id()
-                != *publish
+                != publish
                     .packet_id()
                     .expect("Se esperaba un paquete con identificador (QoS > 0)")
         });
         Ok(())
     }
 
-    pub fn send_suback(&mut self, suback: Suback) -> ServerResult<()> {
-        self.write_all(&suback.encode()?)?;
-        Ok(())
-    }
-
-    pub fn send_unacknowledged(&mut self) {
+    pub fn send_unacknowledged(&mut self) -> ServerResult<()>
+    where
+        S: Write,
+    {
         for publish in self.unacknowledged.iter() {
             debug!(
                 "<{}>: Reenviando paquete con id <{}>",
@@ -136,30 +173,39 @@ impl Client {
                     .packet_id()
                     .expect("Se esperaba un paquete con identificador (QoS > 0)")
             );
-            self.stream.write_all(&publish.encode().unwrap()).unwrap();
+            self.stream
+                .as_mut()
+                .unwrap()
+                .write_all(&publish.encode()?)?;
         }
+        Ok(())
     }
 
-    fn add_unacknowledged(&mut self, publish: Publish) {
+    fn add_unacknowledged(&mut self, mut publish: Publish) {
+        publish.set_dup(true);
         self.unacknowledged.push(publish);
     }
 
-    pub fn send_publish(&mut self, publish: Publish) {
+    pub fn send_publish(&mut self, publish: Publish) -> ServerResult<()>
+    where
+        S: Write,
+    {
         if self.connected() {
-            self.write_all(&publish.encode().unwrap()).unwrap();
+            self.send_packet(&publish)?;
             if publish.qos() == QoSLevel::QoSLevel1 {
                 // TODO: que pasa si el paquete ya existe en el HashMap?
-                debug!("{}: Agregando PUBLISH a UNACKNOWLEDGED", self.id);
+                debug!("<{}>: Agregando PUBLISH a UNACKNOWLEDGED", self.id);
                 self.add_unacknowledged(publish);
             } else {
                 debug!("<{}>: Conectado y con QoS == 0", self.id);
             }
         } else if publish.qos() == QoSLevel::QoSLevel1 {
             debug!(
-                "<{}> Agregando Publish a UNACKNOWLEDGED desconectado",
+                "<{}>: Agregando Publish a UNACKNOWLEDGED desconectado",
                 self.id
             );
             self.add_unacknowledged(publish);
         }
+        Ok(())
     }
 }
