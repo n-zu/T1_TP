@@ -224,7 +224,6 @@ where
                 .get_mut()?
                 .reconnect(connect, connection_stream.stream().try_clone().unwrap())?;
             session_present = true;
-            return_code = ConnackReturnCode::Accepted;
         } else {
             let mut client = Client::new(connect);
             client.connect(connection_stream.stream().try_clone().unwrap())?;
@@ -238,8 +237,8 @@ where
             );
             self.client_add(client);
             session_present = false;
-            return_code = ConnackReturnCode::Accepted;
         }
+        return_code = ConnackReturnCode::Accepted;
         self.current_addrs.insert(id.to_owned(), session_id);
         Ok(ConnectInfo {
             id,
