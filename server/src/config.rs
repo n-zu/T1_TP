@@ -1,6 +1,7 @@
 #![allow(dead_code)]
 
 use std::{
+    collections::HashMap,
     fs::File,
     io::{BufRead, BufReader, Read},
 };
@@ -22,15 +23,14 @@ const LOG_PATH_KEY: &str = "log_path";
 const ACCOUNTS_PATH_KEY: &str = "accounts_path";
 const IP_KEY: &str = "ip";
 
-//const OUTER_BREAK: &str = "\n";
-const INNER_BREAK: &str = "=";
+const SEP: &str = "=";
 
 impl Config {
     /// Returns a Config struct based on the path file
     /// # Arguments
     ///
     /// * `path` - Path file
-    /// Each line of the file must consist of 'field=value' in the following order:
+    /// Each line of the file must consist of 'field=value':
     /// port, dump_path, dump_time, log_path, ip
     ///
     /// # Errors
@@ -44,25 +44,25 @@ impl Config {
     ///
     /// If config_file path does not have the correct format, this function returns None
     pub fn new_from_file(config_file: impl Read) -> Option<Config> {
-        let mut buffered = BufReader::new(config_file);
-
-        let port = get_value_from_line(&mut buffered, PORT_KEY)?;
-        let dump_path = get_value_from_line(&mut buffered, DUMP_PATH_KEY)?;
-        let dump_time = get_value_from_line(&mut buffered, DUMP_TIME_KEY)?;
-        let log_path = get_value_from_line(&mut buffered, LOG_PATH_KEY)?;
-        let accounts_path = get_value_from_line(&mut buffered, ACCOUNTS_PATH_KEY)?;
-        let ip = get_value_from_line(&mut buffered, IP_KEY)?;
-
-        let port = port.parse::<u16>().ok()?;
-        let dump_time = dump_time.parse::<u32>().ok()?;
+        let lines: Vec<String> = BufReader::new(config_file)
+            .lines()
+            .collect::<Result<Vec<_>, _>>()
+            .ok()?;
+        let mut config: HashMap<String, String> = lines
+            .iter()
+            .map(|line| {
+                let (key, value) = line.trim().split_once(SEP)?;
+                Some((key.to_string(), value.to_string()))
+            })
+            .collect::<Option<HashMap<_, _>>>()?;
 
         Some(Config {
-            port,
-            dump_path,
-            dump_time,
-            log_path,
-            accounts_path,
-            ip,
+            port: config.remove(PORT_KEY)?.parse().ok()?,
+            dump_path: config.remove(DUMP_PATH_KEY)?,
+            dump_time: config.remove(DUMP_TIME_KEY)?.parse().ok()?,
+            log_path: config.remove(LOG_PATH_KEY)?,
+            accounts_path: config.remove(ACCOUNTS_PATH_KEY)?,
+            ip: config.remove(IP_KEY)?,
         })
     }
 
@@ -98,25 +98,6 @@ impl Config {
     }
 }
 
-fn get_value_from_line<F>(buffered: &mut BufReader<F>, expected_key: &str) -> Option<String>
-where
-    F: Read,
-{
-    let mut buf = String::new();
-
-    buffered.read_line(&mut buf).ok()?;
-    let key_value = buf.trim().split(INNER_BREAK).collect::<Vec<&str>>();
-    if key_value.len() != 2 {
-        return None;
-    }
-    let key = key_value[0];
-    let value = key_value[1];
-    if !key.eq(expected_key) {
-        return None;
-    }
-    Some(value.to_owned())
-}
-
 #[cfg(test)]
 mod tests {
     use std::io::Cursor;
@@ -140,6 +121,27 @@ ip=localhost",
         assert_eq!(config.dump_time(), 10);
         assert_eq!(config.log_path(), "bar.txt");
         assert_eq!(config.accounts_path(), "baz.csv");
+        assert_eq!(config.ip(), "localhost");
+    }
+
+    #[test]
+    fn valid_file_with_whitespace() {
+        let cursor = Cursor::new(
+            "port=8080
+    dump_path=foo.txt
+  dump_time=10
+log_path=bar.txt    
+accounts_path=baz.csv
+    ip=localhost",
+        );
+
+        let config = Config::new_from_file(cursor).unwrap();
+        assert_eq!(config.port(), 8080);
+        assert_eq!(config.dump_path(), "foo.txt");
+        assert_eq!(config.dump_time(), 10);
+        assert_eq!(config.log_path(), "bar.txt");
+        assert_eq!(config.accounts_path(), "baz.csv");
+        assert_eq!(config.ip(), "localhost");
     }
 
     #[test]
@@ -148,20 +150,6 @@ ip=localhost",
             "invalid_key=8080
 dump_path=foo.txt
 dump_time=10
-log_path=bar.txt
-accounts_path=baz.csv
-ip=localhost",
-        );
-
-        assert!(Config::new_from_file(cursor).is_none());
-    }
-
-    #[test]
-    fn invalid_order() {
-        let cursor = Cursor::new(
-            "port=8080
-dump_time=10
-dump_path=foo.txt
 log_path=bar.txt
 accounts_path=baz.csv
 ip=localhost",
