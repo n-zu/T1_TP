@@ -1,7 +1,7 @@
 use gtk::{
     glib,
-    prelude::{BuilderExtManual, ContainerExt, WidgetExt},
-    Box, Builder, Label, ListBox, ListBoxRow, Orientation,
+    prelude::{BuilderExtManual, ButtonExt, ContainerExt, WidgetExt},
+    Box, Builder, Button, Label, ListBox, ListBoxRow, Orientation,
 };
 use packets::{connack::Connack, qos::QoSLevel, unsuback::Unsuback};
 use packets::{puback::Puback, publish::Publish, suback::Suback};
@@ -90,6 +90,8 @@ impl InternalObserver {
                     "Error interno: {}\n\nSe recomienda reiniciar el cliente",
                     error
                 ));
+                let dis: Button = self.builder().object("discon_btn").unwrap();
+                dis.clicked();
             }
         }
     }
