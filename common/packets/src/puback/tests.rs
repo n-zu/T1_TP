@@ -1,6 +1,6 @@
 use crate::packet_error::{ErrorKind, PacketError};
 use crate::puback::{Puback, MSG_INVALID_PACKET_ID, MSG_PACKET_MORE_BYTES_THAN_EXPECTED};
-use crate::traits::MQTTDecoding;
+use crate::traits::{MQTTDecoding, MQTTEncoding};
 use std::io::Cursor;
 
 #[test]
@@ -27,18 +27,7 @@ fn test_valid_puback_packet_with_packet_id_1() {
     let remaining_length = 2u8;
     let data_buffer: Vec<u8> = vec![remaining_length, 0, 1];
     let mut stream = Cursor::new(data_buffer);
-    let expected = Puback { packet_id: 1 };
-    let result = Puback::read_from(&mut stream, control_byte).unwrap();
-    assert_eq!(expected, result);
-}
-
-#[test]
-fn test_valid_puback_packet_with_packet_id_0() {
-    let control_byte = 0b01000000u8;
-    let remaining_length = 2u8;
-    let data_buffer: Vec<u8> = vec![remaining_length, 0, 0];
-    let mut stream = Cursor::new(data_buffer);
-    let expected = Puback { packet_id: 0 };
+    let expected = Puback::new(1).unwrap();
     let result = Puback::read_from(&mut stream, control_byte).unwrap();
     assert_eq!(expected, result);
 }
@@ -64,7 +53,7 @@ fn test_puback_with_packet_id_0_should_raise_invalid_protocol_error() {
 #[test]
 fn test_encoding_puback_packet_with_packet_id_1() {
     let puback = Puback::new(1).unwrap();
-    let result = puback.encode();
+    let result = puback.encode().unwrap();
     let expected: Vec<u8> = vec![0b01000000, 0b10, 0b0, 1];
     assert_eq!(expected, result)
 }

@@ -30,6 +30,7 @@ pub struct Message {
     pub packet: Publish,
 }
 
+#[doc(hidden)]
 #[derive(Debug, Clone)]
 struct SubscriptionData {
     qos: QoSLevel,
@@ -93,6 +94,7 @@ pub struct TopicHandler {
     root: Topic,
 }
 
+#[doc(hidden)]
 struct Topic {
     subtopics: RwLock<Subtopics>,
     subscribers: RwLock<Subscribers>,
@@ -167,16 +169,19 @@ impl TopicHandler {
         Ok(())
     }
 
+    /// Creates a new TopicHandler
     pub fn new() -> Self {
         Self { root: Topic::new() }
     }
 
+    /// Removes a client and all of its subscriptions
     pub fn remove_client(&self, client_id: &str) -> Result<(), TopicHandlerError> {
         remove_client_rec(&self.root, client_id)?;
         Ok(())
     }
 }
 
+#[doc(hidden)]
 fn starts_with_unmatch(topic_name: Option<&str>) -> bool {
     if let Some(name) = topic_name {
         return name.starts_with(UNMATCH_WILDCARD);
@@ -186,6 +191,7 @@ fn starts_with_unmatch(topic_name: Option<&str>) -> bool {
 
 // Lo tuve que hacer recursivo porque sino era un caos el tema de mantener todos los
 // locks desbloqueados, ya que no los podia dropear porque perdia las referencias internas
+#[doc(hidden)]
 fn pub_rec(
     node: &Topic,
     topic_name: Option<&str>,
@@ -226,6 +232,7 @@ fn pub_rec(
     Ok(())
 }
 
+#[doc(hidden)]
 fn add_singlelevel_subscription(
     node: &Topic,
     topic: String,
@@ -242,6 +249,7 @@ fn add_singlelevel_subscription(
     Ok(())
 }
 
+#[doc(hidden)]
 fn handle_sub_level(
     node: &Topic,
     topic: &str,
@@ -280,6 +288,7 @@ fn handle_sub_level(
     Ok(())
 }
 
+#[doc(hidden)]
 fn subscribe_rec(
     node: &Topic,
     topic_name: Option<&str>,
@@ -315,6 +324,7 @@ fn remove_singlelevel_subscription(
     Ok(())
 }
 
+#[doc(hidden)]
 fn unsubscribe_rec(
     node: &Topic,
     topic_name: Option<&str>,
@@ -355,6 +365,7 @@ fn unsubscribe_rec(
     Ok(())
 }
 
+#[doc(hidden)]
 fn clean_node(node: &Topic) -> Result<(), TopicHandlerError> {
     let mut empty_subtopics = Vec::new();
 
@@ -380,6 +391,7 @@ fn clean_node(node: &Topic) -> Result<(), TopicHandlerError> {
     Ok(())
 }
 
+#[doc(hidden)]
 fn remove_client_rec(node: &Topic, user_id: &str) -> Result<(), TopicHandlerError> {
     for subtopic in node.subtopics.read()?.values() {
         remove_client_rec(subtopic, user_id)?;

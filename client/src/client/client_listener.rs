@@ -547,7 +547,7 @@ mod tests {
             Publish::new(false, QoSLevel1, false, "topic", "msg", Some(123)).unwrap(),
         ))));
         let stop = Arc::new(AtomicBool::new(false));
-        let stream = Cursor::new(Puback::new(123).unwrap().encode());
+        let stream = Cursor::new(Puback::new(123).unwrap().encode().unwrap());
         let mut listener = ClientListener::new(
             stream,
             pending_ack.clone(),
@@ -573,7 +573,7 @@ mod tests {
             Publish::new(false, QoSLevel1, false, "topic", "msg", Some(97)).unwrap(),
         ))));
         let stop = Arc::new(AtomicBool::new(false));
-        let stream = Cursor::new(Puback::new(123).unwrap().encode());
+        let stream = Cursor::new(Puback::new(123).unwrap().encode().unwrap());
         let mut listener = ClientListener::new(
             stream,
             pending_ack.clone(),
@@ -597,7 +597,7 @@ mod tests {
         let observer = ObserverMock::new();
         let pending_ack = Arc::new(Mutex::new(Some(PendingAck::PingReq(PingReq::new()))));
         let stop = Arc::new(AtomicBool::new(false));
-        let stream = Cursor::new(Puback::new(123).unwrap().encode());
+        let stream = Cursor::new(Puback::new(123).unwrap().encode().unwrap());
         let mut listener = ClientListener::new(
             stream,
             pending_ack.clone(),
@@ -626,7 +626,7 @@ mod tests {
             Publish::new(false, QoSLevel0, false, "topic", "msg", None).unwrap(),
         ))));
         let stop = Arc::new(AtomicBool::new(false));
-        let stream = Cursor::new(Puback::new(123).unwrap().encode());
+        let stream = Cursor::new(Puback::new(123).unwrap().encode().unwrap());
         let mut listener = ClientListener::new(
             stream,
             pending_ack.clone(),
