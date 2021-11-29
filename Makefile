@@ -10,3 +10,7 @@ run-server:
 
 run-client:
 	(cd client; cargo run)
+
+run:
+	(cd client; cargo run &)
+	(cd server; cargo run)

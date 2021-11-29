@@ -30,6 +30,7 @@ fn test_connection() {
     .unwrap();
     let connack = Connack::new(false, ConnackReturnCode::Accepted);
     let connack_bytes = connack.encode().unwrap();
+    thread::sleep(Duration::from_millis(500));
     let (_stream, recv_connect) = server.accept_connection(connack);
 
     assert_eq!(recv_connect.encode().unwrap(), connect_bytes);
@@ -89,11 +90,12 @@ fn test_disconnect() {
     )
     .unwrap();
     let connack = Connack::new(false, ConnackReturnCode::Accepted);
+
+    thread::sleep(Duration::from_millis(500));
     let (mut stream, _) = server.accept_connection(connack);
-
     drop(client);
-    let mut buf = [0; 1];
 
+    let mut buf = [0; 1];
     stream.read_exact(&mut buf).unwrap();
     assert_eq!(buf[0] >> 4, 14);
     let _ = Disconnect::read_from(&mut stream, buf[0]).unwrap();
@@ -110,6 +112,8 @@ fn test_failed_connection() {
         connect,
     )
     .unwrap();
+
+    thread::sleep(Duration::from_millis(500));
     let connack = Connack::new(false, ConnackReturnCode::BadUserNameOrPassword);
     let (_s, _) = server.accept_connection(connack);
 

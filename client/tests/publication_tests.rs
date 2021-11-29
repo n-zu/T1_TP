@@ -28,6 +28,7 @@ fn test_send_publish_qos0() {
     )
     .unwrap();
     let connack = Connack::new(false, ConnackReturnCode::Accepted);
+    thread::sleep(Duration::from_millis(500));
     let (mut stream, _) = server.accept_connection(connack);
 
     let publish = Publish::new(false, QoSLevel0, false, "topic", "msg", None).unwrap();
@@ -56,6 +57,7 @@ fn test_send_publish_qos1() {
     )
     .unwrap();
     let connack = Connack::new(false, ConnackReturnCode::Accepted);
+    thread::sleep(Duration::from_millis(500));
     let (mut stream, _) = server.accept_connection(connack);
 
     let publish = Publish::new(false, QoSLevel1, false, "topic", "msg", Some(123)).unwrap();
