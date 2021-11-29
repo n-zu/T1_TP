@@ -1,6 +1,6 @@
 use std::convert::TryFrom;
 
-use crate::{packet_error::PacketResult, qos::QoSLevel, suback::Suback, topic::Topic};
+use crate::{packet_error::PacketResult, qos::QoSLevel, suback::Suback, topic_filter::TopicFilter};
 
 mod decoding;
 mod encoding;
@@ -13,7 +13,7 @@ const RESERVED_BITS: u8 = 2;
 #[derive(Debug)]
 pub struct Subscribe {
     packet_identifier: u16,
-    topics: Vec<Topic>,
+    topics: Vec<TopicFilter>,
 }
 
 impl Subscribe {
@@ -23,7 +23,7 @@ impl Subscribe {
     }
 
     /// Get the subscribe's topics.
-    pub fn topics(&self) -> Vec<Topic> {
+    pub fn topics(&self) -> Vec<TopicFilter> {
         self.topics.clone()
     }
 

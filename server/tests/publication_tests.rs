@@ -13,7 +13,7 @@ use packets::{
     qos::QoSLevel::*,
     suback::Suback,
     subscribe::Subscribe,
-    topic::Topic,
+    topic_filter::TopicFilter,
     traits::{MQTTDecoding, MQTTEncoding},
 };
 
@@ -27,7 +27,7 @@ fn test_subscription_qos0() {
     let mut control = [0u8];
 
     // Mando subscribe
-    let subscribe = Subscribe::new(vec![Topic::new("topic", QoSLevel0).unwrap()], 123);
+    let subscribe = Subscribe::new(vec![TopicFilter::new("topic", QoSLevel0).unwrap()], 123);
     stream.write_all(&subscribe.encode().unwrap()).unwrap();
     thread::sleep(Duration::from_millis(100));
 
@@ -57,7 +57,7 @@ fn test_subscription_qos1() {
     let mut control = [0u8];
 
     // Mando subscribe
-    let subscribe = Subscribe::new(vec![Topic::new("topic", QoSLevel1).unwrap()], 123);
+    let subscribe = Subscribe::new(vec![TopicFilter::new("topic", QoSLevel1).unwrap()], 123);
     stream.write_all(&subscribe.encode().unwrap()).unwrap();
     thread::sleep(Duration::from_millis(100));
 
@@ -102,7 +102,7 @@ fn test_subscription_lowers_qos() {
     let mut control = [0u8];
 
     // Mando subscribe
-    let subscribe = Subscribe::new(vec![Topic::new("topic", QoSLevel0).unwrap()], 123);
+    let subscribe = Subscribe::new(vec![TopicFilter::new("topic", QoSLevel0).unwrap()], 123);
     stream.write_all(&subscribe.encode().unwrap()).unwrap();
     thread::sleep(Duration::from_millis(100));
 
@@ -149,7 +149,7 @@ fn test_subscription_different_clients() {
     let mut control = [0u8];
 
     // Mando subscribe
-    let subscribe = Subscribe::new(vec![Topic::new("topic", QoSLevel0).unwrap()], 123);
+    let subscribe = Subscribe::new(vec![TopicFilter::new("topic", QoSLevel0).unwrap()], 123);
     stream_1.write_all(&subscribe.encode().unwrap()).unwrap();
     thread::sleep(Duration::from_millis(100));
 
@@ -182,7 +182,7 @@ fn test_subscription_different_clients_persistent_session() {
     let mut control = [0u8];
 
     // Mando subscribe con QoS1
-    let subscribe = Subscribe::new(vec![Topic::new("topic", QoSLevel1).unwrap()], 123);
+    let subscribe = Subscribe::new(vec![TopicFilter::new("topic", QoSLevel1).unwrap()], 123);
     stream_1.write_all(&subscribe.encode().unwrap()).unwrap();
     thread::sleep(Duration::from_millis(100));
 
@@ -236,7 +236,7 @@ fn test_last_will() {
     let mut control = [0u8];
 
     // Mando subscribe con QoS0
-    let subscribe = Subscribe::new(vec![Topic::new("topic", QoSLevel0).unwrap()], 123);
+    let subscribe = Subscribe::new(vec![TopicFilter::new("topic", QoSLevel0).unwrap()], 123);
     stream_2.write_all(&subscribe.encode().unwrap()).unwrap();
     thread::sleep(Duration::from_millis(100));
 
@@ -278,7 +278,7 @@ fn test_takeover_should_change_clean_session() {
         ));
     let builder_3 = ConnectBuilder::new("id", 1, false).unwrap();
 
-    let subscribe = Subscribe::new(vec![Topic::new("topic", QoSLevel1).unwrap()], 123);
+    let subscribe = Subscribe::new(vec![TopicFilter::new("topic", QoSLevel1).unwrap()], 123);
 
     let mut control = [0u8];
     let mut stream_1 = connect_client(builder_1, true, port, true);

@@ -18,7 +18,7 @@ use gtk::{
 };
 use gtk::{ComboBoxText, ListBox};
 use packets::connect::{Connect, ConnectBuilder, LastWill};
-use packets::topic::Topic;
+use packets::topic_filter::TopicFilter;
 
 use packets::publish::Publish;
 use packets::qos::QoSLevel;
@@ -232,7 +232,7 @@ impl Controller {
             .parse::<u8>()
             .unwrap();
 
-        let topic = Topic::new(&topic_entry.text().to_string(), QoSLevel::try_from(qos)?)?;
+        let topic = TopicFilter::new(&topic_entry.text().to_string(), QoSLevel::try_from(qos)?)?;
 
         let packet = Subscribe::new(vec![topic], rand::random());
 
@@ -349,7 +349,7 @@ impl Controller {
     /// a new SUBSCRIBE packet
     fn _unsubscribe(&self) -> Result<(), ClientError> {
         let topic_entry: Entry = self.builder.object("unsub_top").unwrap();
-        let text = vec![Topic::new(
+        let text = vec![TopicFilter::new(
             &topic_entry.text().to_string(),
             QoSLevel::QoSLevel0,
         )?];

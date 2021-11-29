@@ -132,7 +132,7 @@ impl TopicHandler {
         client_id: &str,
     ) -> Result<Option<Vec<Publish>>, TopicHandlerError> {
         let topics = packet.topics();
-        let topics: Vec<&packets::topic::Topic> = topics.iter().collect();
+        let topics: Vec<&packets::topic_filter::TopicFilter> = topics.iter().collect();
 
         for topic_filter in topics {
             let data = SubscriptionData {
@@ -418,7 +418,7 @@ mod tests {
     use packets::publish::Publish;
     use packets::qos::QoSLevel;
     use packets::subscribe::Subscribe;
-    use packets::topic::Topic;
+    use packets::topic_filter::TopicFilter;
     use packets::unsubscribe::Unsubscribe;
 
     use crate::topic_handler::matches_singlelevel;
@@ -428,11 +428,18 @@ mod tests {
     }
 
     fn build_subscribe(topic: &str) -> Subscribe {
-        Subscribe::new(vec![Topic::new(topic, QoSLevel::QoSLevel0).unwrap()], 123)
+        Subscribe::new(
+            vec![TopicFilter::new(topic, QoSLevel::QoSLevel0).unwrap()],
+            123,
+        )
     }
 
     fn build_unsubscribe(topic: &str) -> Unsubscribe {
-        Unsubscribe::new(123, vec![Topic::new(topic, QoSLevel::QoSLevel0).unwrap()]).unwrap()
+        Unsubscribe::new(
+            123,
+            vec![TopicFilter::new(topic, QoSLevel::QoSLevel0).unwrap()],
+        )
+        .unwrap()
     }
     #[test]
     fn test_one_subscribe_one_publish_single_level_topic() {
@@ -759,9 +766,9 @@ mod tests {
     */
     #[test]
     fn test_deliver_copies_for_each_subscription() {
-        let topic1 = Topic::new("colors/#", QoSLevel::QoSLevel1).unwrap();
-        let topic2 = Topic::new("colors/primary/blue", QoSLevel::QoSLevel0).unwrap();
-        let topic3 = Topic::new("colors/+/blue", QoSLevel::QoSLevel0).unwrap();
+        let topic1 = TopicFilter::new("colors/#", QoSLevel::QoSLevel1).unwrap();
+        let topic2 = TopicFilter::new("colors/primary/blue", QoSLevel::QoSLevel0).unwrap();
+        let topic3 = TopicFilter::new("colors/+/blue", QoSLevel::QoSLevel0).unwrap();
         let subscribe = Subscribe::new(vec![topic1, topic2, topic3], 123);
         let publish = Publish::new(
             false,
