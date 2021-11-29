@@ -39,7 +39,8 @@ fn build_config(port: u32) -> Config {
          dump_path=tests/files/dump.txt
          dump_time=10
          log_path=tests/files/logs
-         accounts_path=tests/files/test_accounts.csv",
+         accounts_path=tests/files/test_accounts.csv
+         ip=localhost",
         port
     ));
 

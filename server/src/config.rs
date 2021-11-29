@@ -7,25 +7,31 @@ use std::{
 
 /// Config struct contains information which is needed from a Server
 pub struct Config {
-    /// Port to be connected
-    pub port: u16,
-    /// Path to dump file
-    pub dump_path: String,
-    /// Time interval between two consecutive dump
-    pub dump_time: u32,
-    /// Path to log file
+    port: u16,
+    dump_path: String,
+    dump_time: u32,
     log_path: String,
-    /// Path to file with accounts
-    /// Format: username,password
     accounts_path: String,
+    ip: String,
 }
+
+const PORT_KEY: &str = "port";
+const DUMP_PATH_KEY: &str = "dump_path";
+const DUMP_TIME_KEY: &str = "dump_time";
+const LOG_PATH_KEY: &str = "log_path";
+const ACCOUNTS_PATH_KEY: &str = "accounts_path";
+const IP_KEY: &str = "ip";
+
+//const OUTER_BREAK: &str = "\n";
+const INNER_BREAK: &str = "=";
 
 impl Config {
     /// Returns a Config struct based on the path file
     /// # Arguments
     ///
     /// * `path` - Path file
-    /// Each line of the file must consist of 'field=value' in the following order: port, dump_path, dump_time, log_path
+    /// Each line of the file must consist of 'field=value' in the following order:
+    /// port, dump_path, dump_time, log_path, ip
     ///
     /// # Errors
     /// If the file following the path does not have the correct format, this function returns None
@@ -40,11 +46,12 @@ impl Config {
     pub fn new_from_file(config_file: impl Read) -> Option<Config> {
         let mut buffered = BufReader::new(config_file);
 
-        let port = get_value_from_line(&mut buffered, "port")?;
-        let dump_path = get_value_from_line(&mut buffered, "dump_path")?;
-        let dump_time = get_value_from_line(&mut buffered, "dump_time")?;
-        let log_path = get_value_from_line(&mut buffered, "log_path")?;
-        let accounts_path = get_value_from_line(&mut buffered, "accounts_path")?;
+        let port = get_value_from_line(&mut buffered, PORT_KEY)?;
+        let dump_path = get_value_from_line(&mut buffered, DUMP_PATH_KEY)?;
+        let dump_time = get_value_from_line(&mut buffered, DUMP_TIME_KEY)?;
+        let log_path = get_value_from_line(&mut buffered, LOG_PATH_KEY)?;
+        let accounts_path = get_value_from_line(&mut buffered, ACCOUNTS_PATH_KEY)?;
+        let ip = get_value_from_line(&mut buffered, IP_KEY)?;
 
         let port = port.parse::<u16>().ok()?;
         let dump_time = dump_time.parse::<u32>().ok()?;
@@ -55,32 +62,39 @@ impl Config {
             dump_time,
             log_path,
             accounts_path,
+            ip,
         })
     }
 
-    /// Returns port from Config struct
+    /// Returns the port to be connected
     pub fn port(&self) -> u16 {
         self.port
     }
 
-    /// Returns dump_path from Config struct
+    /// Returns path to the dump file
     pub fn dump_path(&self) -> &str {
         &self.dump_path
     }
 
-    /// Returns dump_time from Config struct
+    /// Returns the time interval between two consecutive dumps
     pub fn dump_time(&self) -> u32 {
         self.dump_time
     }
 
-    /// Returns log_path from Config struct
+    /// Returns the path to the logs directory
     pub fn log_path(&self) -> &str {
         &self.log_path
     }
 
-    /// Returns the accounts_path from Config struct
+    /// Returns the path to CSV file with the accounts
+    /// Format: username,password
     pub fn accounts_path(&self) -> &str {
         &self.accounts_path
+    }
+
+    /// Returns the IP address of the server
+    pub fn ip(&self) -> &str {
+        &self.ip
     }
 }
 
@@ -91,7 +105,7 @@ where
     let mut buf = String::new();
 
     buffered.read_line(&mut buf).ok()?;
-    let key_value = buf.trim().split('=').collect::<Vec<&str>>();
+    let key_value = buf.trim().split(INNER_BREAK).collect::<Vec<&str>>();
     if key_value.len() != 2 {
         return None;
     }
@@ -116,7 +130,8 @@ mod tests {
 dump_path=foo.txt
 dump_time=10
 log_path=bar.txt
-accounts_path=baz.csv",
+accounts_path=baz.csv
+ip=localhost",
         );
 
         let config = Config::new_from_file(cursor).unwrap();
@@ -134,7 +149,8 @@ accounts_path=baz.csv",
 dump_path=foo.txt
 dump_time=10
 log_path=bar.txt
-accounts_path=baz.csv",
+accounts_path=baz.csv
+ip=localhost",
         );
 
         assert!(Config::new_from_file(cursor).is_none());
@@ -147,7 +163,8 @@ accounts_path=baz.csv",
 dump_time=10
 dump_path=foo.txt
 log_path=bar.txt
-accounts_path=baz.csv",
+accounts_path=baz.csv
+ip=localhost",
         );
 
         assert!(Config::new_from_file(cursor).is_none());
@@ -160,7 +177,8 @@ accounts_path=baz.csv",
 dump_path=foo.txt
 dump_time=10
 log_path=bar.txt
-accounts_path=baz.csv",
+accounts_path=baz.csv
+ip=localhost",
         );
 
         assert!(Config::new_from_file(cursor).is_none());

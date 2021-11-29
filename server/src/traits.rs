@@ -24,7 +24,7 @@ pub trait BidirectionalStream: Read + Write + Send + Sync + 'static {
 }
 
 pub trait ClientAccepter<S> {
-    fn new(port: u16) -> io::Result<Self>
+    fn new(ip: &str, port: u16) -> io::Result<Self>
     where
         Self: Sized;
 

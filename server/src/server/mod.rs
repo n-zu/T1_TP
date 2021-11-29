@@ -130,8 +130,8 @@ where
 {
     /// Creates and returns a server in a valid state
     pub fn new(config: Config, threadpool_size: usize) -> Arc<Self> {
-        info!("Iniciando servidor en localhost: {}", config.port());
-        let client_accepter = A::new(config.port()).unwrap();
+        info!("Iniciando servidor en {}:{}", config.ip(), config.port());
+        let client_accepter = A::new(config.ip(), config.port()).unwrap();
         Arc::new(Self {
             clients_manager: RwLock::new(ClientsManager::new(config.accounts_path())),
             config,
@@ -432,11 +432,11 @@ impl BidirectionalStream for TcpStream {
 }
 
 impl ClientAccepter<TcpStream> for TcpListener {
-    fn new(port: u16) -> io::Result<Self>
+    fn new(ip: &str, port: u16) -> io::Result<Self>
     where
         Self: Sized,
     {
-        let listener = Self::bind(format!("localhost:{}", port))?;
+        let listener = Self::bind(format!("{}:{}", ip, port))?;
         listener.set_nonblocking(true)?;
         Ok(listener)
     }
