@@ -3,6 +3,7 @@
 use crate::{
     helpers::{build_control_byte, PacketType},
     packet_error::{PacketError, PacketResult},
+    packet_reader::RemainingLength,
     traits::{MQTTBytes, MQTTEncoding},
     utf8::Field,
 };
@@ -20,35 +21,6 @@ const PACKET_TYPE_SHIFT: u8 = 4;
 pub struct ConnectBuilder {
     #[doc(hidden)]
     connect: Connect,
-}
-
-/// Non negative integer codification algorithm for
-/// variable_length, according to MQTT V3.1.1 protocol
-fn encode_len(len: u32) -> MQTTBytes {
-    let mut len = len;
-    let mut encoded_len = 0;
-    while len > 0 {
-        let mut encoded_byte = len % 128;
-        len /= 128;
-        if len > 0 {
-            encoded_byte |= 128;
-        }
-        encoded_len <<= 8;
-        encoded_len |= encoded_byte;
-    }
-    let mut bytes_vec = vec![];
-    let bytes = encoded_len.to_be_bytes();
-    let mut i = 0;
-    // Salteo bytes que son 0 en caso de que la
-    // codificacion no haya usado los 4 bytes
-    while bytes[i] == 0 {
-        i += 1;
-    }
-    while i < ENCODED_LEN_MAX_BYTES {
-        bytes_vec.push(bytes[i]);
-        i += 1
-    }
-    bytes_vec
 }
 
 impl MQTTEncoding for Connect {
@@ -131,7 +103,7 @@ impl Connect {
     fn fixed_header(&self) -> PacketResult<MQTTBytes> {
         let mut fixed_header = vec![];
         let remaining_len = self.variable_header().len() + self.payload()?.len();
-        let mut remaining_len = encode_len(remaining_len as u32);
+        let mut remaining_len = RemainingLength::from_uncoded(remaining_len)?.encode();
         let control_byte = build_control_byte(PacketType::Connect, RESERVED_BITS);
         fixed_header.push(control_byte);
         fixed_header.append(&mut remaining_len);

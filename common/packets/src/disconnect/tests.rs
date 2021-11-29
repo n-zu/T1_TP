@@ -1,6 +1,6 @@
 use std::{io::Cursor, vec};
 
-use crate::{disconnect::Disconnect, traits::MQTTDecoding};
+use crate::{disconnect::Disconnect, traits::MQTTDecoding, traits::MQTTEncoding};
 
 // server_side tests
 #[test]
@@ -47,7 +47,7 @@ fn test_invalid_reserved_bytes() {
 #[test]
 fn test_control_byte() {
     let packet = Disconnect::new();
-    let control_byte = packet.encode()[0];
+    let control_byte = packet.encode().unwrap()[0];
     let expected_control_byte = 0b11100000;
     assert_eq!(control_byte, expected_control_byte);
 }
@@ -55,7 +55,7 @@ fn test_control_byte() {
 #[test]
 fn test_remaining_length_should_be_zero() {
     let packet = Disconnect::new();
-    let remaining_length = packet.encode()[1];
+    let remaining_length = packet.encode().unwrap()[1];
     let expected_control_byte = 0;
     assert_eq!(remaining_length, expected_control_byte);
 }
@@ -63,6 +63,6 @@ fn test_remaining_length_should_be_zero() {
 #[test]
 fn test_packet_should_be_two_bytes_long() {
     let packet = Disconnect::new();
-    let encoded = packet.encode();
+    let encoded = packet.encode().unwrap();
     assert_eq!(encoded.len(), 2);
 }
