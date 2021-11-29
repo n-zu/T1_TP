@@ -11,9 +11,10 @@ impl MQTTEncoding for Puback {
     /// # Examples
     /// ```
     /// use packets::puback::Puback;
+    /// use crate::packets::traits::MQTTEncoding;
     ///
     /// let puback = Puback::new(1).unwrap();
-    /// let result = puback.encode();
+    /// let result = puback.encode().unwrap();
     /// let expected: Vec<u8> = vec![0b01000000, 0b10, 0b0, 0b1];
     /// assert_eq!(expected, result)
     /// ```
@@ -45,24 +46,6 @@ impl Puback {
             ));
         }
         Ok(())
-    }
-
-    /// Encodes a Puback packet into its bytes representation following MQTT 3.1.1 protocol
-    ///
-    /// # Examples
-    /// ```
-    /// use packets::puback::Puback;
-    ///
-    /// let puback = Puback::new(1).unwrap();
-    /// let result = puback.encode();
-    /// let expected: Vec<u8> = vec![0b01000000, 0b10, 0b0, 0b1];
-    /// assert_eq!(expected, result)
-    /// ```
-    pub fn encode(&self) -> Vec<u8> {
-        let mut bytes: Vec<u8> = vec![];
-        bytes.append(&mut self.fixed_header());
-        bytes.append(&mut self.variable_header());
-        bytes
     }
 
     #[doc(hidden)]

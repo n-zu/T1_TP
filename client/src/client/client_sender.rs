@@ -69,7 +69,7 @@ impl<T: Observer, W: Write> ClientSender<T, W> {
 
     #[doc(hidden)]
     fn _puback(&self, puback: Puback) -> Result<(), ClientError> {
-        self.stream.lock()?.write_all(&puback.encode())?;
+        self.stream.lock()?.write_all(&puback.encode()?)?;
         Ok(())
     }
 
@@ -216,7 +216,7 @@ impl<T: Observer, W: Write> ClientSender<T, W> {
 
     #[doc(hidden)]
     fn _disconnect(&self, disconnect: Disconnect) -> Result<(), ClientError> {
-        self.stream.lock()?.write_all(&disconnect.encode())?;
+        self.stream.lock()?.write_all(&disconnect.encode()?)?;
         Ok(())
     }
 
@@ -654,7 +654,7 @@ mod tests {
 
         client_sender.send_disconnect();
 
-        assert_eq!(stream.content(), Disconnect::new().encode());
+        assert_eq!(stream.content(), Disconnect::new().encode().unwrap());
         // Debería haber escrito el disconnect en el stream
 
         assert!(observer.messages.lock().unwrap().is_empty());
@@ -838,7 +838,7 @@ mod tests {
     #[test]
     fn test_send_puback() {
         let puback = Puback::new(123).unwrap();
-        let bytes = puback.encode();
+        let bytes = puback.encode().unwrap();
 
         let observer = ObserverMock::new();
         let stream = Cursor::new();
