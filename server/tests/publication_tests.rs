@@ -192,7 +192,9 @@ fn test_subscription_different_clients_persistent_session() {
     let suback = Suback::read_from(&mut stream_1, control[0]).unwrap();
     assert_eq!(suback.packet_id(), 123);
 
-    stream_1.write_all(&Disconnect::new().encode()).unwrap();
+    stream_1
+        .write_all(&Disconnect::new().encode().unwrap())
+        .unwrap();
     drop(stream_1); // Debería recordar al usuario
 
     // Mando publish con QoS1

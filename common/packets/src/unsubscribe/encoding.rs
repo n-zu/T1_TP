@@ -33,7 +33,7 @@ impl Unsubscribe {
     ///
     /// This functions returns PacketError if:
     /// - packet_id is zero
-    pub fn new(packet_id: u16, topic_filters: Vec<String>) -> PacketResult<Unsubscribe> {
+    pub fn new(packet_id: u16, topic_filters: Vec<Topic>) -> PacketResult<Unsubscribe> {
         Self::verify_packet_id(&packet_id)?;
         Ok(Self {
             packet_id,
@@ -79,7 +79,7 @@ impl Unsubscribe {
     fn payload(&self) -> PacketResult<Vec<u8>> {
         let mut payload_buffer = Vec::new();
         for topic in &self.topic_filters {
-            let field = Field::new_from_string(topic)?;
+            let field = Field::new_from_string(topic.name())?;
             let mut field_encoded = field.encode();
             payload_buffer.append(&mut field_encoded);
         }

@@ -36,7 +36,7 @@ impl Subscribe {
     ///
     /// # Errors
     ///
-    /// Allowed return codes are 0x00, 0x01, 0x80. If a return code doesn't match any of those, this function returns a [ErrorKind::InvalidReturnCode]
+    /// Allowed return codes are 0x00, 0x01, 0x80. If a return code doesn't match any of those, this function returns a [crate::packet_error::ErrorKind::InvalidReturnCode]
     pub fn response(&self) -> PacketResult<Suback> {
         let mut return_codes = Vec::new();
         for topic in &self.topics {

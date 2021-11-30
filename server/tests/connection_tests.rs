@@ -65,7 +65,9 @@ fn test_connect_present_after_reconnection() {
     assert_eq!(connack, connack_expected);
 
     // Me desconecto
-    stream.write_all(&Disconnect::new().encode()).unwrap();
+    stream
+        .write_all(&Disconnect::new().encode().unwrap())
+        .unwrap();
 
     connect_builder = ConnectBuilder::new("id", 0, false).unwrap();
     stream = connect_client(connect_builder, true, port, false);

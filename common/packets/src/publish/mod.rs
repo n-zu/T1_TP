@@ -49,7 +49,7 @@ impl Publish {
     pub fn dup_flag(&self) -> bool {
         self.dup_flag
     }
-    /// Gets payload from a Publish packet
+    /// Gets the payload from a Publish packet
     pub fn payload(&self) -> Option<&String> {
         self.payload.as_ref()
     }
