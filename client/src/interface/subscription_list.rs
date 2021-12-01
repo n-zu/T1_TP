@@ -4,7 +4,7 @@ use gtk::{
     prelude::{ButtonExt, ContainerExt, EntryExt, WidgetExt},
     Box, Button, Entry, IconSize, Label, ListBox, Orientation, Widget,
 };
-use packets::{qos::QoSLevel, topic::Topic};
+use packets::{qos::QoSLevel, topic_filter::TopicFilter};
 
 pub struct SubscriptionList {
     list: ListBox,
@@ -32,14 +32,14 @@ impl SubscriptionList {
     }
 
     /// Removes the given topics from the SubsList and updates the view accordingly
-    pub fn remove_subs(&mut self, topics: &[Topic]) {
+    pub fn remove_subs(&mut self, topics: &[TopicFilter]) {
         for topic in topics {
             self.remove_sub(topic.name());
         }
     }
 
     /// Adds the given topics to the SubsList and updates the view accordingly
-    pub fn add_subs(&mut self, topics: &[Topic]) {
+    pub fn add_subs(&mut self, topics: &[TopicFilter]) {
         for topic in topics {
             self.add_sub(topic.name(), topic.qos());
         }

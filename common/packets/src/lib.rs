@@ -11,7 +11,7 @@ pub mod publish;
 pub mod qos;
 pub mod suback;
 pub mod subscribe;
-pub mod topic;
+pub mod topic_filter;
 pub mod traits;
 pub mod unsuback;
 pub mod unsubscribe;

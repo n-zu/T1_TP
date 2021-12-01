@@ -1,5 +1,5 @@
 use crate::packet_error::{ErrorKind, PacketError, PacketResult};
-use crate::topic::Topic;
+use crate::topic_filter::TopicFilter;
 
 mod decoding;
 mod encoding;
@@ -16,7 +16,7 @@ const RESERVED_BITS: u8 = 0;
 /// to confirm receipt of an UNSUBSCRIBE Packet.
 pub struct Unsuback {
     packet_id: u16,
-    topics: Vec<Topic>,
+    topics: Vec<TopicFilter>,
 }
 
 impl Unsuback {
@@ -26,12 +26,12 @@ impl Unsuback {
     }
 
     /// Set the unsuback's subscribe topics
-    pub fn set_topics(&mut self, topics: Vec<Topic>) {
+    pub fn set_topics(&mut self, topics: Vec<TopicFilter>) {
         self.topics = topics;
     }
 
     /// Get the unsuback's subscribe topics
-    pub fn topics(&self) -> &Vec<Topic> {
+    pub fn topics(&self) -> &Vec<TopicFilter> {
         &self.topics
     }
 

@@ -30,7 +30,7 @@ impl MQTTDecoding for Unsubscribe {
         check_reserved_bits(control_byte, RESERVED_BITS)?;
         let mut remaining_bytes = packet_reader::read_remaining_bytes(bytes)?;
         let packet_id = Self::read_packet_id(&mut remaining_bytes);
-        let mut topic_filters: Vec<Topic> = Vec::new();
+        let mut topic_filters: Vec<TopicFilter> = Vec::new();
         Self::read_topic_filters(&mut remaining_bytes, &mut topic_filters)?;
         Ok(Unsubscribe {
             packet_id,
@@ -50,11 +50,11 @@ impl Unsubscribe {
     #[doc(hidden)]
     fn read_topic_filters(
         bytes: &mut impl Read,
-        topic_filters_buffer: &mut Vec<Topic>,
+        topic_filters_buffer: &mut Vec<TopicFilter>,
     ) -> PacketResult<()> {
         while let Some(topic_filter) = Field::new_from_stream(bytes) {
             Self::verify_at_least_one_character_long_topic_filter(&topic_filter)?;
-            topic_filters_buffer.push(Topic::new(&topic_filter.value, QoSLevel::QoSLevel0)?);
+            topic_filters_buffer.push(TopicFilter::new(&topic_filter.value, QoSLevel::QoSLevel0)?);
         }
 
         if topic_filters_buffer.is_empty() {

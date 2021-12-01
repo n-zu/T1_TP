@@ -3,19 +3,19 @@ use crate::qos::QoSLevel;
 use crate::utf8::Field;
 
 #[derive(Debug, Clone)]
-pub struct Topic {
+pub struct TopicFilter {
     /// Topic for a subscribe packet
     name: Field,
     qos: QoSLevel,
 }
 
-impl Topic {
+impl TopicFilter {
     /// Creates a new topic
     /// Returns PacketError if the topic name is invalid
-    pub fn new(name: &str, qos: QoSLevel) -> PacketResult<Topic> {
-        Topic::check_valid_topic_name(name)?;
+    pub fn new(name: &str, qos: QoSLevel) -> PacketResult<TopicFilter> {
+        TopicFilter::check_valid_topic_name(name)?;
 
-        Ok(Topic {
+        Ok(TopicFilter {
             name: Field::new_from_string(name)?,
             qos,
         })
@@ -96,59 +96,59 @@ mod tests {
 
     #[test]
     fn test_topic_new() {
-        let topic = Topic::new("test", QoSLevel::QoSLevel0).unwrap();
+        let topic = TopicFilter::new("test", QoSLevel::QoSLevel0).unwrap();
         assert_eq!(topic.name(), "test");
         assert_eq!(topic.qos(), QoSLevel::QoSLevel0);
     }
 
     #[test]
     fn test_invalid_topic_name_empty() {
-        let topic = Topic::new("", QoSLevel::QoSLevel0);
+        let topic = TopicFilter::new("", QoSLevel::QoSLevel0);
         assert!(topic.is_err());
     }
 
     #[test]
     fn test_invalid_topic_name_multilevel_wildcard() {
-        let topic = Topic::new("hello/#/rs", QoSLevel::QoSLevel0);
+        let topic = TopicFilter::new("hello/#/rs", QoSLevel::QoSLevel0);
         assert!(topic.is_err());
 
-        let topic = Topic::new("hello/rs#", QoSLevel::QoSLevel0);
+        let topic = TopicFilter::new("hello/rs#", QoSLevel::QoSLevel0);
         assert!(topic.is_err());
     }
 
     #[test]
     fn test_invalid_topic_name_singlelevel_wildcard() {
-        let topic = Topic::new("hello/+", QoSLevel::QoSLevel0);
+        let topic = TopicFilter::new("hello/+", QoSLevel::QoSLevel0);
         assert!(topic.is_ok());
 
-        let topic = Topic::new("hello+/rs", QoSLevel::QoSLevel0);
+        let topic = TopicFilter::new("hello+/rs", QoSLevel::QoSLevel0);
         assert!(topic.is_err());
 
-        let topic = Topic::new("+hello/rs", QoSLevel::QoSLevel0);
+        let topic = TopicFilter::new("+hello/rs", QoSLevel::QoSLevel0);
         assert!(topic.is_err());
 
-        let topic = Topic::new("he+llo/rs", QoSLevel::QoSLevel0);
+        let topic = TopicFilter::new("he+llo/rs", QoSLevel::QoSLevel0);
         assert!(topic.is_err());
     }
 
     #[test]
     fn test_valid_topic_name() {
-        let _ = Topic::new("hello/#", QoSLevel::QoSLevel0).unwrap();
+        let _ = TopicFilter::new("hello/#", QoSLevel::QoSLevel0).unwrap();
 
-        let _ = Topic::new("hello/+/world", QoSLevel::QoSLevel0).unwrap();
+        let _ = TopicFilter::new("hello/+/world", QoSLevel::QoSLevel0).unwrap();
 
-        let _ = Topic::new("hello////moto", QoSLevel::QoSLevel0).unwrap();
+        let _ = TopicFilter::new("hello////moto", QoSLevel::QoSLevel0).unwrap();
 
-        let _ = Topic::new("hello/l/l/l/l/l/l/l", QoSLevel::QoSLevel0).unwrap();
+        let _ = TopicFilter::new("hello/l/l/l/l/l/l/l", QoSLevel::QoSLevel0).unwrap();
 
-        let _ = Topic::new("+", QoSLevel::QoSLevel0).unwrap();
+        let _ = TopicFilter::new("+", QoSLevel::QoSLevel0).unwrap();
 
-        let _ = Topic::new("#", QoSLevel::QoSLevel0).unwrap();
+        let _ = TopicFilter::new("#", QoSLevel::QoSLevel0).unwrap();
 
-        let _ = Topic::new("_/+/+//#", QoSLevel::QoSLevel0).unwrap();
+        let _ = TopicFilter::new("_/+/+//#", QoSLevel::QoSLevel0).unwrap();
 
-        let _ = Topic::new("+/+/+/#", QoSLevel::QoSLevel0).unwrap();
+        let _ = TopicFilter::new("+/+/+/#", QoSLevel::QoSLevel0).unwrap();
 
-        let _ = Topic::new("+/+/+/+", QoSLevel::QoSLevel0).unwrap();
+        let _ = TopicFilter::new("+/+/+/+", QoSLevel::QoSLevel0).unwrap();
     }
 }

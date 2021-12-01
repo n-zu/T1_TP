@@ -314,7 +314,7 @@ mod tests {
         connect::ConnectBuilder, disconnect::Disconnect, pingreq::PingReq, qos::QoSLevel,
         subscribe::Subscribe, traits::MQTTEncoding, unsubscribe::Unsubscribe,
     };
-    use packets::{puback::Puback, publish::Publish, topic::Topic};
+    use packets::{puback::Puback, publish::Publish, topic_filter::TopicFilter};
 
     use super::ClientSender;
 
@@ -454,7 +454,7 @@ mod tests {
 
     #[test]
     fn test_subscribe() {
-        let topic = Topic::new("cars/wheels", QoSLevel::QoSLevel0).unwrap();
+        let topic = TopicFilter::new("cars/wheels", QoSLevel::QoSLevel0).unwrap();
         let subscribe = Subscribe::new(vec![topic], 123);
         let bytes = subscribe.encode().unwrap();
 
@@ -490,7 +490,7 @@ mod tests {
 
     #[test]
     fn test_subscribe_fail() {
-        let topic = Topic::new("cars/wheels", QoSLevel::QoSLevel0).unwrap();
+        let topic = TopicFilter::new("cars/wheels", QoSLevel::QoSLevel0).unwrap();
         let subscribe = Subscribe::new(vec![topic], 123);
         let bytes = subscribe.encode().unwrap();
 
@@ -519,7 +519,7 @@ mod tests {
     fn test_unsubscribe() {
         let unsubscribe = Unsubscribe::new(
             123,
-            vec![Topic::new("car/wheels", QoSLevel::QoSLevel0).unwrap()],
+            vec![TopicFilter::new("car/wheels", QoSLevel::QoSLevel0).unwrap()],
         )
         .unwrap();
         let bytes = unsubscribe.encode().unwrap();
@@ -558,7 +558,7 @@ mod tests {
     fn test_unsubscribe_fail() {
         let unsubscribe = Unsubscribe::new(
             123,
-            vec![Topic::new("car/wheels", QoSLevel::QoSLevel0).unwrap()],
+            vec![TopicFilter::new("car/wheels", QoSLevel::QoSLevel0).unwrap()],
         )
         .unwrap();
         let bytes = unsubscribe.encode().unwrap();

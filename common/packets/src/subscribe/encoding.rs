@@ -5,7 +5,7 @@ use crate::{
     helpers::{build_control_byte, PacketType},
     packet_error::PacketResult,
     packet_reader::RemainingLength,
-    topic::Topic,
+    topic_filter::TopicFilter,
     traits::{MQTTBytes, MQTTEncoding},
 };
 
@@ -40,7 +40,7 @@ impl MQTTEncoding for Subscribe {
 
 impl Subscribe {
     /// Creates a new subscribe packet
-    pub fn new(topics: Vec<Topic>, packet_identifier: u16) -> Subscribe {
+    pub fn new(topics: Vec<TopicFilter>, packet_identifier: u16) -> Subscribe {
         Subscribe {
             topics,
             packet_identifier,
