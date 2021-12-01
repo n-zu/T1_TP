@@ -14,6 +14,7 @@ pub enum ErrorKind {
     ErrorAtReadingPacket,
     TopicNameMustBeAtLeastOneCharacterLong,
     TopicNameMustNotHaveWildcards,
+    InvalidTopicName,
     InvalidReturnCode,
     WouldBlock,
     UnexpectedEof,

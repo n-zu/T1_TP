@@ -152,7 +152,8 @@ impl<T: Observer, R: ReadTimeout, A: AckSender> ClientListener<T, R, A> {
             }
             Err(err)
                 if (err.kind() == io::ErrorKind::TimedOut
-                    || err.kind() == io::ErrorKind::WouldBlock) =>
+                    || err.kind() == io::ErrorKind::WouldBlock)
+                    || self.stop.load(Ordering::Relaxed) =>
             {
                 Ok(())
             }
@@ -183,7 +184,7 @@ impl<T: Observer, R: ReadTimeout, A: AckSender> ClientListener<T, R, A> {
     #[doc(hidden)]
     fn handle_publish(&mut self, header: u8) -> Result<(), ClientError> {
         let publish = Publish::read_from(&mut self.stream, header)?;
-        let id_opt = publish.packet_id().cloned();
+        let id_opt = publish.packet_id();
         self.observer.update(Message::Publish(publish));
 
         // Si tiene id no es QoS 0
@@ -262,7 +263,7 @@ impl<T: Observer, R: ReadTimeout, A: AckSender> ClientListener<T, R, A> {
 
         if let Some(PendingAck::Publish(publish)) = lock.as_ref() {
             if let Some(expected_id) = publish.packet_id() {
-                if *expected_id == puback.packet_id() {
+                if expected_id == puback.packet_id() {
                     lock.take();
                     self.observer.update(Message::Published(Ok(Some(puback))));
                 }
@@ -546,7 +547,7 @@ mod tests {
             Publish::new(false, QoSLevel1, false, "topic", "msg", Some(123)).unwrap(),
         ))));
         let stop = Arc::new(AtomicBool::new(false));
-        let stream = Cursor::new(Puback::new(123).unwrap().encode());
+        let stream = Cursor::new(Puback::new(123).unwrap().encode().unwrap());
         let mut listener = ClientListener::new(
             stream,
             pending_ack.clone(),
@@ -572,7 +573,7 @@ mod tests {
             Publish::new(false, QoSLevel1, false, "topic", "msg", Some(97)).unwrap(),
         ))));
         let stop = Arc::new(AtomicBool::new(false));
-        let stream = Cursor::new(Puback::new(123).unwrap().encode());
+        let stream = Cursor::new(Puback::new(123).unwrap().encode().unwrap());
         let mut listener = ClientListener::new(
             stream,
             pending_ack.clone(),
@@ -596,7 +597,7 @@ mod tests {
         let observer = ObserverMock::new();
         let pending_ack = Arc::new(Mutex::new(Some(PendingAck::PingReq(PingReq::new()))));
         let stop = Arc::new(AtomicBool::new(false));
-        let stream = Cursor::new(Puback::new(123).unwrap().encode());
+        let stream = Cursor::new(Puback::new(123).unwrap().encode().unwrap());
         let mut listener = ClientListener::new(
             stream,
             pending_ack.clone(),
@@ -625,7 +626,7 @@ mod tests {
             Publish::new(false, QoSLevel0, false, "topic", "msg", None).unwrap(),
         ))));
         let stop = Arc::new(AtomicBool::new(false));
-        let stream = Cursor::new(Puback::new(123).unwrap().encode());
+        let stream = Cursor::new(Puback::new(123).unwrap().encode().unwrap());
         let mut listener = ClientListener::new(
             stream,
             pending_ack.clone(),
@@ -745,7 +746,7 @@ mod tests {
         let mut msgs = observer.messages.lock().unwrap();
         assert!(matches!(msgs[0], Message::Publish(_)));
         if let Message::Publish(publish) = msgs.remove(0) {
-            assert_eq!(publish.packet_id(), Some(&123));
+            assert_eq!(publish.packet_id(), Some(123));
             assert_eq!(publish.topic_name(), "topic");
             assert_eq!(publish.payload(), Some(&"msg".to_string()));
         }

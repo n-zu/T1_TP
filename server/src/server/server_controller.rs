@@ -6,23 +6,29 @@ use super::ServerResult;
 
 pub struct ServerController {
     shutdown_sender: Sender<()>,
-    handle: JoinHandle<()>,
+    handle: Option<JoinHandle<()>>,
 }
 
 impl ServerController {
     pub fn new(shutdown_sender: Sender<()>, handle: JoinHandle<()>) -> ServerController {
         ServerController {
             shutdown_sender,
-            handle,
+            handle: Some(handle),
         }
     }
 
-    pub fn shutdown(self) -> ServerResult<()> {
+    fn shutdown(&mut self) -> ServerResult<()> {
         self.shutdown_sender.send(())?;
-        match self.handle.join() {
-            Ok(()) => debug!("El thread del servidor fue joineado normalmente (sin panic)"),
+        match self.handle.take().unwrap().join() {
+            Ok(()) => debug!("El thread del servidor fue joineado normalmente"),
             Err(err) => debug!("El thread del servidor fue joineado con panic: {:?}", err),
         }
         Ok(())
+    }
+}
+
+impl Drop for ServerController {
+    fn drop(&mut self) {
+        self.shutdown().expect("Error al cerrar el servidor");
     }
 }

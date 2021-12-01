@@ -11,3 +11,4 @@ tracing-subscriber = "0.3.1"
 tracing = "0.1.29"
 tracing-appender = "0.2"
 threadpool = { path = "../common/threadpool" }
+rand = "0.8.4"

@@ -11,6 +11,7 @@ use crate::client::{Client, ClientError};
 
 use gtk::prelude::{ComboBoxTextExt, SwitchExt};
 
+use gtk::glib::GString;
 use gtk::{
     prelude::{BuilderExtManual, ButtonExt, EntryExt, TextBufferExt},
     Builder, Button, Entry, Switch, TextBuffer,
@@ -128,7 +129,7 @@ impl Controller {
         let connect = self._create_connect_packet()?;
         let sub_box: ListBox = self.builder.object("sub_subs").unwrap();
         let unsub_entry: Entry = self.builder.object("unsub_top").unwrap();
-        let subs_list = Rc::new(SubscriptionList::new(sub_box, unsub_entry));
+        let subs_list = SubscriptionList::new(sub_box, unsub_entry);
         let observer = ClientObserver::new(self.builder.clone(), subs_list);
         let client = Client::new(&full_addr, observer, connect)?;
 
@@ -149,7 +150,7 @@ impl Controller {
         let clean_session_switch: Switch = self.builder.object("con_cs").unwrap();
         let last_will_retain_switch: Switch = self.builder.object("con_lw_ret").unwrap();
         let last_will_topic_entry: Entry = self.builder.object("con_lw_top").unwrap();
-        let last_will_msg_entry: Entry = self.builder.object("con_lw_msg").unwrap();
+        let last_will_msg_entry: TextBuffer = self.builder.object("con_lw_txtbuffer").unwrap();
         let last_will_qos_entry: ComboBoxText = self.builder.object("con_lw_qos").unwrap();
 
         // Get the values from the entries
@@ -164,7 +165,14 @@ impl Controller {
         let clean_session = clean_session_switch.is_active();
         let last_will_retain = last_will_retain_switch.is_active();
         let last_will_topic = last_will_topic_entry.text().to_string();
-        let last_will_msg = last_will_msg_entry.text().to_string();
+        let last_will_msg = last_will_msg_entry
+            .text(
+                &last_will_msg_entry.start_iter(),
+                &last_will_msg_entry.end_iter(),
+                false,
+            )
+            .unwrap_or_else(|| GString::from(""))
+            .to_string();
         let last_will_qos = last_will_qos_entry
             .active_text()
             .unwrap()
@@ -387,7 +395,7 @@ impl Controller {
         self.set_text_to_entry_box("con_psw", "");
         self.set_text_to_entry_box("con_ka", "0");
         self.set_text_to_entry_box("con_lw_top", "");
-        self.set_text_to_entry_box("con_lw_msg", "");
+        self.set_buffer_to_text_buffer("con_lw_txtbuffer", "");
         self.set_state_to_switch_box("con_cs", false);
         self.set_state_to_switch_box("con_lw_ret", false);
     }
@@ -399,6 +407,7 @@ impl Controller {
         self.set_state_to_switch_box("pub_ret", false);
         self.set_text_to_entry_box("sub_top", "top/sub");
         self.set_text_to_entry_box("unsub_top", "top/sub");
+        self.set_buffer_to_text_buffer("pub_mg_txtbuffer", "");
         self.remove_all_children_from_listbox("sub_subs");
         self.remove_all_children_from_listbox("sub_msgs");
     }

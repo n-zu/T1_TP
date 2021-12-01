@@ -1,9 +1,7 @@
-use std::rc::Rc;
-
 use gtk::{
     glib,
-    prelude::{BuilderExtManual, ContainerExt, WidgetExt},
-    Box, Builder, Label, ListBox, ListBoxRow, Orientation,
+    prelude::{BuilderExtManual, ButtonExt, ContainerExt, WidgetExt},
+    Box, Builder, Button, Label, ListBox, ListBoxRow, Orientation,
 };
 use packets::{connack::Connack, qos::QoSLevel, unsuback::Unsuback};
 use packets::{puback::Puback, publish::Publish, suback::Suback};
@@ -36,9 +34,9 @@ impl Observer for ClientObserver {
 impl ClientObserver {
     /// Creates a new ClientObserver with the given Builder
     /// of the interface
-    pub fn new(builder: Builder, subs: Rc<SubscriptionList>) -> ClientObserver {
+    pub fn new(builder: Builder, subs: SubscriptionList) -> ClientObserver {
         let (sender, receiver) = glib::MainContext::channel(glib::PRIORITY_DEFAULT);
-        let internal = InternalObserver::new(builder, subs);
+        let mut internal = InternalObserver::new(builder, subs);
         receiver.attach(None, move |message: Message| {
             internal.message_receiver(message);
             glib::Continue(true)
@@ -52,7 +50,7 @@ impl ClientObserver {
 /// the interface's Builder and runs in the main GKT thread
 struct InternalObserver {
     builder: Builder,
-    subs: Rc<SubscriptionList>,
+    subs: SubscriptionList,
 }
 
 impl InterfaceUtils for InternalObserver {
@@ -64,13 +62,13 @@ impl InterfaceUtils for InternalObserver {
 impl InternalObserver {
     /// Creates a new InternalObserver with the given
     /// interface builder
-    fn new(builder: Builder, subs: Rc<SubscriptionList>) -> Self {
+    fn new(builder: Builder, subs: SubscriptionList) -> Self {
         Self { builder, subs }
     }
 
     /// Receives a message and updates the interface
     /// accordingly
-    fn message_receiver(&self, message: Message) {
+    fn message_receiver(&mut self, message: Message) {
         match message {
             Message::Publish(publish) => {
                 self.add_publish(publish);
@@ -92,13 +90,15 @@ impl InternalObserver {
                     "Error interno: {}\n\nSe recomienda reiniciar el cliente",
                     error
                 ));
+                let dis: Button = self.builder().object("discon_btn").unwrap();
+                dis.clicked();
             }
         }
     }
 
     /// Re-enables the interface and shows information
     /// about the result of the subscribe operation
-    fn subscribed(&self, result: Result<Suback, ClientError>) {
+    fn subscribed(&mut self, result: Result<Suback, ClientError>) {
         self.sensitive(true);
         match result {
             Ok(suback) => {
@@ -115,7 +115,7 @@ impl InternalObserver {
 
     /// Re-enables the interface and shows information
     /// about the result of the publish operation
-    fn published(&self, result: Result<Option<Puback>, ClientError>) {
+    fn published(&mut self, result: Result<Option<Puback>, ClientError>) {
         self.sensitive(true);
         if let Err(e) = result {
             self.icon(Icon::Error);
@@ -127,7 +127,7 @@ impl InternalObserver {
     }
 
     /// Adds a new received publish packet to the feed
-    fn add_publish(&self, publish: Publish) {
+    fn add_publish(&mut self, publish: Publish) {
         let list: ListBox = self.builder.object("sub_msgs").unwrap();
 
         let row = ListBoxRow::new();
@@ -144,7 +144,7 @@ impl InternalObserver {
     /// Re-enables the interface and shows information
     /// about the result of the connect operation. If
     /// it succeed it switches to the connected/content menu
-    fn connected(&self, result: Result<Connack, ClientError>) {
+    fn connected(&mut self, result: Result<Connack, ClientError>) {
         if let Err(e) = result {
             self.connection_info(None);
             self.sensitive(true);
@@ -159,7 +159,7 @@ impl InternalObserver {
 
     /// Re-enables the interfaces and shows information
     /// about the result of the unsubscribe operation
-    fn unsubscribed(&self, result: Result<Unsuback, ClientError>) {
+    fn unsubscribed(&mut self, result: Result<Unsuback, ClientError>) {
         self.sensitive(true);
         match result {
             Ok(unsuback) => {

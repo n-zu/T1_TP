@@ -13,16 +13,3 @@ pub trait MQTTDecoding {
     where
         Self: Sized;
 }
-
-/*
-pub trait PacketVisitor {
-    fn visit(self, server: impl PacketAccepter);
-}
-
-pub trait PacketAccepter {
-    fn accept_publish(&self, publish: Publish);
-    fn accept_puback(&self, puback: Puback);
-    fn accept_subscribe(&self, subscribe: Subscribe);
-    fn accept_suback(&self, suback: Suback);
-}
-*/
