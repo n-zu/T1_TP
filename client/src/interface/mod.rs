@@ -9,9 +9,8 @@ use crate::interface::client_observer::ClientObserver;
 
 use crate::client::{Client, ClientError};
 
-use gtk::prelude::{ComboBoxTextExt, SwitchExt};
-
 use gtk::glib::GString;
+use gtk::prelude::{ComboBoxTextExt, SwitchExt};
 use gtk::{
     prelude::{BuilderExtManual, ButtonExt, EntryExt, TextBufferExt},
     Builder, Button, Entry, Switch, TextBuffer,
@@ -120,10 +119,17 @@ impl Controller {
     fn _connect(&self) -> Result<(), ClientError> {
         let address_entry: Entry = self.builder.object("con_host").unwrap();
         let port_entry: Entry = self.builder.object("con_port").unwrap();
+        let con_user_entry: Entry = self.builder.object("con_usr").unwrap();
+        let con_client_id_entry: Entry = self.builder.object("con_cli").unwrap();
         let full_addr = format!(
             "{}:{}",
             &address_entry.text().to_string(),
             &port_entry.text().to_string()
+        );
+        let full_client = format!(
+            "Usuario: {} - ID Cliente: {}",
+            con_user_entry.text().to_string(),
+            con_client_id_entry.text().to_string()
         );
 
         let connect = self._create_connect_packet()?;
@@ -133,7 +139,10 @@ impl Controller {
         let observer = ClientObserver::new(self.builder.clone(), subs_list);
         let client = Client::new(&full_addr, observer, connect)?;
 
-        self.connection_info(Some(&format!("Conectado a {}", full_addr)));
+        self.connection_info(Some(&format!(
+            "Conectado a {} ({})",
+            full_addr, full_client
+        )));
         self.client.lock()?.replace(client);
 
         Ok(())
