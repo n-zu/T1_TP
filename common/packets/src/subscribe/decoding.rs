@@ -26,7 +26,7 @@ impl MQTTDecoding for Subscribe {
             let mut qos_buf = [0; 1];
             bytes.read_exact(&mut qos_buf)?;
 
-            topics.push(Topic::new(&field.value, Self::get_qos(qos_buf[0])?)?);
+            topics.push(TopicFilter::new(&field.value, Self::get_qos(qos_buf[0])?)?);
         }
 
         if topics.is_empty() {

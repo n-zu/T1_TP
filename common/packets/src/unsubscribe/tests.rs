@@ -99,7 +99,7 @@ fn test_valid_unsubscribe_packet_with_two_topics() {
 
 #[test]
 fn unsubscribe_packet_with_packet_id_0_should_raise_protocol_error() {
-    let topics = vec![Topic::new("temperatura/Argentina", QoSLevel::QoSLevel0).unwrap()];
+    let topics = vec![TopicFilter::new("temperatura/Argentina", QoSLevel::QoSLevel0).unwrap()];
     let result = Unsubscribe::new(0, topics).unwrap_err();
     let expected_error = PacketError::new_kind(MSG_INVALID_PACKET_ID, ErrorKind::InvalidProtocol);
     assert_eq!(result, expected_error)
@@ -107,7 +107,7 @@ fn unsubscribe_packet_with_packet_id_0_should_raise_protocol_error() {
 
 #[test]
 fn valid_unsubscribe_packet_with_id_1_and_one_topic() {
-    let topics = vec![Topic::new("temperatura/Argentina", QoSLevel::QoSLevel0).unwrap()];
+    let topics = vec![TopicFilter::new("temperatura/Argentina", QoSLevel::QoSLevel0).unwrap()];
     let result = Unsubscribe::new(1, topics).unwrap().encode().unwrap();
     let mut topic_encoded = Field::new_from_string("temperatura/Argentina")
         .unwrap()
@@ -125,8 +125,8 @@ fn valid_unsubscribe_packet_with_id_1_and_one_topic() {
 #[test]
 fn valid_unsubscribe_packet_with_id_5_and_two_topic() {
     let topics = vec![
-        Topic::new("temperatura/Argentina", QoSLevel::QoSLevel0).unwrap(),
-        Topic::new("temperatura/Uruguay", QoSLevel::QoSLevel0).unwrap(),
+        TopicFilter::new("temperatura/Argentina", QoSLevel::QoSLevel0).unwrap(),
+        TopicFilter::new("temperatura/Uruguay", QoSLevel::QoSLevel0).unwrap(),
     ];
     let result = Unsubscribe::new(5, topics).unwrap().encode().unwrap();
     let mut topic_encoded_arg = Field::new_from_string("temperatura/Argentina")
@@ -161,7 +161,7 @@ fn client_unsubscribe_packet_can_have_empty_topic_filter() {
 
 #[test]
 fn test_returns_same_identifier() {
-    let topics = vec![Topic::new("temperatura/Argentina", QoSLevel::QoSLevel0).unwrap()];
+    let topics = vec![TopicFilter::new("temperatura/Argentina", QoSLevel::QoSLevel0).unwrap()];
     let packet = Unsubscribe::new(123, topics).unwrap();
     assert_eq!(packet.packet_id(), 123);
 }

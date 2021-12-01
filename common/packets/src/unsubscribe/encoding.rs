@@ -33,7 +33,7 @@ impl Unsubscribe {
     ///
     /// This functions returns PacketError if:
     /// - packet_id is zero
-    pub fn new(packet_id: u16, topic_filters: Vec<Topic>) -> PacketResult<Unsubscribe> {
+    pub fn new(packet_id: u16, topic_filters: Vec<TopicFilter>) -> PacketResult<Unsubscribe> {
         Self::verify_packet_id(&packet_id)?;
         Ok(Self {
             packet_id,
