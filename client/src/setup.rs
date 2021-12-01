@@ -1,5 +1,6 @@
 use crate::interface::Controller;
-use gtk::prelude::{BuilderExtManual, CssProviderExt, GtkWindowExt, WidgetExt};
+use gtk::gdk_pixbuf::PixbufLoader;
+use gtk::prelude::{BuilderExtManual, CssProviderExt, GtkWindowExt, PixbufLoaderExt, WidgetExt};
 use gtk::{gdk, Application, Builder, Window};
 
 /// Loads CSS into the application
@@ -26,7 +27,11 @@ pub fn build_ui(app: &Application) {
     win.set_default_width(640);
     win.set_default_height(480);
 
-    win.set_icon_name(Some("gtk-network"));
+    let loader = PixbufLoader::with_type("ico").unwrap();
+    loader.write(include_bytes!("resources/logo.ico")).unwrap();
+    loader.close().unwrap();
+    win.set_icon(Some(&loader.pixbuf().unwrap()));
+
     // We show the window.
     win.show_all();
 
