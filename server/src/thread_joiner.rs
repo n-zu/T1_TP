@@ -4,33 +4,32 @@ use std::{
     thread::{self, JoinHandle, ThreadId},
 };
 
-use tracing::{debug, error};
+use crate::{
+    logging::{self, LogKind},
+    server::{ServerError, ServerResult},
+};
 
-use crate::server::{ServerError, ServerResult};
-
-struct ThreadInfo {
-    id: ThreadId,
-    handle: JoinHandle<()>,
-}
-
-pub struct ClientThreadJoiner {
+pub struct ThreadJoiner {
     handles: Option<HashMap<ThreadId, JoinHandle<()>>>,
-    finished_sender: Option<Sender<ThreadInfo>>,
+    finished_sender: Option<Sender<JoinHandle<()>>>,
     joiner_thread_handle: Option<JoinHandle<()>>,
 }
 
-impl Default for ClientThreadJoiner {
+impl Default for ThreadJoiner {
     fn default() -> Self {
         Self::new()
     }
 }
 
-impl ClientThreadJoiner {
-    pub fn new() -> ClientThreadJoiner {
+impl ThreadJoiner {
+    pub fn new() -> ThreadJoiner {
         let (sender, receiver) = mpsc::channel();
-        let joiner_thread_handle = thread::spawn(move || ClientThreadJoiner::join_loop(receiver));
+        let joiner_thread_handle = thread::spawn(move || {
+            logging::log::<&str>(LogKind::ThreadStart(thread::current().id()));
+            ThreadJoiner::join_loop(receiver);
+        });
 
-        ClientThreadJoiner {
+        ThreadJoiner {
             handles: Some(HashMap::new()),
             finished_sender: Some(sender),
             joiner_thread_handle: Some(joiner_thread_handle),
@@ -53,11 +52,14 @@ impl ClientThreadJoiner {
         }
     }
 
-    fn join_loop(receiver: Receiver<ThreadInfo>) {
-        for thread_info in receiver {
-            match thread_info.handle.join() {
-                Ok(()) => debug!("{:?} termino de forma esperada", thread_info.id),
-                Err(err) => error!("{:?} termino en panic: {:?}", thread_info.id, err),
+    fn join_loop(receiver: Receiver<JoinHandle<()>>) {
+        for handle in receiver {
+            let thread_id = handle.thread().id();
+            match handle.join() {
+                Ok(()) => logging::log::<&str>(LogKind::ThreadEndOk(thread_id)),
+                Err(err) => {
+                    logging::log::<&str>(LogKind::ThreadEndErr(thread_id, &format!("{:?}", err)))
+                }
             }
         }
     }
@@ -67,7 +69,7 @@ impl ClientThreadJoiner {
             self.finished_sender
                 .as_ref()
                 .expect("finished_sender es None")
-                .send(ThreadInfo { id, handle })
+                .send(handle)
                 .expect("Error de sender");
             Ok(())
         } else {
@@ -78,13 +80,13 @@ impl ClientThreadJoiner {
     }
 }
 
-impl Drop for ClientThreadJoiner {
+impl Drop for ThreadJoiner {
     fn drop(&mut self) {
-        for (id, handle) in self.handles.take().expect("handles es None") {
+        for (_id, handle) in self.handles.take().expect("handles es None") {
             self.finished_sender
                 .as_ref()
                 .expect("finished_sender es None")
-                .send(ThreadInfo { id, handle })
+                .send(handle)
                 .expect("Error de sender");
         }
         drop(
@@ -92,15 +94,19 @@ impl Drop for ClientThreadJoiner {
                 .take()
                 .expect("finished_sender es None"),
         );
+        let joiner_thread_id = self.joiner_thread_handle.as_ref().unwrap().thread().id();
         if let Err(err) = self
             .joiner_thread_handle
             .take()
             .expect("joiner_thread_handle es None")
             .join()
         {
-            error!("Thread de ClientThreadJoiner termino en panic: {:?}", err);
+            logging::log::<&str>(LogKind::ThreadEndErr(
+                joiner_thread_id,
+                &format!("{:?}", err),
+            ));
         } else {
-            debug!("Thread de ClientThreadJoiner fue joineado normalmente")
+            logging::log::<&str>(LogKind::ThreadEndOk(joiner_thread_id));
         }
     }
 }

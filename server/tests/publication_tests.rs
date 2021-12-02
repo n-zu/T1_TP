@@ -287,11 +287,18 @@ fn test_gracefully_disconnection_should_not_send_last_will() {
     assert_eq!(suback.packet_id(), 123);
 
     // Me desconecto mandando disconnect
-    stream_1.write_all(&mut Disconnect::new().encode()).unwrap();
+    stream_1
+        .write_all(&mut Disconnect::new().encode().unwrap())
+        .unwrap();
 
     // El otro no debería recibir publish
-    stream_2.set_read_timeout(Some(Duration::from_millis(100))).unwrap();
-    assert_eq!(stream_2.read_exact(&mut control).unwrap_err().kind(), std::io::ErrorKind::WouldBlock);
+    stream_2
+        .set_read_timeout(Some(Duration::from_millis(100)))
+        .unwrap();
+    assert_eq!(
+        stream_2.read_exact(&mut control).unwrap_err().kind(),
+        std::io::ErrorKind::WouldBlock
+    );
 }
 
 #[test]

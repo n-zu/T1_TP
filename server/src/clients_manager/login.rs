@@ -3,7 +3,7 @@ use std::{
     io::{BufRead, BufReader},
 };
 
-use tracing::debug;
+use packets::connack::ConnackReturnCode;
 
 use crate::server::{server_error::ServerErrorKind, ServerError, ServerResult};
 
@@ -29,14 +29,13 @@ pub fn search_in_file(mut file: impl BufRead, user_name_to_search: &str) -> Serv
             "Cliente con usuario {} no se encontro en el archivo de cuentas",
             user_name_to_search
         ),
-        ServerErrorKind::ClientNotInWhitelist,
+        ServerErrorKind::ConnectionRefused(ConnackReturnCode::NotAuthorized),
     ))
 }
 
 fn parse_account_line(line: &str) -> ServerResult<(&str, &str)> {
     let tokens: Vec<&str> = line.split(',').collect();
     if tokens.len() != 2 {
-        debug!("{:?}", tokens);
         return Err(ServerError::new_msg(
             "Formato de archivo de cuentas invalido",
         ));
@@ -49,6 +48,8 @@ fn parse_account_line(line: &str) -> ServerResult<(&str, &str)> {
 #[cfg(test)]
 mod tests {
     use std::io::{BufRead, Cursor};
+
+    use packets::connack::ConnackReturnCode;
 
     use crate::server::server_error::ServerErrorKind;
 
@@ -92,7 +93,7 @@ fdelu,fdelu",
         let password = search_in_file(cursor, "NoExiste");
         assert_eq!(
             password.err().unwrap().kind(),
-            ServerErrorKind::ClientNotInWhitelist
+            ServerErrorKind::ConnectionRefused(ConnackReturnCode::NotAuthorized)
         );
     }
 

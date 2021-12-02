@@ -2,11 +2,8 @@ use packets::pingresp::PingResp;
 
 use super::*;
 
-impl<S, A> Server<S, A>
-where
-    S: BidirectionalStream,
-    A: ClientAccepter<S> + Sized + Send + Sync + 'static,
-{
+impl Server {
+    /// Submit a job to the ThreadPool
     fn to_threadpool<F>(self: &Arc<Self>, action: F, id: &ClientIdArg) -> ServerResult<()>
     where
         F: FnOnce(Arc<Self>, &ClientId) -> ServerResult<()> + Send + 'static,
@@ -29,6 +26,12 @@ where
         Ok(())
     }
 
+    /// Reads a packet from the stream and processes it.
+    ///
+    /// The first byte of the packet must have already been read, and
+    /// corresponds to the *control_byte* parameter.
+    ///
+    /// Returns the type of package that was read
     fn process_packet_given_control_byte<T: Read>(
         self: &Arc<Self>,
         control_byte: u8,
@@ -36,6 +39,7 @@ where
         id: &ClientIdArg,
     ) -> ServerResult<PacketType> {
         let packet_type = PacketType::try_from(control_byte)?;
+        logging::log(LogKind::PacketProcessing(id, packet_type));
         match packet_type {
             PacketType::Publish => {
                 let publish = Publish::read_from(stream, control_byte)?;
@@ -74,9 +78,13 @@ where
         Ok(packet_type)
     }
 
-    pub fn process_packet(
+    /// Reads a packet from the stream and processes it.
+    ///
+    /// In case the client associated with the stream has disconnected,
+    /// it returns an error of kin [ServerErrorKind::ClientDisconnected]
+    pub fn process_packet<T: Read>(
         self: &Arc<Self>,
-        stream: &mut ConnectionStream<S, ThreadId>,
+        stream: &mut T,
         id: &ClientIdArg,
     ) -> ServerResult<PacketType> {
         let mut control_byte_buff = [0u8; 1];
@@ -94,10 +102,12 @@ where
         }
     }
 
+    /// Receives through the channel the packets to be published, and
+    /// publishes them
     fn publish_dispatcher_loop(&self, receiver: Receiver<Message>) -> ServerResult<()> {
         for message in receiver {
-            let id = message.client_id.clone();
-            debug!("Enviando PUBLISH a <{}>", id);
+            let id = message.client_id;
+            logging::log(LogKind::Publishing(&id));
             self.clients_manager
                 .read()?
                 .send_publish(&id, message.packet)?;
@@ -105,10 +115,12 @@ where
         Ok(())
     }
 
+    /// Send [Publish] to all clients that are subscribed to the topic
     fn broadcast_publish(self: &Arc<Self>, publish: Publish) -> ServerResult<()> {
         let (sender, receiver) = mpsc::channel();
         let sv_copy = self.clone();
         let handler: JoinHandle<ServerResult<()>> = thread::spawn(move || {
+            logging::log::<&str>(LogKind::ThreadStart(thread::current().id()));
             sv_copy.publish_dispatcher_loop(receiver)?;
             Ok(())
         });
@@ -124,6 +136,8 @@ where
         }
     }
 
+    /// Publish the packet so that all clients subscribed
+    /// to the topics can receive them
     fn handle_publish(
         self: &Arc<Self>,
         mut publish: Publish,
@@ -139,6 +153,9 @@ where
         self.broadcast_publish(publish)
     }
 
+    /// Subscribes the client to all the topics specified in the
+    /// [Subscribe] packet
+    /// Send the corresponding Suback
     fn handle_subscribe(&self, mut subscribe: Subscribe, id: &ClientIdArg) -> ServerResult<()> {
         debug!("<{}>: Recibido SUBSCRIBE", id);
         subscribe.set_max_qos(QoSLevel::QoSLevel1);
@@ -157,6 +174,9 @@ where
         Ok(())
     }
 
+    /// Unsubscribe the client from the topics specified in the
+    /// [Unsubscribe] packet
+    /// Send the corresponding [Unsuback]
     fn handle_unsubscribe(&self, unsubscribe: Unsubscribe, id: &ClientIdArg) -> ServerResult<()> {
         debug!("<{}>: Recibido UNSUBSCRIBE", id);
         let packet_id = unsubscribe.packet_id();
@@ -168,30 +188,29 @@ where
         Ok(())
     }
 
+    /// Sends the LastWill packet, previously converted to the
+    /// [Publish] format
     pub fn send_last_will(
         self: &Arc<Self>,
-        mut publish: Publish,
+        mut last_will: Publish,
         id: &ClientIdArg,
     ) -> ServerResult<()> {
         debug!("<{}>: Enviando LAST WILL", id);
-        publish.set_max_qos(QoSLevel::QoSLevel1);
+        last_will.set_max_qos(QoSLevel::QoSLevel1);
 
-        self.broadcast_publish(publish)
+        self.broadcast_publish(last_will)
     }
-}
 
-impl<S, A> Server<S, A>
-where
-    S: BidirectionalStream,
-    A: ClientAccepter<S> + Sized + Send + Sync + 'static,
-{
+    /// Waits until it receives the [Connect] packet. In case the
+    /// read fails due to timeout, it returns an error of kind
+    /// [ServerErrorKind::Timeout]
     pub fn wait_for_connect(
         &self,
-        connection_stream: &mut ConnectionStream<S, ThreadId>,
+        connection_stream: &mut NetworkConnection<TcpStream, SocketAddr>,
     ) -> ServerResult<Connect> {
         match Connect::new_from_zero(connection_stream) {
             Ok(connect) => {
-                info!("<{:?}>: Recibido CONNECT", connection_stream.id());
+                info!("<{}>: Recibido CONNECT", connection_stream.id());
                 Ok(connect)
             }
             Err(err) => Err(ServerError::from(err)),

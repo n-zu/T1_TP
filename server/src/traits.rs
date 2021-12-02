@@ -22,11 +22,3 @@ pub trait BidirectionalStream: Read + Write + Send + Sync + 'static {
 
     fn change_write_timeout(&mut self, dur: Option<Duration>) -> io::Result<()>;
 }
-
-pub trait ClientAccepter<S> {
-    fn new(ip: &str, port: u16) -> io::Result<Self>
-    where
-        Self: Sized;
-
-    fn accept_client(&self) -> io::Result<S>;
-}
