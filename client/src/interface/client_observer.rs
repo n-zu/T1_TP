@@ -1,3 +1,4 @@
+use gtk::prelude::LabelExt;
 use gtk::{
     glib,
     prelude::{BuilderExtManual, ButtonExt, ContainerExt, WidgetExt},
@@ -179,9 +180,15 @@ impl InternalObserver {
 fn get_box(topic: &str, payload: &str, qos: QoSLevel) -> Box {
     let outer_box = Box::new(Orientation::Vertical, 5);
     let inner_box = Box::new(Orientation::Horizontal, 5);
-    inner_box.add(&Label::new(Some(&("• ".to_owned() + topic))));
-    inner_box.add(&Label::new(Some(&format!("- QoS: {}", qos as u8))));
+    let label_topic: Label = Label::new(Some(&("• ".to_owned() + topic)));
+    let label_qos: Label = Label::new(Some(&format!("- QoS: {}", qos as u8)));
+    let label_payload: Label = Label::new(Some(payload));
+    label_topic.set_line_wrap(true);
+    label_qos.set_line_wrap(true);
+    label_payload.set_line_wrap(true);
+    inner_box.add(&label_topic);
+    inner_box.add(&label_qos);
     outer_box.add(&inner_box);
-    outer_box.add(&Label::new(Some(payload)));
+    outer_box.add(&label_payload);
     outer_box
 }
