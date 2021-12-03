@@ -165,11 +165,7 @@ impl Controller {
         // Get the values from the entries
         let user_name = user_entry.text().to_string();
         let password = password_entry.text().to_string();
-        let keep_alive = keep_alive_entry
-            .text()
-            .to_string()
-            .parse::<u16>()
-            .unwrap_or(0);
+        let keep_alive = keep_alive_entry.text().to_string().parse::<u16>()?;
         let client_id = id_entry.text().to_string();
         let clean_session = clean_session_switch.is_active();
         let last_will_retain = last_will_retain_switch.is_active();
