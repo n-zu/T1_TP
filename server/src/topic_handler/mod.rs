@@ -1529,10 +1529,10 @@ mod tests {
 
         let _retained_messages = handler.subscribe(&subscribe, "user").unwrap();
 
-        // assert_eq!(_retained_messages.len(), 1);
-        // assert_eq!(
-        //     _retained_messages[0].payload(),
-        //     Some(&"spam".to_string())
-        // );
+        assert_eq!(_retained_messages.len(), 1);
+        assert_eq!(
+            _retained_messages[0].payload(),
+            Some(&"spam".to_string())
+        );
     }
 }
