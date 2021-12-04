@@ -282,12 +282,8 @@ impl TopicHandler {
 
         single_level_subscribers.insert(client_id.to_string(), data.clone());
 
-        //print!(">> [{}]\n", topic);
-        if is_root && topic.starts_with(UNMATCH_WILDCARD) {
-            Ok(Vec::new())
-        } else {
-            Self::get_retained_messages_rec(node, Some(&topic), data.qos)
-        }
+       Self::get_retained_messages_rec(node, Some(&topic), data.qos, is_root)
+        
     }
 
     fn add_multi_level_subscription(
@@ -300,12 +296,8 @@ impl TopicHandler {
         let mut multilevel_subscribers = node.multilevel_subscribers.write()?;
         multilevel_subscribers.insert(client_id.to_string(), data.clone());
 
-        //print!(">> [{}]\n", topic);
-        if is_root && topic.starts_with(UNMATCH_WILDCARD) {
-            Ok(Vec::new())
-        } else {
-            Self::get_retained_messages_rec(node, Some(&topic), data.qos)
-        }
+        Self::get_retained_messages_rec(node, Some(&topic), data.qos,is_root)
+
     }
 
     #[doc(hidden)]
@@ -485,30 +477,36 @@ impl TopicHandler {
         node: &Topic,
         topic: &str,
         max_qos: QoSLevel,
+        unmatch: bool,
     ) -> Result<Vec<Publish>, TopicHandlerError> {
         match Self::split(topic) {
             (MULTILEVEL_WILDCARD, _) => {
                 let mut messages = Self::get_retained(node, max_qos)?;
-                for child in node.subtopics.read()?.values() {
-                    messages.extend(Self::get_retained_messages_rec(
-                        child,
-                        Some(MULTILEVEL_WILDCARD),
-                        max_qos,
-                    )?);
+                for (name, child) in node.subtopics.read()?.deref() {
+                    if !( unmatch && name.starts_with(UNMATCH_WILDCARD) ) {
+                        messages.extend(Self::get_retained_messages_rec(
+                            child,
+                            Some(MULTILEVEL_WILDCARD),
+                            max_qos,
+                            false,
+                        )?);
+                    }   
                 }
                 Ok(messages)
             }
             (SINGLELEVEL_WILDCARD, rest) => {
                 let mut messages = vec![];
-                for child in node.subtopics.read()?.values() {
-                    messages.extend(Self::get_retained_messages_rec(child, rest, max_qos)?);
+                for (name, child) in node.subtopics.read()?.deref() {
+                    if !( unmatch && name.starts_with(UNMATCH_WILDCARD) ){
+                        messages.extend(Self::get_retained_messages_rec(child, rest, max_qos, false)?);
+                    }
                 }
                 Ok(messages)
             }
             (name, rest) => {
                 let mut messages = vec![];
                 if let Some(child) = node.subtopics.read()?.get(name) {
-                    messages.extend(Self::get_retained_messages_rec(child, rest, max_qos)?);
+                    messages.extend(Self::get_retained_messages_rec(child, rest, max_qos, false)?);
                 }
                 Ok(messages)
             }
@@ -520,9 +518,10 @@ impl TopicHandler {
         node: &Topic,
         topic: Option<&str>,
         max_qos: QoSLevel,
+        unmatch: bool,
     ) -> Result<Vec<Publish>, TopicHandlerError> {
         match topic {
-            Some(topic) => Self::handle_retained_messages_level(node, topic, max_qos),
+            Some(topic) => Self::handle_retained_messages_level(node, topic, max_qos, unmatch),
             None => Self::get_retained(node, max_qos),
         }
     }
@@ -1460,6 +1459,27 @@ mod tests {
         handler.publish(&publish, sender).unwrap();
         let _retained_messages = handler.subscribe(&subscribe, "user").unwrap();
 
-        //assert_eq!(retained_messages.len(), 0);
+        assert_eq!(_retained_messages.len(), 0);
+    }
+
+    #[test]
+    fn test_retained_messages_matched_and_unmatched() {
+        let subscribe = build_subscribe("#");
+        let publish = Publish::new(
+            false,
+            QoSLevel::QoSLevel1,
+            true,
+            "$SYS",
+            "#0000FF",
+            Some(123),
+        )
+        .unwrap();
+        let handler = super::TopicHandler::new();
+        let (sender, _r) = channel();
+
+        handler.publish(&publish, sender).unwrap();
+        let _retained_messages = handler.subscribe(&subscribe, "user").unwrap();
+
+        assert_eq!(_retained_messages.len(), 0);
     }
 }
