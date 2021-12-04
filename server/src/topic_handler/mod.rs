@@ -1505,8 +1505,22 @@ mod tests {
     #[test]
     fn test_retained_messages_one_matches_one_starts_with_dollar_sign() {
         let subscribe = build_subscribe("#");
-        let publish1 = build_publish("SYS/logs", "spam");
-        let publish2 = build_publish("$SYS/logs", "fdelu");
+        let publish1 = Publish::new(
+            false,
+            QoSLevel::QoSLevel1,
+            true,
+            "SYS/logs",
+            "spam",
+            Some(123),
+        ).unwrap();
+        let publish2 = Publish::new(
+            false,
+            QoSLevel::QoSLevel1,
+            true,
+            "$SYS/logs",
+            "fdelu",
+            Some(123),
+        ).unwrap();
         let handler = super::TopicHandler::new();
         let (sender, _r) = channel();
 
