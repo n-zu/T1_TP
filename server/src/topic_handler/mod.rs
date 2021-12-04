@@ -14,6 +14,7 @@ use packets::{publish::Publish, subscribe::Subscribe, unsubscribe::Unsubscribe};
 
 use self::topic_handler_error::TopicHandlerError;
 
+type Subscription = (String, SubscriptionData); // client_id, data
 type Subtopics = HashMap<String, Topic>; // key: subtopic name
 type Subscribers = HashMap<String, SubscriptionData>; // key: client_id
 type Subscriptions = HashMap<String, Subscribers>; // key: topic filter { key: client_id }
@@ -193,11 +194,12 @@ impl TopicHandler {
 
     #[doc(hidden)]
     /// Returns all the matching subscriptions for a given topic name
-    fn set_matching_subscribers(
+    fn current_matching_single_level_subs(
         topic_name: Option<&str>,
         singlelevel_subscriptions: &Subscriptions,
-    ) -> Vec<(String, SubscriptionData)> {
+    ) -> Vec<Subscription> {
         let mut matching = Vec::new();
+
         if let Some(topic) = topic_name {
             for (topic_filter, subscribers) in singlelevel_subscriptions {
                 if Self::topic_filter_matches(topic_filter, topic) {
@@ -206,6 +208,48 @@ impl TopicHandler {
             }
         }
         matching
+    }
+
+    #[doc(hidden)]
+    /// Gets the matching subscriptions of the given topic for the given topic name
+    fn current_matching_subs(
+        node: &Topic,
+        topic_name: Option<&str>,
+        is_root: bool,
+    ) -> Result<Vec<Subscription>, TopicHandlerError> {
+        let mut matching = Vec::new();
+        if !(is_root && Self::starts_with_unmatch(topic_name)) {
+            matching.extend(Self::current_matching_single_level_subs(
+                topic_name,
+                node.singlelevel_subscriptions.read()?.deref(),
+            ));
+
+            matching.extend(node.multilevel_subscribers.read()?.clone());
+        }
+
+        if topic_name.is_none() {
+            matching.extend(node.subscribers.read()?.clone());
+        }
+
+        Ok(matching)
+    }
+
+    #[doc(hidden)]
+    /// Sends a publish packet to the given subscribers, adjusting the QoS if needed
+    fn send_publish(
+        sender: &Sender<Message>,
+        packet: &Publish,
+        subscribers: &Vec<Subscription>,
+    ) -> Result<(), TopicHandlerError> {
+        for (id, data) in subscribers {
+            let mut to_be_sent = packet.clone();
+            to_be_sent.set_max_qos(data.qos);
+            sender.send(Message {
+                client_id: id.to_string(),
+                packet: to_be_sent,
+            })?;
+        }
+        Ok(())
     }
 
     // Lo tuve que hacer recursivo porque sino era un caos el tema de mantener todos los
@@ -219,48 +263,29 @@ impl TopicHandler {
         packet: &Publish,
         is_root: bool,
     ) -> Result<(), TopicHandlerError> {
-        let mut matching = Vec::new();
-        if !(is_root && Self::starts_with_unmatch(topic_name)) {
-            // Agregar los subscribers multinivel de esta hoja
-            matching = Self::set_matching_subscribers(
-                topic_name,
-                node.singlelevel_subscriptions.read()?.deref(),
-            );
+        let matching = Self::current_matching_subs(node, topic_name, is_root)?;
+        Self::send_publish(&sender, packet, &matching)?;
 
-            matching.extend(node.multilevel_subscribers.read()?.clone());
-        }
+        match topic_name {
+            Some(topic) => {
+                let (current, rest) = Self::split(topic);
+                let mut subtopics = node.subtopics.read()?;
+                if !subtopics.contains_key(current) && packet.retain_flag() {
+                    drop(subtopics);
+                    node.subtopics
+                        .write()?
+                        .insert(current.to_string(), Topic::new());
+                    subtopics = node.subtopics.read()?;
+                }
 
-        if topic_name.is_none() {
-            matching.extend(node.subscribers.read()?.clone());
-            if packet.retain_flag() {
-                node.retained_message.write()?.replace(packet.clone());
-            }
-        }
-
-        for (id, data) in matching {
-            let mut to_be_sent = packet.clone();
-            to_be_sent.set_max_qos(data.qos);
-            sender.send(Message {
-                client_id: id.to_string(),
-                packet: to_be_sent,
-            })?;
-        }
-
-        if let Some(topic) = topic_name {
-            let (current, rest) = Self::split(topic);
-            let subtopics = node.subtopics.read()?;
-            if let Some(node) = subtopics.get(current) {
-                Self::publish_rec(node, rest, sender, packet, false)?;
-            } else if packet.retain_flag() {
-                drop(subtopics);
-                node.subtopics
-                    .write()?
-                    .insert(current.to_string(), Topic::new());
-                let subtopics = node.subtopics.read()?;
                 if let Some(node) = subtopics.get(current) {
                     Self::publish_rec(node, rest, sender, packet, false)?;
                 }
             }
+            None if packet.retain_flag() => {
+                node.retained_message.write()?.replace(packet.clone());
+            }
+            None => (),
         }
 
         Ok(())
@@ -323,13 +348,11 @@ impl TopicHandler {
             }
             _ => {
                 let mut subtopics = node.subtopics.read()?;
-                // Insercion de nuevo nodo
                 if subtopics.get(current).is_none() {
-                    drop(subtopics); //lo tengo que pedir en modo write y si esta leyendo no va a poder
-                    let mut wr_subtopics = node.subtopics.write()?;
-                    let subtopic = Topic::new();
-                    wr_subtopics.insert(current.to_string(), subtopic);
-                    drop(wr_subtopics);
+                    drop(subtopics);
+                    node.subtopics
+                        .write()?
+                        .insert(current.to_string(), Topic::new());
                     subtopics = node.subtopics.read()?;
                 }
 
