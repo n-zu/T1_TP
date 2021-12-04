@@ -46,6 +46,7 @@ struct Topic {
     subscribers: RwLock<Subscribers>,
     multilevel_subscribers: RwLock<Subscribers>,
     singlelevel_subscriptions: RwLock<Subscriptions>,
+    retained_message: RwLock<Option<Publish>>,
 }
 
 impl Debug for Topic {
@@ -66,6 +67,7 @@ impl Topic {
             subscribers: RwLock::new(HashMap::new()),
             multilevel_subscribers: RwLock::new(HashMap::new()),
             singlelevel_subscriptions: RwLock::new(HashMap::new()),
+            retained_message: RwLock::new(None),
         }
     }
 }
@@ -81,18 +83,24 @@ impl TopicHandler {
         &self,
         packet: &Subscribe,
         client_id: &str,
-    ) -> Result<Option<Vec<Publish>>, TopicHandlerError> {
+    ) -> Result<Vec<Publish>, TopicHandlerError> {
         let topics = packet.topics();
         let topics: Vec<&packets::topic_filter::TopicFilter> = topics.iter().collect();
+        let mut retained = Vec::new();
 
         for topic_filter in topics {
             let data = SubscriptionData {
                 qos: topic_filter.qos(),
             };
-            Self::subscribe_rec(&self.root, Some(topic_filter.name()), client_id, data)?;
+            retained.extend(Self::subscribe_rec(
+                &self.root,
+                Some(topic_filter.name()),
+                client_id,
+                data,
+            )?);
         }
 
-        Ok(None)
+        Ok(retained)
     }
 
     /// Sends a Publish packet to the clients who are subscribed into a certain topic
@@ -158,7 +166,7 @@ impl TopicHandler {
 
     #[doc(hidden)]
     /// Returns true if a certain topic name matches a given topic filter
-    fn matches_single_level(topic_filter: String, topic_name: String) -> bool {
+    fn topic_filter_matches(topic_filter: String, topic_name: String) -> bool {
         let name = topic_name.split(SEP).collect::<Vec<&str>>();
         let filter = topic_filter.split(SEP).collect::<Vec<&str>>();
 
@@ -190,7 +198,7 @@ impl TopicHandler {
         let mut matching = Vec::new();
         if let Some(topic) = topic_name {
             for (topic_filter, subscribers) in singlelevel_subscriptions {
-                if Self::matches_single_level(topic_filter.to_string(), topic.to_string()) {
+                if Self::topic_filter_matches(topic_filter.to_string(), topic.to_string()) {
                     matching.extend(subscribers.clone());
                 }
             }
@@ -222,6 +230,9 @@ impl TopicHandler {
 
         if topic_name.is_none() {
             matching.extend(node.subscribers.read()?.clone());
+            if packet.retain_flag() {
+                node.retained_message.write()?.replace(packet.clone());
+            }
         }
 
         for (id, data) in matching {
@@ -238,6 +249,13 @@ impl TopicHandler {
             let subtopics = node.subtopics.read()?;
             if let Some(node) = subtopics.get(current) {
                 Self::publish_rec(node, rest, sender, packet, false)?;
+            } else if packet.retain_flag() {
+                drop(subtopics);
+                node.subtopics.write()?.insert(current.to_string(), Topic::new());
+                let subtopics = node.subtopics.read()?;
+                if let Some(node) = subtopics.get(current) {
+                    Self::publish_rec(node, rest, sender, packet, false)?;
+                }
             }
         }
 
@@ -251,54 +269,63 @@ impl TopicHandler {
         topic: String,
         client_id: &str,
         data: SubscriptionData,
-    ) -> Result<(), TopicHandlerError> {
+    ) -> Result<Vec<Publish>, TopicHandlerError> {
         let mut single_level_subscriptions = node.singlelevel_subscriptions.write()?;
 
         let single_level_subscribers = single_level_subscriptions
-            .entry(topic)
+            .entry(topic.clone())
             .or_insert_with(HashMap::new);
 
-        single_level_subscribers.insert(client_id.to_string(), data);
-        Ok(())
+            single_level_subscribers.insert(client_id.to_string(), data.clone());
+        Self::get_retained_messages_rec(node, &topic, data.qos)
     }
 
-    #[doc(hidden)]
+    fn add_multi_level_subscription(
+        node: &Topic,
+        topic: String,
+        client_id: &str,
+        data: SubscriptionData,
+    ) -> Result<Vec<Publish>, TopicHandlerError> {
+        let mut multilevel_subscribers = node.multilevel_subscribers.write()?;
+        multilevel_subscribers.insert(client_id.to_string(), data.clone());
+    
+        Self::get_retained_messages_rec(node, &topic, data.qos)
+    }
+
+        #[doc(hidden)]
     fn handle_sub_level(
         node: &Topic,
         topic: &str,
         user_id: &str,
         sub_data: SubscriptionData,
-    ) -> Result<(), TopicHandlerError> {
+    ) -> Result<Vec<Publish>, TopicHandlerError> {
         if topic.starts_with(SINGLELEVEL_WILDCARD) {
             return Self::add_single_level_subscription(node, topic.to_string(), user_id, sub_data);
         }
-
+    
         let (current, rest) = Self::split(topic);
         match (current, rest) {
             (MULTILEVEL_WILDCARD, _) => {
-                let mut multilevel_subscribers = node.multilevel_subscribers.write()?;
-                multilevel_subscribers.insert(user_id.to_string(), sub_data);
-                return Ok(());
+                Self::add_multi_level_subscription(node, topic.to_string(), user_id, sub_data)
             }
             _ => {
                 let mut subtopics = node.subtopics.read()?;
-                // Inserción de nuevo nodo
+                // Insercion de nuevo nodo
                 if subtopics.get(current).is_none() {
-                    drop(subtopics); // lo tengo que pedir en modo write y si esta leyendo no va a poder
+                    drop(subtopics); //lo tengo que pedir en modo write y si esta leyendo no va a poder
                     let mut wr_subtopics = node.subtopics.write()?;
                     let subtopic = Topic::new();
                     wr_subtopics.insert(current.to_string(), subtopic);
                     drop(wr_subtopics);
                     subtopics = node.subtopics.read()?;
                 }
-
-                // En principio siempre tiene que entrar a este if, pero lo pongo para no unwrappear
-                if let Some(subtopic) = subtopics.get(current) {
-                    Self::subscribe_rec(subtopic, rest, user_id, sub_data)?;
-                }
+    
+                let subtopic = subtopics
+                    .get(current)
+                    .ok_or_else(|| TopicHandlerError::new("Unexpected error, subtopic not created"))?;
+                Self::subscribe_rec(subtopic, rest, user_id, sub_data)
             }
         }
-        Ok(())
     }
 
     #[doc(hidden)]
@@ -308,18 +335,17 @@ impl TopicHandler {
         topic_name: Option<&str>,
         user_id: &str,
         sub_data: SubscriptionData,
-    ) -> Result<(), TopicHandlerError> {
+    ) -> Result<Vec<Publish>, TopicHandlerError> {
         match topic_name {
-            Some(topic) => {
-                Self::handle_sub_level(node, topic, user_id, sub_data)?;
-            }
+            Some(topic) => Self::handle_sub_level(node, topic, user_id, sub_data),
             None => {
                 node.subscribers
                     .write()?
-                    .insert(user_id.to_string(), sub_data);
+                    .insert(user_id.to_string(), sub_data.clone());
+    
+                Self::get_retained(node, sub_data.qos)
             }
         }
-        Ok(())
     }
 
     #[doc(hidden)]
@@ -423,6 +449,56 @@ impl TopicHandler {
             return name.starts_with(UNMATCH_WILDCARD);
         }
         false
+    }
+
+    #[doc(hidden)]
+    fn get_retained(node: &Topic, max_qos: QoSLevel) -> Result<Vec<Publish>, TopicHandlerError> {
+        if let Some(retained) = node.retained_message.read()?.deref() {
+            let mut retained = retained.clone();
+            retained.set_max_qos(max_qos);
+            Ok(vec![retained])
+        } else {
+            Ok(vec![])
+        }
+    }
+
+    #[doc(hidden)]
+    fn get_retained_messages_rec(
+        node: &Topic,
+        topic: &str,
+        max_qos: QoSLevel,
+    ) -> Result<Vec<Publish>, TopicHandlerError> {
+        match Self::split(topic) {
+            (MULTILEVEL_WILDCARD, _) => {
+                let mut messages = Self::get_retained(node, max_qos)?;
+                for child in node.subtopics.read()?.values() {
+                    messages.extend(Self::get_retained_messages_rec(
+                        child,
+                        MULTILEVEL_WILDCARD,
+                        max_qos,
+                    )?);
+                }
+                Ok(messages)
+            }
+            (SINGLELEVEL_WILDCARD, Some(rest)) => {
+                let mut messages = vec![];
+                for (name, child) in node.subtopics.read()?.deref() {
+                    let (next_topic, _) = Self::split(rest);
+                    if Self::topic_filter_matches(next_topic.to_string(), name.to_string()) {
+                        messages.extend(Self::get_retained_messages_rec(child, rest, max_qos)?);
+                    }
+                }
+                Ok(messages)
+            }
+            (name, Some(rest)) => {
+                let mut messages = vec![];
+                if let Some(child) = node.subtopics.read()?.get(name) {
+                    messages.extend(Self::get_retained_messages_rec(child, rest, max_qos)?);
+                }
+                Ok(messages)
+            }
+            (_, None) => Self::get_retained(node, max_qos),
+        }
     }
 }
 
@@ -836,50 +912,50 @@ mod tests {
     }
 
     #[test]
-    fn test_matches_singlelevel() {
+    fn test_topic_filter_matches() {
         // name, filter
 
-        assert!(TopicHandler::matches_single_level(
+        assert!(TopicHandler::topic_filter_matches(
             "top".to_string(),
             "top".to_string()
         ));
-        assert!(TopicHandler::matches_single_level(
+        assert!(TopicHandler::topic_filter_matches(
             "top/sub".to_string(),
             "top/sub".to_string()
         ));
-        assert!(TopicHandler::matches_single_level(
+        assert!(TopicHandler::topic_filter_matches(
             "+/sub".to_string(),
             "top/sub".to_string()
         ));
-        assert!(TopicHandler::matches_single_level(
+        assert!(TopicHandler::topic_filter_matches(
             "top/+/leaf".to_string(),
             "top/sub/leaf".to_string()
         ));
-        assert!(TopicHandler::matches_single_level(
+        assert!(TopicHandler::topic_filter_matches(
             "top/#".to_string(),
             "top/sub/leaf".to_string()
         ));
-        assert!(TopicHandler::matches_single_level(
+        assert!(TopicHandler::topic_filter_matches(
             "top/+/+/green".to_string(),
             "top/sub/leaf/green".to_string()
         ));
-        assert!(TopicHandler::matches_single_level(
+        assert!(TopicHandler::topic_filter_matches(
             "top/+/+/#".to_string(),
             "top/sub/leaf/green".to_string()
         ));
-        assert!(TopicHandler::matches_single_level(
+        assert!(TopicHandler::topic_filter_matches(
             "top/+/+/#".to_string(),
             "top/sub/leaf/green".to_string()
         ));
-        assert!(TopicHandler::matches_single_level(
+        assert!(TopicHandler::topic_filter_matches(
             "top/+/+/#".to_string(),
             "top/sub/leaf/green/#00FF00".to_string()
         ));
-        assert!(TopicHandler::matches_single_level(
+        assert!(TopicHandler::topic_filter_matches(
             "top/+//#".to_string(),
             "top/sub//green/#00FF00".to_string()
         ));
-        assert!(TopicHandler::matches_single_level(
+        assert!(TopicHandler::topic_filter_matches(
             "+".to_string(),
             "fdelu".to_string()
         ));
@@ -1185,5 +1261,36 @@ mod tests {
             receiver.recv().unwrap().packet.payload(),
             Some(&":D".to_string())
         );
+    }
+
+    #[test]
+    fn test_retained_messages() {
+        let subscribe = build_subscribe("topic");
+        let publish = Publish::new(
+            false,
+            QoSLevel::QoSLevel1,
+            true,
+            "topic",
+            "#0000FF",
+            Some(123),
+        )
+        .unwrap();
+        let handler = super::TopicHandler::new();
+        let (sender, _r) = channel();
+
+        handler.publish(&publish, sender).unwrap();
+        let retained_messages =  handler.subscribe(&subscribe, "user").unwrap();
+
+        assert_eq!(retained_messages.len(), 1);
+
+        assert_eq!(
+            retained_messages[0].payload(),
+            Some(&"#0000FF".to_string())
+        );
+        assert_eq!(
+            retained_messages[0].topic_name(),
+            "topic"
+        );
+        
     }
 }

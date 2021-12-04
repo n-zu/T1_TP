@@ -146,7 +146,8 @@ where
             .read()?
             .client_do(id, |mut client| client.send_packet(&subscribe.response()?))?;
 
-        if let Some(retained_messages) = self.topic_handler.subscribe(&subscribe, id)? {
+        let retained_messages = self.topic_handler.subscribe(&subscribe, id)?;
+        if !retained_messages.is_empty() {
             self.clients_manager.read()?.client_do(id, |mut client| {
                 for retained in retained_messages {
                     client.send_publish(retained)?;
