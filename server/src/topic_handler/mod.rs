@@ -97,6 +97,7 @@ impl TopicHandler {
                 Some(topic_filter.name()),
                 client_id,
                 data,
+                true,
             )?);
         }
 
@@ -271,6 +272,7 @@ impl TopicHandler {
         topic: String,
         client_id: &str,
         data: SubscriptionData,
+        is_root: bool,
     ) -> Result<Vec<Publish>, TopicHandlerError> {
         let mut single_level_subscriptions = node.singlelevel_subscriptions.write()?;
 
@@ -279,7 +281,13 @@ impl TopicHandler {
             .or_insert_with(HashMap::new);
 
         single_level_subscribers.insert(client_id.to_string(), data.clone());
-        Self::get_retained_messages_rec(node, Some(&topic), data.qos)
+
+        //print!(">> [{}]\n", topic);
+        if is_root && topic.starts_with(UNMATCH_WILDCARD) {
+            Ok(Vec::new())
+        } else {
+            Self::get_retained_messages_rec(node, Some(&topic), data.qos)
+        }
     }
 
     fn add_multi_level_subscription(
@@ -287,11 +295,17 @@ impl TopicHandler {
         topic: String,
         client_id: &str,
         data: SubscriptionData,
+        is_root: bool,
     ) -> Result<Vec<Publish>, TopicHandlerError> {
         let mut multilevel_subscribers = node.multilevel_subscribers.write()?;
         multilevel_subscribers.insert(client_id.to_string(), data.clone());
 
-        Self::get_retained_messages_rec(node, Some(&topic), data.qos)
+        //print!(">> [{}]\n", topic);
+        if is_root && topic.starts_with(UNMATCH_WILDCARD) {
+            Ok(Vec::new())
+        } else {
+            Self::get_retained_messages_rec(node, Some(&topic), data.qos)
+        }
     }
 
     #[doc(hidden)]
@@ -300,15 +314,24 @@ impl TopicHandler {
         topic: &str,
         user_id: &str,
         sub_data: SubscriptionData,
+        is_root: bool,
     ) -> Result<Vec<Publish>, TopicHandlerError> {
         let (current, rest) = Self::split(topic);
         match (current, rest) {
-            (SINGLELEVEL_WILDCARD, _) => {
-                Self::add_single_level_subscription(node, topic.to_string(), user_id, sub_data)
-            }
-            (MULTILEVEL_WILDCARD, _) => {
-                Self::add_multi_level_subscription(node, topic.to_string(), user_id, sub_data)
-            }
+            (SINGLELEVEL_WILDCARD, _) => Self::add_single_level_subscription(
+                node,
+                topic.to_string(),
+                user_id,
+                sub_data,
+                is_root,
+            ),
+            (MULTILEVEL_WILDCARD, _) => Self::add_multi_level_subscription(
+                node,
+                topic.to_string(),
+                user_id,
+                sub_data,
+                is_root,
+            ),
             _ => {
                 let mut subtopics = node.subtopics.read()?;
                 // Insercion de nuevo nodo
@@ -324,7 +347,7 @@ impl TopicHandler {
                 let subtopic = subtopics.get(current).ok_or_else(|| {
                     TopicHandlerError::new("Unexpected error, subtopic not created")
                 })?;
-                Self::subscribe_rec(subtopic, rest, user_id, sub_data)
+                Self::subscribe_rec(subtopic, rest, user_id, sub_data, false)
             }
         }
     }
@@ -336,9 +359,10 @@ impl TopicHandler {
         topic_name: Option<&str>,
         user_id: &str,
         sub_data: SubscriptionData,
+        is_root: bool,
     ) -> Result<Vec<Publish>, TopicHandlerError> {
         match topic_name {
-            Some(topic) => Self::handle_sub_level(node, topic, user_id, sub_data),
+            Some(topic) => Self::handle_sub_level(node, topic, user_id, sub_data, is_root),
             None => {
                 node.subscribers
                     .write()?
@@ -1299,6 +1323,27 @@ mod tests {
     }
 
     #[test]
+    fn test_retained_messages_not_on_siblings() {
+        let subscribe = build_subscribe("other_topic");
+        let publish = Publish::new(
+            false,
+            QoSLevel::QoSLevel1,
+            true,
+            "topic",
+            "#0000FF",
+            Some(123),
+        )
+        .unwrap();
+        let handler = super::TopicHandler::new();
+        let (sender, _r) = channel();
+
+        handler.publish(&publish, sender).unwrap();
+        let retained_messages = handler.subscribe(&subscribe, "user").unwrap();
+
+        assert_eq!(retained_messages.len(), 0);
+    }
+
+    #[test]
     fn test_retained_messages_single_level_wildcard() {
         let subscribe = build_subscribe("topic/+");
         let publish = Publish::new(
@@ -1347,6 +1392,29 @@ mod tests {
     }
 
     #[test]
+    fn test_retained_messages_single_level_wildcard_multiple() {
+        let subscribe = build_subscribe("topic/+//+/subtopic");
+        let publish = Publish::new(
+            false,
+            QoSLevel::QoSLevel1,
+            true,
+            "topic/a//b/subtopic",
+            "#0000FF",
+            Some(123),
+        )
+        .unwrap();
+        let handler = super::TopicHandler::new();
+        let (sender, _r) = channel();
+
+        handler.publish(&publish, sender).unwrap();
+        let retained_messages = handler.subscribe(&subscribe, "user").unwrap();
+
+        assert_eq!(retained_messages.len(), 1);
+
+        assert_eq!(retained_messages[0].payload(), Some(&"#0000FF".to_string()));
+    }
+
+    #[test]
     fn test_retained_messages_multi_level_wildcard() {
         let subscribe = build_subscribe("topic/#");
         let publish = Publish::new(
@@ -1368,5 +1436,53 @@ mod tests {
 
         assert_eq!(retained_messages[0].payload(), Some(&"#0000FF".to_string()));
         assert_eq!(retained_messages[0].topic_name(), "topic/a/subtopic");
+    }
+
+    #[test]
+    fn test_retained_messages_combined_wildcards() {
+        let subscribe = build_subscribe("topic/+//+/subtopic/#");
+        let publish = Publish::new(
+            false,
+            QoSLevel::QoSLevel1,
+            true,
+            "topic/a//b/subtopic/cat/white",
+            "#0000FF",
+            Some(123),
+        )
+        .unwrap();
+        let handler = super::TopicHandler::new();
+        let (sender, _r) = channel();
+
+        handler.publish(&publish, sender).unwrap();
+        let retained_messages = handler.subscribe(&subscribe, "user").unwrap();
+
+        assert_eq!(retained_messages.len(), 1);
+
+        assert_eq!(retained_messages[0].payload(), Some(&"#0000FF".to_string()));
+        assert_eq!(
+            retained_messages[0].topic_name(),
+            "topic/a//b/subtopic/cat/white"
+        );
+    }
+
+    #[test]
+    fn test_retained_messages_wildcards_topic_starting_with_dollar_sign() {
+        let subscribe = build_subscribe("#");
+        let publish = Publish::new(
+            false,
+            QoSLevel::QoSLevel1,
+            true,
+            "$SYS",
+            "#0000FF",
+            Some(123),
+        )
+        .unwrap();
+        let handler = super::TopicHandler::new();
+        let (sender, _r) = channel();
+
+        handler.publish(&publish, sender).unwrap();
+        let _retained_messages = handler.subscribe(&subscribe, "user").unwrap();
+
+        //assert_eq!(retained_messages.len(), 0);
     }
 }
