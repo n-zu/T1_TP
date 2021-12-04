@@ -7,6 +7,7 @@ use gtk::{
 use packets::{connack::Connack, qos::QoSLevel, unsuback::Unsuback};
 use packets::{puback::Puback, publish::Publish, suback::Suback};
 
+use crate::interface::publication_counter::PublicationCounter;
 use crate::{
     client::ClientError,
     observer::{Message, Observer},
@@ -35,9 +36,13 @@ impl Observer for ClientObserver {
 impl ClientObserver {
     /// Creates a new ClientObserver with the given Builder
     /// of the interface
-    pub fn new(builder: Builder, subs: SubscriptionList) -> ClientObserver {
+    pub fn new(
+        builder: Builder,
+        subs: SubscriptionList,
+        pub_counter: PublicationCounter,
+    ) -> ClientObserver {
         let (sender, receiver) = glib::MainContext::channel(glib::PRIORITY_DEFAULT);
-        let mut internal = InternalObserver::new(builder, subs);
+        let mut internal = InternalObserver::new(builder, subs, pub_counter);
         receiver.attach(None, move |message: Message| {
             internal.message_receiver(message);
             glib::Continue(true)
@@ -52,6 +57,7 @@ impl ClientObserver {
 struct InternalObserver {
     builder: Builder,
     subs: SubscriptionList,
+    pub_counter: PublicationCounter,
 }
 
 impl InterfaceUtils for InternalObserver {
@@ -63,8 +69,12 @@ impl InterfaceUtils for InternalObserver {
 impl InternalObserver {
     /// Creates a new InternalObserver with the given
     /// interface builder
-    fn new(builder: Builder, subs: SubscriptionList) -> Self {
-        Self { builder, subs }
+    fn new(builder: Builder, subs: SubscriptionList, pub_counter: PublicationCounter) -> Self {
+        Self {
+            builder,
+            subs,
+            pub_counter,
+        }
     }
 
     /// Receives a message and updates the interface
@@ -130,14 +140,13 @@ impl InternalObserver {
     /// Adds a new received publish packet to the feed
     fn add_publish(&mut self, publish: Publish) {
         let list: ListBox = self.builder.object("sub_msgs").unwrap();
-
         let row = ListBoxRow::new();
         row.add(&get_box(
             publish.topic_name(),
             publish.payload().unwrap_or(&"".to_string()),
             publish.qos(),
         ));
-
+        self.pub_counter.update_new_messages_amount();
         list.add(&row);
         list.show_all();
     }
