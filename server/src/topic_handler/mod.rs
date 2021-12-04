@@ -192,6 +192,7 @@ impl TopicHandler {
     }
 
     #[doc(hidden)]
+    /// Returns all the matching subscriptions for a given topic name
     fn set_matching_subscribers(
         topic_name: Option<&str>,
         singlelevel_subscriptions: &Subscriptions,
@@ -266,7 +267,8 @@ impl TopicHandler {
     }
 
     #[doc(hidden)]
-    /// Adds a new client id with its data into a given topic
+    /// Adds a new client id with its data into a given topic's single level subscriptions
+    /// Returns the matching retained messages
     fn add_single_level_subscription(
         node: &Topic,
         topic: &str,
@@ -285,6 +287,9 @@ impl TopicHandler {
         Self::get_retained_messages_rec(node, Some(topic), data.qos, is_root)
     }
 
+    #[doc(hidden)]
+    /// Adds a new client id with its data into a given topic's multi level subscriptions
+    /// Returns the matching retained messages
     fn add_multi_level_subscription(
         node: &Topic,
         topic: &str,
@@ -299,6 +304,8 @@ impl TopicHandler {
     }
 
     #[doc(hidden)]
+    /// Helper function for subscribe_rec() that walks through the current tree level according to
+    /// the remaining part of the topic name currently being processed
     fn handle_sub_level(
         node: &Topic,
         topic: &str,
@@ -415,6 +422,7 @@ impl TopicHandler {
     }
 
     #[doc(hidden)]
+    /// Removes all the subtopics of a node that do not contain any information
     fn clean_node(node: &Topic) -> Result<(), TopicHandlerError> {
         let mut empty_subtopics = Vec::new();
 
@@ -460,6 +468,8 @@ impl TopicHandler {
     }
 
     #[doc(hidden)]
+    /// Gets the retained message of a given topic in a Vec
+    /// The Vec will be empty if there is no retained message
     fn get_retained(node: &Topic, max_qos: QoSLevel) -> Result<Vec<Publish>, TopicHandlerError> {
         if let Some(retained) = node.retained_message.read()?.deref() {
             let mut retained = retained.clone();
@@ -471,6 +481,8 @@ impl TopicHandler {
     }
 
     #[doc(hidden)]
+    /// Helper function for get_retained_messages_rec() that walks through the current
+    /// tree level according to the remaining part of the topic name currently being processed
     fn handle_retained_messages_level(
         node: &Topic,
         topic: &str,
@@ -516,6 +528,7 @@ impl TopicHandler {
     }
 
     #[doc(hidden)]
+    /// recursively gets all the matching retained messages of a given topic
     fn get_retained_messages_rec(
         node: &Topic,
         topic: Option<&str>,
@@ -1459,9 +1472,9 @@ mod tests {
         let (sender, _r) = channel();
 
         handler.publish(&publish, sender).unwrap();
-        let _retained_messages = handler.subscribe(&subscribe, "user").unwrap();
+        let retained_messages = handler.subscribe(&subscribe, "user").unwrap();
 
-        assert_eq!(_retained_messages.len(), 0);
+        assert_eq!(retained_messages.len(), 0);
     }
 
     #[test]
