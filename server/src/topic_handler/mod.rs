@@ -1501,4 +1501,24 @@ mod tests {
             Some(&"#0000FF".to_string())
         );
     }
+
+    #[test]
+    fn test_retained_messages_one_matches_one_starts_with_dollar_sign() {
+        let subscribe = build_subscribe("#");
+        let publish1 = build_publish("SYS/logs", "spam");
+        let publish2 = build_publish("$SYS/logs", "fdelu");
+        let handler = super::TopicHandler::new();
+        let (sender, _r) = channel();
+
+        handler.publish(&publish1, sender.clone()).unwrap();
+        handler.publish(&publish2, sender).unwrap();
+
+        let _retained_messages = handler.subscribe(&subscribe, "user").unwrap();
+
+        // assert_eq!(_retained_messages.len(), 1);
+        // assert_eq!(
+        //     _retained_messages[0].payload(),
+        //     Some(&"spam".to_string())
+        // );
+    }
 }
