@@ -167,7 +167,7 @@ impl TopicHandler {
 
     #[doc(hidden)]
     /// Returns true if a certain topic name matches a given topic filter
-    fn topic_filter_matches(topic_filter: String, topic_name: String) -> bool {
+    fn topic_filter_matches(topic_filter: &str, topic_name: &str) -> bool {
         let name = topic_name.split(SEP).collect::<Vec<&str>>();
         let filter = topic_filter.split(SEP).collect::<Vec<&str>>();
 
@@ -199,7 +199,7 @@ impl TopicHandler {
         let mut matching = Vec::new();
         if let Some(topic) = topic_name {
             for (topic_filter, subscribers) in singlelevel_subscriptions {
-                if Self::topic_filter_matches(topic_filter.to_string(), topic.to_string()) {
+                if Self::topic_filter_matches(topic_filter, topic) {
                     matching.extend(subscribers.clone());
                 }
             }
@@ -269,7 +269,7 @@ impl TopicHandler {
     /// Adds a new client id with its data into a given topic
     fn add_single_level_subscription(
         node: &Topic,
-        topic: String,
+        topic: &str,
         client_id: &str,
         data: SubscriptionData,
         is_root: bool,
@@ -277,7 +277,7 @@ impl TopicHandler {
         let mut single_level_subscriptions = node.singlelevel_subscriptions.write()?;
 
         let single_level_subscribers = single_level_subscriptions
-            .entry(topic.clone())
+            .entry(topic.to_string())
             .or_insert_with(HashMap::new);
 
         single_level_subscribers.insert(client_id.to_string(), data.clone());
@@ -292,7 +292,7 @@ impl TopicHandler {
 
     fn add_multi_level_subscription(
         node: &Topic,
-        topic: String,
+        topic: &str,
         client_id: &str,
         data: SubscriptionData,
         is_root: bool,
@@ -318,20 +318,12 @@ impl TopicHandler {
     ) -> Result<Vec<Publish>, TopicHandlerError> {
         let (current, rest) = Self::split(topic);
         match (current, rest) {
-            (SINGLELEVEL_WILDCARD, _) => Self::add_single_level_subscription(
-                node,
-                topic.to_string(),
-                user_id,
-                sub_data,
-                is_root,
-            ),
-            (MULTILEVEL_WILDCARD, _) => Self::add_multi_level_subscription(
-                node,
-                topic.to_string(),
-                user_id,
-                sub_data,
-                is_root,
-            ),
+            (SINGLELEVEL_WILDCARD, _) => {
+                Self::add_single_level_subscription(node, topic, user_id, sub_data, is_root)
+            }
+            (MULTILEVEL_WILDCARD, _) => {
+                Self::add_multi_level_subscription(node, topic, user_id, sub_data, is_root)
+            }
             _ => {
                 let mut subtopics = node.subtopics.read()?;
                 // Insercion de nuevo nodo
@@ -377,14 +369,14 @@ impl TopicHandler {
     /// Removes a client id from a given topic (String) from a given Topic node
     fn remove_single_level_subscription(
         node: &Topic,
-        topic: String,
+        topic: &str,
         client_id: &str,
     ) -> Result<(), TopicHandlerError> {
         let mut single_level_subscriptions = node.singlelevel_subscriptions.write()?;
-        if let Some(subscribers) = single_level_subscriptions.get_mut(&topic) {
+        if let Some(subscribers) = single_level_subscriptions.get_mut(topic) {
             subscribers.remove(client_id);
             if subscribers.is_empty() {
-                single_level_subscriptions.remove(&topic);
+                single_level_subscriptions.remove(topic);
             }
         };
         Ok(())
@@ -404,7 +396,7 @@ impl TopicHandler {
                     (SINGLELEVEL_WILDCARD, Some(rest)) => {
                         return Self::remove_single_level_subscription(
                             node,
-                            current.to_string() + SEP + rest,
+                            &(current.to_string() + SEP + rest),
                             client_id,
                         );
                     }
@@ -950,50 +942,35 @@ mod tests {
     fn test_topic_filter_matches() {
         // name, filter
 
+        assert!(TopicHandler::topic_filter_matches("top", "top"));
+        assert!(TopicHandler::topic_filter_matches("top/sub", "top/sub"));
+        assert!(TopicHandler::topic_filter_matches("+/sub", "top/sub"));
         assert!(TopicHandler::topic_filter_matches(
-            "top".to_string(),
-            "top".to_string()
+            "top/+/leaf",
+            "top/sub/leaf"
+        ));
+        assert!(TopicHandler::topic_filter_matches("top/#", "top/sub/leaf"));
+        assert!(TopicHandler::topic_filter_matches(
+            "top/+/+/green",
+            "top/sub/leaf/green"
         ));
         assert!(TopicHandler::topic_filter_matches(
-            "top/sub".to_string(),
-            "top/sub".to_string()
+            "top/+/+/#",
+            "top/sub/leaf/green"
         ));
         assert!(TopicHandler::topic_filter_matches(
-            "+/sub".to_string(),
-            "top/sub".to_string()
+            "top/+/+/#",
+            "top/sub/leaf/green"
         ));
         assert!(TopicHandler::topic_filter_matches(
-            "top/+/leaf".to_string(),
-            "top/sub/leaf".to_string()
+            "top/+/+/#",
+            "top/sub/leaf/green/#00FF00"
         ));
         assert!(TopicHandler::topic_filter_matches(
-            "top/#".to_string(),
-            "top/sub/leaf".to_string()
+            "top/+//#",
+            "top/sub//green/#00FF00"
         ));
-        assert!(TopicHandler::topic_filter_matches(
-            "top/+/+/green".to_string(),
-            "top/sub/leaf/green".to_string()
-        ));
-        assert!(TopicHandler::topic_filter_matches(
-            "top/+/+/#".to_string(),
-            "top/sub/leaf/green".to_string()
-        ));
-        assert!(TopicHandler::topic_filter_matches(
-            "top/+/+/#".to_string(),
-            "top/sub/leaf/green".to_string()
-        ));
-        assert!(TopicHandler::topic_filter_matches(
-            "top/+/+/#".to_string(),
-            "top/sub/leaf/green/#00FF00".to_string()
-        ));
-        assert!(TopicHandler::topic_filter_matches(
-            "top/+//#".to_string(),
-            "top/sub//green/#00FF00".to_string()
-        ));
-        assert!(TopicHandler::topic_filter_matches(
-            "+".to_string(),
-            "fdelu".to_string()
-        ));
+        assert!(TopicHandler::topic_filter_matches("+", "fdelu"));
     }
 
     #[test]
