@@ -271,9 +271,7 @@ fn test_takeover_should_change_clean_session() {
 
     let mut control = [0u8];
     let mut stream_1 = connect_client(builder_1, true, port, true);
-    stream_1
-        .write_all(&mut subscribe.encode().unwrap())
-        .unwrap();
+    stream_1.write_all(&subscribe.encode().unwrap()).unwrap();
     stream_1.read_exact(&mut control).unwrap();
     Suback::read_from(&mut stream_1, control[0]).unwrap();
 
@@ -309,13 +307,13 @@ fn test_retained_message() {
     stream_1.write_all(&subscribe.encode().unwrap()).unwrap();
     thread::sleep(Duration::from_millis(100));
 
-    // Recibo suback
+    // Recibo suback para cliente 1
     stream_1.read_exact(&mut control).unwrap();
     assert_eq!(control[0] >> 4, 9);
     let suback = Suback::read_from(&mut stream_1, control[0]).unwrap();
     assert_eq!(suback.packet_id(), 123);
 
-    // Recibo publish
+    // Recibo publish en cliente 1
     stream_1.read_exact(&mut control).unwrap();
     assert_eq!(control[0] >> 4, 3);
     let recv_publish = Publish::read_from(&mut stream_1, control[0]).unwrap();
@@ -356,5 +354,5 @@ fn test_retained_message_in_last_will() {
     let recv_publish = Publish::read_from(&mut stream_1, control[0]).unwrap();
     assert_eq!(recv_publish.payload(), "lw");
     assert_eq!(recv_publish.topic_name(), "topic");
-    assert_eq!(recv_publish.retain_flag(), true);
+    assert!(recv_publish.retain_flag());
 }

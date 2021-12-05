@@ -1600,7 +1600,7 @@ mod tests {
     }
 
     #[test]
-    fn test_retained_messages_zero_length_shouldnt_be_stored() {
+    fn test_retained_messages_zero_length_should_not_be_stored() {
         let subscribe = build_subscribe("topic");
         let publish =
             Publish::new(false, QoSLevel::QoSLevel1, true, "topic", "", Some(123)).unwrap();
