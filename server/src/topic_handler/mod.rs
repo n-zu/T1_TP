@@ -285,7 +285,10 @@ impl TopicHandler {
             Some(topic) => {
                 let (current, rest) = Self::split(topic);
                 let mut subtopics = node.subtopics.read()?;
-                if !subtopics.contains_key(current) && packet.retain_flag() {
+                if !subtopics.contains_key(current)
+                    && packet.retain_flag()
+                    && !packet.payload().is_empty()
+                {
                     drop(subtopics);
                     node.subtopics
                         .write()?
@@ -1605,6 +1608,30 @@ mod tests {
         let (sender, _r) = channel();
 
         handler.publish(&publish, sender).unwrap();
+        let retained_messages = handler.subscribe(&subscribe, "user").unwrap();
+
+        assert_eq!(retained_messages.len(), 0);
+    }
+
+    #[test]
+    fn test_retained_messages_zero_length_should_remove_retained_message() {
+        let subscribe = build_subscribe("topic");
+        let publish_1 = Publish::new(
+            false,
+            QoSLevel::QoSLevel1,
+            true,
+            "topic",
+            "#0000FF",
+            Some(123),
+        )
+        .unwrap();
+        let publish_2 =
+            Publish::new(false, QoSLevel::QoSLevel1, true, "topic", "", Some(123)).unwrap();
+        let handler = super::TopicHandler::new();
+        let (sender, _r) = channel();
+
+        handler.publish(&publish_1, sender.clone()).unwrap();
+        handler.publish(&publish_2, sender).unwrap();
         let retained_messages = handler.subscribe(&subscribe, "user").unwrap();
 
         assert_eq!(retained_messages.len(), 0);
