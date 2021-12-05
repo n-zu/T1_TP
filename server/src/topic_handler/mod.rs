@@ -239,7 +239,7 @@ impl TopicHandler {
     fn send_publish(
         sender: &Sender<Message>,
         packet: &Publish,
-        subscribers: &Vec<Subscription>,
+        subscribers: &[Subscription],
     ) -> Result<(), TopicHandlerError> {
         for (id, data) in subscribers {
             let mut to_be_sent = packet.clone();
@@ -1382,6 +1382,39 @@ mod tests {
     }
 
     #[test]
+    fn test_retained_messages_single_level_wildcard_negative() {
+        let subscribe = build_subscribe("topic/+");
+        let publish_1 = Publish::new(
+            false,
+            QoSLevel::QoSLevel1,
+            true,
+            "topic/sub/subsub",
+            "#0000FF",
+            Some(123),
+        )
+        .unwrap();
+
+        let publish_2 = Publish::new(
+            false,
+            QoSLevel::QoSLevel1,
+            true,
+            "topic",
+            "#0000FF",
+            Some(123),
+        )
+        .unwrap();
+
+        let handler = super::TopicHandler::new();
+        let (sender, _r) = channel();
+
+        handler.publish(&publish_1, sender.clone()).unwrap();
+        handler.publish(&publish_2, sender).unwrap();
+        let retained_messages = handler.subscribe(&subscribe, "user").unwrap();
+
+        assert_eq!(retained_messages.len(), 0);
+    }
+
+    #[test]
     fn test_retained_messages_single_level_wildcard_deeper() {
         let subscribe = build_subscribe("topic/+/subtopic");
         let publish = Publish::new(
@@ -1535,7 +1568,8 @@ mod tests {
             "SYS/logs",
             "spam",
             Some(123),
-        ).unwrap();
+        )
+        .unwrap();
         let publish2 = Publish::new(
             false,
             QoSLevel::QoSLevel1,
@@ -1543,7 +1577,8 @@ mod tests {
             "$SYS/logs",
             "fdelu",
             Some(123),
-        ).unwrap();
+        )
+        .unwrap();
         let handler = super::TopicHandler::new();
         let (sender, _r) = channel();
 
@@ -1553,9 +1588,6 @@ mod tests {
         let _retained_messages = handler.subscribe(&subscribe, "user").unwrap();
 
         assert_eq!(_retained_messages.len(), 1);
-        assert_eq!(
-            _retained_messages[0].payload(),
-            Some(&"spam".to_string())
-        );
+        assert_eq!(_retained_messages[0].payload(), Some(&"spam".to_string()));
     }
 }
