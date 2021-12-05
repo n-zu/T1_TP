@@ -141,10 +141,11 @@ impl InternalObserver {
     fn add_publish(&mut self, publish: Publish) {
         let list: ListBox = self.builder.object("sub_msgs").unwrap();
         let row = ListBoxRow::new();
-        row.add(&get_box(
+        row.add(&Self::create_box(
             publish.topic_name(),
             publish.payload().unwrap_or(&"".to_string()),
             publish.qos(),
+            publish.retain_flag(),
         ));
         self.pub_counter.update_new_messages_amount();
         list.add(&row);
@@ -183,21 +184,26 @@ impl InternalObserver {
             }
         }
     }
-}
 
-#[doc(hidden)]
-fn get_box(topic: &str, payload: &str, qos: QoSLevel) -> Box {
-    let outer_box = Box::new(Orientation::Vertical, 5);
-    let inner_box = Box::new(Orientation::Horizontal, 5);
-    let label_topic: Label = Label::new(Some(&("• ".to_owned() + topic)));
-    let label_qos: Label = Label::new(Some(&format!("- QoS: {}", qos as u8)));
-    let label_payload: Label = Label::new(Some(payload));
-    label_topic.set_line_wrap(true);
-    label_qos.set_line_wrap(true);
-    label_payload.set_line_wrap(true);
-    inner_box.add(&label_topic);
-    inner_box.add(&label_qos);
-    outer_box.add(&inner_box);
-    outer_box.add(&label_payload);
-    outer_box
+    #[doc(hidden)]
+    /// Returns a Box with the given topic, payload and QoS added on it
+    fn create_box(topic: &str, payload: &str, qos: QoSLevel, retain_flag: bool) -> Box {
+        let outer_box = Box::new(Orientation::Vertical, 5);
+        let inner_box = Box::new(Orientation::Horizontal, 5);
+        let label_topic: Label = Label::new(Some(&("• ".to_owned() + topic)));
+        let mut qos_msg = format!("- QoS: {}", qos as u8);
+        if retain_flag {
+            qos_msg.push_str(" (retained)");
+        }
+        let label_qos: Label = Label::new(Some(&qos_msg));
+        let label_payload: Label = Label::new(Some(payload));
+        label_topic.set_line_wrap(true);
+        label_qos.set_line_wrap(true);
+        label_payload.set_line_wrap(true);
+        inner_box.add(&label_topic);
+        inner_box.add(&label_qos);
+        outer_box.add(&inner_box);
+        outer_box.add(&label_payload);
+        outer_box
+    }
 }
