@@ -1,3 +1,4 @@
+use gtk::prelude::LabelExt;
 use gtk::{
     glib,
     prelude::{BuilderExtManual, ButtonExt, ContainerExt, WidgetExt},
@@ -6,6 +7,7 @@ use gtk::{
 use packets::{connack::Connack, qos::QoSLevel, unsuback::Unsuback};
 use packets::{puback::Puback, publish::Publish, suback::Suback};
 
+use crate::interface::publication_counter::PublicationCounter;
 use crate::{
     client::ClientError,
     observer::{Message, Observer},
@@ -34,9 +36,13 @@ impl Observer for ClientObserver {
 impl ClientObserver {
     /// Creates a new ClientObserver with the given Builder
     /// of the interface
-    pub fn new(builder: Builder, subs: SubscriptionList) -> ClientObserver {
+    pub fn new(
+        builder: Builder,
+        subs: SubscriptionList,
+        pub_counter: PublicationCounter,
+    ) -> ClientObserver {
         let (sender, receiver) = glib::MainContext::channel(glib::PRIORITY_DEFAULT);
-        let mut internal = InternalObserver::new(builder, subs);
+        let mut internal = InternalObserver::new(builder, subs, pub_counter);
         receiver.attach(None, move |message: Message| {
             internal.message_receiver(message);
             glib::Continue(true)
@@ -51,6 +57,7 @@ impl ClientObserver {
 struct InternalObserver {
     builder: Builder,
     subs: SubscriptionList,
+    pub_counter: PublicationCounter,
 }
 
 impl InterfaceUtils for InternalObserver {
@@ -62,8 +69,12 @@ impl InterfaceUtils for InternalObserver {
 impl InternalObserver {
     /// Creates a new InternalObserver with the given
     /// interface builder
-    fn new(builder: Builder, subs: SubscriptionList) -> Self {
-        Self { builder, subs }
+    fn new(builder: Builder, subs: SubscriptionList, pub_counter: PublicationCounter) -> Self {
+        Self {
+            builder,
+            subs,
+            pub_counter,
+        }
     }
 
     /// Receives a message and updates the interface
@@ -129,14 +140,14 @@ impl InternalObserver {
     /// Adds a new received publish packet to the feed
     fn add_publish(&mut self, publish: Publish) {
         let list: ListBox = self.builder.object("sub_msgs").unwrap();
-
         let row = ListBoxRow::new();
-        row.add(&get_box(
+        row.add(&Self::create_box(
             publish.topic_name(),
             publish.payload(),
             publish.qos(),
+            publish.retain_flag(),
         ));
-
+        self.pub_counter.update_new_messages_amount();
         list.add(&row);
         list.show_all();
     }
@@ -173,15 +184,26 @@ impl InternalObserver {
             }
         }
     }
-}
 
-#[doc(hidden)]
-fn get_box(topic: &str, payload: &str, qos: QoSLevel) -> Box {
-    let outer_box = Box::new(Orientation::Vertical, 5);
-    let inner_box = Box::new(Orientation::Horizontal, 5);
-    inner_box.add(&Label::new(Some(&("• ".to_owned() + topic))));
-    inner_box.add(&Label::new(Some(&format!("- QoS: {}", qos as u8))));
-    outer_box.add(&inner_box);
-    outer_box.add(&Label::new(Some(payload)));
-    outer_box
+    #[doc(hidden)]
+    /// Returns a Box with the given topic, payload and QoS added on it
+    fn create_box(topic: &str, payload: &str, qos: QoSLevel, retain_flag: bool) -> Box {
+        let outer_box = Box::new(Orientation::Vertical, 5);
+        let inner_box = Box::new(Orientation::Horizontal, 5);
+        let label_topic: Label = Label::new(Some(&("• ".to_owned() + topic)));
+        let mut qos_msg = format!("- QoS: {}", qos as u8);
+        if retain_flag {
+            qos_msg.push_str(" (retained)");
+        }
+        let label_qos: Label = Label::new(Some(&qos_msg));
+        let label_payload: Label = Label::new(Some(payload));
+        label_topic.set_line_wrap(true);
+        label_qos.set_line_wrap(true);
+        label_payload.set_line_wrap(true);
+        inner_box.add(&label_topic);
+        inner_box.add(&label_qos);
+        outer_box.add(&inner_box);
+        outer_box.add(&label_payload);
+        outer_box
+    }
 }
