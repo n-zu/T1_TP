@@ -49,7 +49,7 @@ impl MQTTDecoding for Publish {
     ///             qos: QoSLevel::QoSLevel1,
     ///             retain_flag: false,
     ///             dup_flag: false,
-    ///             payload: Option::from("mensaje".to_string()),
+    ///             payload: "mensaje".to_string(),
     ///         };
     ///  let result = Publish::read_from(&mut stream, control_byte).unwrap();
     ///  assert_eq!(expected, result);
@@ -62,7 +62,7 @@ impl MQTTDecoding for Publish {
         let mut remaining_bytes = packet_reader::read_remaining_bytes(stream)?;
         let topic_name = Self::verify_topic_name(&mut remaining_bytes)?;
         let packet_id = Self::verify_packet_id(&mut remaining_bytes, &qos_level)?;
-        let payload = Self::read_payload(&mut remaining_bytes);
+        let payload = Self::read_payload(&mut remaining_bytes)?;
         Ok(Self {
             packet_id,
             topic_name: topic_name.value,
@@ -76,10 +76,10 @@ impl MQTTDecoding for Publish {
 
 impl Publish {
     #[doc(hidden)]
-    fn read_payload(bytes: &mut impl Read) -> Option<String> {
+    fn read_payload(bytes: &mut impl Read) -> PacketResult<String> {
         let mut payload_buf = vec![];
         let _ = bytes.read_to_end(&mut payload_buf);
-        String::from_utf8(payload_buf).ok()
+        Ok(String::from_utf8(payload_buf)?)
     }
 
     #[doc(hidden)]

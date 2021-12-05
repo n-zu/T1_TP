@@ -728,7 +728,7 @@ mod tests {
         if let Message::Publish(publish) = msgs.remove(0) {
             assert_eq!(publish.packet_id(), None);
             assert_eq!(publish.topic_name(), "topic");
-            assert_eq!(publish.payload(), Some(&"msg".to_string()));
+            assert_eq!(publish.payload(), "msg");
         }
         assert_eq!(*sender.times_called.lock().unwrap(), 0);
     }
@@ -760,7 +760,7 @@ mod tests {
         if let Message::Publish(publish) = msgs.remove(0) {
             assert_eq!(publish.packet_id(), Some(123));
             assert_eq!(publish.topic_name(), "topic");
-            assert_eq!(publish.payload(), Some(&"msg".to_string()));
+            assert_eq!(publish.payload(), "msg");
         }
         assert_eq!(*sender.times_called.lock().unwrap(), 1);
     }

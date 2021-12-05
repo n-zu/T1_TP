@@ -1,4 +1,5 @@
 use std::error::Error;
+use std::string::FromUtf8Error;
 use std::{fmt, io};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -91,6 +92,12 @@ impl From<io::Error> for PacketError {
             }
             _ => PacketError::new_msg(&error.to_string()),
         }
+    }
+}
+
+impl From<FromUtf8Error> for PacketError {
+    fn from(error: FromUtf8Error) -> Self {
+        PacketError::new_kind(&error.to_string(), ErrorKind::ErrorAtReadingPacket)
     }
 }
 

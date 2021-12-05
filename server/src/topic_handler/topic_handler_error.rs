@@ -4,7 +4,7 @@ use std::{
     sync::{mpsc::SendError, PoisonError, RwLockReadGuard, RwLockWriteGuard},
 };
 
-use super::{Message, Subscribers, Subscriptions, Subtopics};
+use super::Message;
 
 #[derive(Debug)]
 pub struct TopicHandlerError {
@@ -33,38 +33,14 @@ impl TopicHandlerError {
 
 const DEFAULT_MSG: &str = "TopicHandlerError: No se pudo desbloquear contenido del Topic";
 
-impl From<PoisonError<RwLockReadGuard<'_, Subscribers>>> for TopicHandlerError {
-    fn from(err: PoisonError<RwLockReadGuard<Subscribers>>) -> TopicHandlerError {
+impl<T> From<PoisonError<RwLockReadGuard<'_, T>>> for TopicHandlerError {
+    fn from(err: PoisonError<RwLockReadGuard<T>>) -> TopicHandlerError {
         TopicHandlerError::new(&format!("{} ({})", DEFAULT_MSG, err))
     }
 }
 
-impl From<PoisonError<RwLockReadGuard<'_, Subtopics>>> for TopicHandlerError {
-    fn from(err: PoisonError<RwLockReadGuard<Subtopics>>) -> TopicHandlerError {
-        TopicHandlerError::new(&format!("{} ({})", DEFAULT_MSG, err))
-    }
-}
-
-impl From<PoisonError<RwLockReadGuard<'_, Subscriptions>>> for TopicHandlerError {
-    fn from(err: PoisonError<RwLockReadGuard<Subscriptions>>) -> TopicHandlerError {
-        TopicHandlerError::new(&format!("{} ({})", DEFAULT_MSG, err))
-    }
-}
-
-impl From<PoisonError<RwLockWriteGuard<'_, Subscribers>>> for TopicHandlerError {
-    fn from(err: PoisonError<RwLockWriteGuard<Subscribers>>) -> TopicHandlerError {
-        TopicHandlerError::new(&format!("{} ({})", DEFAULT_MSG, err))
-    }
-}
-
-impl From<PoisonError<RwLockWriteGuard<'_, Subtopics>>> for TopicHandlerError {
-    fn from(err: PoisonError<RwLockWriteGuard<Subtopics>>) -> TopicHandlerError {
-        TopicHandlerError::new(&format!("{} ({})", DEFAULT_MSG, err))
-    }
-}
-
-impl From<PoisonError<RwLockWriteGuard<'_, Subscriptions>>> for TopicHandlerError {
-    fn from(err: PoisonError<RwLockWriteGuard<Subscriptions>>) -> TopicHandlerError {
+impl<T> From<PoisonError<RwLockWriteGuard<'_, T>>> for TopicHandlerError {
+    fn from(err: PoisonError<RwLockWriteGuard<T>>) -> TopicHandlerError {
         TopicHandlerError::new(&format!("{} ({})", DEFAULT_MSG, err))
     }
 }

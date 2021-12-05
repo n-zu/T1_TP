@@ -24,7 +24,7 @@ const THREAD_WAIT_TIMEOUT: Duration = Duration::from_micros(1000); // 0.001s
 #[derive(Clone)]
 pub struct ThreadPool {
     job_sender: Sender<Job>, // Sender por el que se le envían las tareas al ThreadManager
-    thread_manager_handler: Arc<ManagerHandle>, // Handler del thread que ejecuta al ThreadManager
+    _thread_manager_handler: Arc<ManagerHandle>, // Handler del thread que ejecuta al ThreadManager
 } // Es importante que el sender este definido primero para que se dropee antes, sino el manager va a quedar bloqueado
 
 // Información que se guarda el ThreadManager de cada worker thread
@@ -153,7 +153,7 @@ impl ThreadPool {
 
         ThreadPool {
             job_sender: sender,
-            thread_manager_handler: Arc::new(ManagerHandle(Some(handler))),
+            _thread_manager_handler: Arc::new(ManagerHandle(Some(handler))),
         }
     }
 
@@ -176,7 +176,7 @@ impl Drop for ThreadManager {
                 // con lo que la función sale del loop
                 drop(thread);
 
-                let _res = handle.join();
+                let _ = handle.join();
             }
         }
     }
