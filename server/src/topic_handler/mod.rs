@@ -252,6 +252,21 @@ impl TopicHandler {
         Ok(())
     }
 
+    #[doc(hidden)]
+    /// If the packet is a retained message, it either updates the retained message of the topic or
+    /// it removes its retained message if it the packet has a zero-lenght payload ([MQTT-3.3.1-11])
+    fn update_retained_message(topic: &Topic, packet: &Publish) -> Result<(), TopicHandlerError> {
+        if packet.retain_flag() {
+            let mut retained = topic.retained_message.write()?;
+            if packet.payload().is_empty() {
+                *retained = None;
+            } else {
+                *retained = Some(packet.clone());
+            }
+        }
+        Ok(())
+    }
+
     // Lo tuve que hacer recursivo porque sino era un caos el tema de mantener todos los
     // locks desbloqueados, ya que no los podia dropear porque perdia las referencias internas
     #[doc(hidden)]
@@ -282,10 +297,9 @@ impl TopicHandler {
                     Self::publish_rec(node, rest, sender, packet, false)?;
                 }
             }
-            None if packet.retain_flag() => {
-                node.retained_message.write()?.replace(packet.clone());
+            None => {
+                Self::update_retained_message(node, packet)?;
             }
-            None => (),
         }
 
         Ok(())
@@ -1288,10 +1302,7 @@ mod tests {
 
         handler.publish(&publish, sender).unwrap();
 
-        assert_eq!(
-            receiver.recv().unwrap().packet.payload(),
-            Some(&":D".to_string())
-        );
+        assert_eq!(receiver.recv().unwrap().packet.payload(), ":D");
     }
 
     #[test]
@@ -1306,10 +1317,7 @@ mod tests {
 
         handler.publish(&publish, sender).unwrap();
 
-        assert_eq!(
-            receiver.recv().unwrap().packet.payload(),
-            Some(&":D".to_string())
-        );
+        assert_eq!(receiver.recv().unwrap().packet.payload(), ":D");
     }
 
     #[test]
@@ -1332,7 +1340,7 @@ mod tests {
 
         assert_eq!(retained_messages.len(), 1);
 
-        assert_eq!(retained_messages[0].payload(), Some(&"#0000FF".to_string()));
+        assert_eq!(retained_messages[0].payload(), "#0000FF");
         assert_eq!(retained_messages[0].topic_name(), "topic");
     }
 
@@ -1377,7 +1385,7 @@ mod tests {
 
         assert_eq!(retained_messages.len(), 1);
 
-        assert_eq!(retained_messages[0].payload(), Some(&"#0000FF".to_string()));
+        assert_eq!(retained_messages[0].payload(), "#0000FF");
         assert_eq!(retained_messages[0].topic_name(), "topic/subtopic");
     }
 
@@ -1434,7 +1442,7 @@ mod tests {
 
         assert_eq!(retained_messages.len(), 1);
 
-        assert_eq!(retained_messages[0].payload(), Some(&"#0000FF".to_string()));
+        assert_eq!(retained_messages[0].payload(), "#0000FF");
         assert_eq!(retained_messages[0].topic_name(), "topic/a/subtopic");
     }
 
@@ -1458,7 +1466,7 @@ mod tests {
 
         assert_eq!(retained_messages.len(), 1);
 
-        assert_eq!(retained_messages[0].payload(), Some(&"#0000FF".to_string()));
+        assert_eq!(retained_messages[0].payload(), "#0000FF");
     }
 
     #[test]
@@ -1481,7 +1489,7 @@ mod tests {
 
         assert_eq!(retained_messages.len(), 1);
 
-        assert_eq!(retained_messages[0].payload(), Some(&"#0000FF".to_string()));
+        assert_eq!(retained_messages[0].payload(), "#0000FF");
         assert_eq!(retained_messages[0].topic_name(), "topic/a/subtopic");
     }
 
@@ -1505,7 +1513,7 @@ mod tests {
 
         assert_eq!(retained_messages.len(), 1);
 
-        assert_eq!(retained_messages[0].payload(), Some(&"#0000FF".to_string()));
+        assert_eq!(retained_messages[0].payload(), "#0000FF");
         assert_eq!(
             retained_messages[0].topic_name(),
             "topic/a//b/subtopic/cat/white"
@@ -1549,13 +1557,10 @@ mod tests {
         let (sender, _r) = channel();
 
         handler.publish(&publish, sender).unwrap();
-        let _retained_messages = handler.subscribe(&subscribe, "user").unwrap();
+        let retained_messages = handler.subscribe(&subscribe, "user").unwrap();
 
-        assert_eq!(_retained_messages.len(), 1);
-        assert_eq!(
-            _retained_messages[0].payload(),
-            Some(&"#0000FF".to_string())
-        );
+        assert_eq!(retained_messages.len(), 1);
+        assert_eq!(retained_messages[0].payload(), "#0000FF");
     }
 
     #[test]
@@ -1585,9 +1590,23 @@ mod tests {
         handler.publish(&publish1, sender.clone()).unwrap();
         handler.publish(&publish2, sender).unwrap();
 
-        let _retained_messages = handler.subscribe(&subscribe, "user").unwrap();
+        let retained_messages = handler.subscribe(&subscribe, "user").unwrap();
 
-        assert_eq!(_retained_messages.len(), 1);
-        assert_eq!(_retained_messages[0].payload(), Some(&"spam".to_string()));
+        assert_eq!(retained_messages.len(), 1);
+        assert_eq!(retained_messages[0].payload(), "spam");
+    }
+
+    #[test]
+    fn test_retained_messages_zero_length_shouldnt_be_stored() {
+        let subscribe = build_subscribe("topic");
+        let publish =
+            Publish::new(false, QoSLevel::QoSLevel1, true, "topic", "", Some(123)).unwrap();
+        let handler = super::TopicHandler::new();
+        let (sender, _r) = channel();
+
+        handler.publish(&publish, sender).unwrap();
+        let retained_messages = handler.subscribe(&subscribe, "user").unwrap();
+
+        assert_eq!(retained_messages.len(), 0);
     }
 }

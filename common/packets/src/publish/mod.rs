@@ -25,7 +25,7 @@ pub struct Publish {
     pub qos: QoSLevel,
     pub retain_flag: bool,
     pub dup_flag: bool,
-    pub payload: Option<String>,
+    pub payload: String,
 }
 
 impl Publish {
@@ -50,8 +50,8 @@ impl Publish {
         self.dup_flag
     }
     /// Gets the payload from a Publish packet
-    pub fn payload(&self) -> Option<&String> {
-        self.payload.as_ref()
+    pub fn payload(&self) -> &str {
+        &self.payload
     }
 
     #[doc(hidden)]

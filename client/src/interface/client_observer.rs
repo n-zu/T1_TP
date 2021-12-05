@@ -133,7 +133,7 @@ impl InternalObserver {
         let row = ListBoxRow::new();
         row.add(&get_box(
             publish.topic_name(),
-            publish.payload().unwrap_or(&"".to_string()),
+            publish.payload(),
             publish.qos(),
         ));
 

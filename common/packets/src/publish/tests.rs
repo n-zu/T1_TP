@@ -53,7 +53,7 @@ fn test_publish_packet_with_qos_level_0_must_not_have_a_packet_id() {
         qos: QoSLevel::QoSLevel0,
         retain_flag: false,
         dup_flag: false,
-        payload: Option::from("mensaje".to_string()),
+        payload: "mensaje".to_string(),
     };
     let result = Publish::read_from(&mut stream, control_byte).unwrap();
     assert_eq!(expected, result);
@@ -79,7 +79,7 @@ fn test_publish_packet_with_qos_level_1_must_have_a_packet_id() {
         qos: QoSLevel::QoSLevel1,
         retain_flag: false,
         dup_flag: false,
-        payload: Option::from("mensaje".to_string()),
+        payload: "mensaje".to_string(),
     };
     let result = Publish::read_from(&mut stream, control_byte).unwrap();
     assert_eq!(expected, result);
@@ -103,11 +103,11 @@ fn test_publish_packet_might_have_zero_length_payload() {
         qos: QoSLevel::QoSLevel0,
         retain_flag: false,
         dup_flag: false,
-        payload: Option::from("".to_string()),
+        payload: "".to_string(),
     };
     let result = Publish::read_from(&mut stream, control_byte).unwrap();
     assert_eq!(expected, result);
-    assert_eq!(expected.payload().unwrap(), "");
+    assert_eq!(expected.payload(), "");
 }
 
 #[test]
@@ -128,7 +128,7 @@ fn test_publish_packet_topics_should_be_case_sensitive() {
         qos: QoSLevel::QoSLevel0,
         retain_flag: false,
         dup_flag: false,
-        payload: Option::from("".to_string()),
+        payload: "".to_string(),
     };
     let result = Publish::read_from(&mut stream, control_byte).unwrap();
     assert_ne!(expected, result);
