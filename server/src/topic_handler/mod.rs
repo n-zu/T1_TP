@@ -62,7 +62,7 @@ impl Debug for Topic {
 }
 
 impl Topic {
-    fn new() -> Self {
+    pub fn new() -> Self {
         Topic {
             subtopics: RwLock::new(HashMap::new()),
             subscribers: RwLock::new(HashMap::new()),
@@ -70,6 +70,14 @@ impl Topic {
             singlelevel_subscriptions: RwLock::new(HashMap::new()),
             retained_message: RwLock::new(None),
         }
+    }
+
+    pub fn is_empty(&self) -> Result<bool, TopicHandlerError> {
+        Ok(self.subtopics.read()?.is_empty()
+            && self.subscribers.read()?.is_empty()
+            && self.multilevel_subscribers.read()?.is_empty()
+            && self.singlelevel_subscriptions.read()?.is_empty()
+            && self.retained_message.read()?.is_none())
     }
 }
 
@@ -139,31 +147,43 @@ impl TopicHandler {
     #[doc(hidden)]
     /// remove_client recursive function
     fn remove_client_rec(node: &Topic, user_id: &str) -> Result<(), TopicHandlerError> {
-        for subtopic in node.subtopics.read()?.values() {
+        let mut to_be_cleaned = Vec::new();
+        for (name, subtopic) in node.subtopics.read()?.deref() {
             Self::remove_client_rec(subtopic, user_id)?;
+            if subtopic.is_empty()? {
+                to_be_cleaned.push(name.to_string());
+            }
         }
 
-        let subs_read = node.subscribers.read()?;
-        if subs_read.contains_key(user_id) {
-            drop(subs_read);
-            node.subscribers.write()?.remove(user_id);
+        if !to_be_cleaned.is_empty() {
+            let mut subtopics = node.subtopics.write()?;
+            for name in to_be_cleaned {
+                subtopics.remove(&name);
+            }
         }
-        node.multilevel_subscribers.write()?.remove(user_id);
-        let mut singlelevel_subscriptions = node.singlelevel_subscriptions.write()?;
-        Self::remove_subscriber(&mut singlelevel_subscriptions, user_id);
 
-        // si falla no importa
-        let _res = Self::clean_node(node);
+        Self::remove_subscriber(node, user_id)?;
+
         Ok(())
     }
 
     #[doc(hidden)]
-    /// Removes a client id from given subscriptions
-    fn remove_subscriber(singlelevel_subscribers: &mut Subscriptions, client_id: &str) {
-        singlelevel_subscribers.retain(|_, subscribers| {
-            subscribers.remove(client_id);
-            !subscribers.is_empty()
-        });
+    /// Removes a client id's subscriptions in the given node
+    fn remove_subscriber(node: &Topic, client_id: &str) -> Result<(), TopicHandlerError> {
+        let subs_read = node.subscribers.read()?;
+        if subs_read.contains_key(client_id) {
+            drop(subs_read);
+            node.subscribers.write()?.remove(client_id);
+        }
+        node.multilevel_subscribers.write()?.remove(client_id);
+
+        node.singlelevel_subscriptions
+            .write()?
+            .retain(|_, subscribers| {
+                subscribers.remove(client_id);
+                !subscribers.is_empty()
+            });
+        Ok(())
     }
 
     #[doc(hidden)]
@@ -296,8 +316,12 @@ impl TopicHandler {
                     subtopics = node.subtopics.read()?;
                 }
 
-                if let Some(node) = subtopics.get(current) {
-                    Self::publish_rec(node, rest, sender, packet, false)?;
+                if let Some(subtopic) = subtopics.get(current) {
+                    Self::publish_rec(subtopic, rest, sender, packet, false)?;
+                    if subtopic.is_empty()? {
+                        drop(subtopics);
+                        node.subtopics.write()?.remove(current);
+                    }
                 }
             }
             None => {
@@ -447,42 +471,16 @@ impl TopicHandler {
 
                         if let Some(subtopic) = subtopics.get(current) {
                             Self::unsubscribe_rec(subtopic, rest, client_id)?;
+                            if subtopic.is_empty()? {
+                                drop(subtopics);
+                                node.subtopics.write()?.remove(current);
+                            }
                         }
                     }
                 }
             }
             None => {
                 node.subscribers.write()?.remove(client_id);
-            }
-        }
-
-        // si falla no importa
-        let _res = Self::clean_node(node);
-        Ok(())
-    }
-
-    #[doc(hidden)]
-    /// Removes all the subtopics of a node that do not contain any information
-    fn clean_node(node: &Topic) -> Result<(), TopicHandlerError> {
-        let mut empty_subtopics = Vec::new();
-
-        let subtopics_read = node.subtopics.read()?;
-        for (sub_topic, topic) in subtopics_read.iter() {
-            if topic.subscribers.read()?.is_empty()
-                && topic.subtopics.read()?.is_empty()
-                && topic.multilevel_subscribers.read()?.is_empty()
-                && topic.singlelevel_subscriptions.read()?.is_empty()
-                && topic.retained_message.read()?.is_none()
-            {
-                empty_subtopics.push(sub_topic.to_string());
-            }
-        }
-
-        if !empty_subtopics.is_empty() {
-            drop(subtopics_read);
-            let mut subtopics_write = node.subtopics.write()?;
-            for sub_topic in empty_subtopics {
-                subtopics_write.remove(&sub_topic);
             }
         }
 
@@ -1246,7 +1244,7 @@ mod tests {
 
     #[test]
     fn test_topic_starting_with_dollar_sign_receive() {
-        let subscribe = build_subscribe("$SYS/info"); // PANICS HERE
+        let subscribe = build_subscribe("$SYS/info");
         let publish = build_publish("$SYS/info", "ERROR");
 
         let handler = super::TopicHandler::new();
