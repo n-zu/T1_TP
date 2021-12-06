@@ -350,3 +350,11 @@ fn test_zero_length_payload() {
         ]
     );
 }
+
+#[test]
+fn test_set_retain() {
+    let mut packet =
+        Publish::new(false, QoSLevel::QoSLevel1, true, "topic", "", Some(350)).unwrap();
+    packet.set_retain_flag(false);
+    assert!(!packet.retain_flag());
+}

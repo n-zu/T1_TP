@@ -1,17 +1,18 @@
 use std::io::Read;
-use std::net::TcpListener;
 
 pub use crate::config::Config;
-pub use crate::server::{Server, ServerController, ServerInterface};
+pub use crate::server::{Server, ServerController};
 use tracing::info;
 use tracing_subscriber::{fmt, prelude::__tracing_subscriber_SubscriberExt, Registry};
 
 mod client;
-mod client_thread_joiner;
 mod clients_manager;
 mod config;
-mod connection_stream;
+mod iomock;
+mod logging;
+mod network_connection;
 mod server;
+mod thread_joiner;
 mod topic_handler;
 mod traits;
 
@@ -27,14 +28,12 @@ pub fn init() {
 
     tracing::subscriber::set_global_default(subscriber).unwrap();
 
-    let threadpool_size = 20;
-    let server = Server::<_, TcpListener>::new(config, threadpool_size);
+    let threadpool_size = 8;
+    let server = Server::new(config, threadpool_size);
     let _controller = server.run().unwrap();
 
     info!("Presione [ENTER] para detener la ejecucion del servidor");
 
     let mut buf = [0u8; 1];
-    std::io::stdin()
-        .read_exact(&mut buf)
-        .expect("Error al leer de stdin");
+    std::io::stdin().read_exact(&mut buf).unwrap_or(());
 }
