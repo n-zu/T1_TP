@@ -20,4 +20,4 @@ online-config:
 	sed -i 's/^ip=.*/ip='$$(hostname -I | grep -Eo '^[^ ]+' | sed 's/\./\\\./g')'/' server/config.txt	
 
 stress:
-	(cd server; SFLAGS="$(SFLAGS)" ./stress.sh)
+	@(cd server; SFLAGS="$(SFLAGS)" ./stress.sh)
