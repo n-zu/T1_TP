@@ -299,7 +299,9 @@ impl TopicHandler {
         is_root: bool,
     ) -> Result<(), TopicHandlerError> {
         let matching = Self::current_matching_subs(node, topic_name, is_root)?;
-        Self::send_publish(&sender, packet, &matching)?;
+        let mut packet_no_retain = packet.clone();
+        packet_no_retain.set_retain_flag(false);
+        Self::send_publish(&sender, &packet_no_retain, &matching)?;
 
         match topic_name {
             Some(topic) => {
@@ -1340,7 +1342,7 @@ mod tests {
         let retained_messages = handler.subscribe(&subscribe, "user").unwrap();
 
         assert_eq!(retained_messages.len(), 1);
-
+        assert!(retained_messages[0].retain_flag());
         assert_eq!(retained_messages[0].payload(), "#0000FF");
         assert_eq!(retained_messages[0].topic_name(), "topic");
     }
@@ -1385,7 +1387,7 @@ mod tests {
         let retained_messages = handler.subscribe(&subscribe, "user").unwrap();
 
         assert_eq!(retained_messages.len(), 1);
-
+        assert!(retained_messages[0].retain_flag());
         assert_eq!(retained_messages[0].payload(), "#0000FF");
         assert_eq!(retained_messages[0].topic_name(), "topic/subtopic");
     }
@@ -1442,7 +1444,7 @@ mod tests {
         let retained_messages = handler.subscribe(&subscribe, "user").unwrap();
 
         assert_eq!(retained_messages.len(), 1);
-
+        assert!(retained_messages[0].retain_flag());
         assert_eq!(retained_messages[0].payload(), "#0000FF");
         assert_eq!(retained_messages[0].topic_name(), "topic/a/subtopic");
     }
@@ -1466,7 +1468,7 @@ mod tests {
         let retained_messages = handler.subscribe(&subscribe, "user").unwrap();
 
         assert_eq!(retained_messages.len(), 1);
-
+        assert!(retained_messages[0].retain_flag());
         assert_eq!(retained_messages[0].payload(), "#0000FF");
     }
 
@@ -1489,7 +1491,7 @@ mod tests {
         let retained_messages = handler.subscribe(&subscribe, "user").unwrap();
 
         assert_eq!(retained_messages.len(), 1);
-
+        assert!(retained_messages[0].retain_flag());
         assert_eq!(retained_messages[0].payload(), "#0000FF");
         assert_eq!(retained_messages[0].topic_name(), "topic/a/subtopic");
     }
@@ -1513,7 +1515,7 @@ mod tests {
         let retained_messages = handler.subscribe(&subscribe, "user").unwrap();
 
         assert_eq!(retained_messages.len(), 1);
-
+        assert!(retained_messages[0].retain_flag());
         assert_eq!(retained_messages[0].payload(), "#0000FF");
         assert_eq!(
             retained_messages[0].topic_name(),
@@ -1561,6 +1563,7 @@ mod tests {
         let retained_messages = handler.subscribe(&subscribe, "user").unwrap();
 
         assert_eq!(retained_messages.len(), 1);
+        assert!(retained_messages[0].retain_flag());
         assert_eq!(retained_messages[0].payload(), "#0000FF");
     }
 
@@ -1594,6 +1597,7 @@ mod tests {
         let retained_messages = handler.subscribe(&subscribe, "user").unwrap();
 
         assert_eq!(retained_messages.len(), 1);
+        assert!(retained_messages[0].retain_flag());
         assert_eq!(retained_messages[0].payload(), "spam");
     }
 
@@ -1633,5 +1637,28 @@ mod tests {
         let retained_messages = handler.subscribe(&subscribe, "user").unwrap();
 
         assert_eq!(retained_messages.len(), 0);
+    }
+
+    #[test]
+    fn test_retained_message_should_not_be_retained_when_first_sent() {
+        let subscribe = build_subscribe("topic");
+        let publish_1 = Publish::new(
+            false,
+            QoSLevel::QoSLevel1,
+            true,
+            "topic",
+            "#0000FF",
+            Some(123),
+        )
+        .unwrap();
+        let handler = super::TopicHandler::new();
+        let (sender, receiver) = channel();
+
+        handler.subscribe(&subscribe, "user").unwrap();
+        handler.publish(&publish_1, sender.clone()).unwrap();
+
+        let msg = receiver.recv().unwrap();
+        assert_eq!(msg.client_id, "user");
+        assert!(!msg.packet.retain_flag());
     }
 }

@@ -265,7 +265,7 @@ fn test_gracefully_disconnection_should_not_send_last_will() {
     let mut control = [0u8];
 
     // Mando subscribe con QoS0
-    let subscribe = Subscribe::new(vec![Topic::new("topic", QoSLevel0).unwrap()], 123);
+    let subscribe = Subscribe::new(vec![TopicFilter::new("topic", QoSLevel0).unwrap()], 123);
     stream_2.write_all(&subscribe.encode().unwrap()).unwrap();
     thread::sleep(Duration::from_millis(100));
 
@@ -377,6 +377,10 @@ fn test_retained_message_in_last_will() {
     let stream_2 = connect_client(builder_2, true, port, true);
     let mut control = [0u8];
 
+    // cliente 3 por ahora no se suscribe
+    let builder_3 = ConnectBuilder::new("id3", 0, true).unwrap();
+    let mut stream_3 = connect_client(builder_3, true, port, true);
+
     // Mando subscribe de cliente 1
     let subscribe = Subscribe::new(vec![TopicFilter::new("topic", QoSLevel0).unwrap()], 123);
     stream_1.write_all(&subscribe.encode().unwrap()).unwrap();
@@ -395,6 +399,25 @@ fn test_retained_message_in_last_will() {
     stream_1.read_exact(&mut control).unwrap();
     assert_eq!(control[0] >> 4, 3);
     let recv_publish = Publish::read_from(&mut stream_1, control[0]).unwrap();
+    assert_eq!(recv_publish.payload(), "lw");
+    assert_eq!(recv_publish.topic_name(), "topic");
+    assert!(!recv_publish.retain_flag()); // no me deberia llegar al principio como retained
+
+    // Me suscribo con cliente 3
+    let subscribe = Subscribe::new(vec![TopicFilter::new("topic", QoSLevel0).unwrap()], 123);
+    stream_3.write_all(&subscribe.encode().unwrap()).unwrap();
+    thread::sleep(Duration::from_millis(100));
+
+    // Recibo suback en cliente 3
+    stream_3.read_exact(&mut control).unwrap();
+    assert_eq!(control[0] >> 4, 9);
+    let suback = Suback::read_from(&mut stream_3, control[0]).unwrap();
+    assert_eq!(suback.packet_id(), 123);
+
+    // Ahora me tiene que llegar el publish retenido, con la flag en true
+    stream_3.read_exact(&mut control).unwrap();
+    assert_eq!(control[0] >> 4, 3);
+    let recv_publish = Publish::read_from(&mut stream_3, control[0]).unwrap();
     assert_eq!(recv_publish.payload(), "lw");
     assert_eq!(recv_publish.topic_name(), "topic");
     assert!(recv_publish.retain_flag());
