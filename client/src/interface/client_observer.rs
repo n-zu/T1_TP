@@ -1,11 +1,12 @@
-use gtk::prelude::LabelExt;
+use gtk::prelude::{LabelExt, NotebookExt};
 use gtk::{
     glib,
     prelude::{BuilderExtManual, ButtonExt, ContainerExt, WidgetExt},
-    Box, Builder, Button, Label, ListBox, ListBoxRow, Orientation,
+    Box, Builder, Button, Label, ListBox, ListBoxRow, Notebook, Orientation, Widget,
 };
 use packets::{connack::Connack, qos::QoSLevel, unsuback::Unsuback};
 use packets::{puback::Puback, publish::Publish, suback::Suback};
+use std::rc::Rc;
 
 use crate::interface::publication_counter::PublicationCounter;
 use crate::{
@@ -17,6 +18,9 @@ use super::{
     subscription_list::SubscriptionList,
     utils::{alert, Icon, InterfaceUtils},
 };
+
+#[doc(hidden)]
+const PUBLICATIONS_TAB: u32 = 2;
 
 /// Observer for the internal client. It sends all messages through
 /// a channel to the main GTK thread.
@@ -42,7 +46,7 @@ impl ClientObserver {
         pub_counter: PublicationCounter,
     ) -> ClientObserver {
         let (sender, receiver) = glib::MainContext::channel(glib::PRIORITY_DEFAULT);
-        let mut internal = InternalObserver::new(builder, subs, pub_counter);
+        let internal = InternalObserver::new(builder, subs, pub_counter);
         receiver.attach(None, move |message: Message| {
             internal.message_receiver(message);
             glib::Continue(true)
@@ -69,17 +73,23 @@ impl InterfaceUtils for InternalObserver {
 impl InternalObserver {
     /// Creates a new InternalObserver with the given
     /// interface builder
-    fn new(builder: Builder, subs: SubscriptionList, pub_counter: PublicationCounter) -> Self {
-        Self {
+    fn new(
+        builder: Builder,
+        subs: SubscriptionList,
+        pub_counter: PublicationCounter,
+    ) -> Rc<InternalObserver> {
+        let internal_observer = Rc::new(Self {
             builder,
             subs,
             pub_counter,
-        }
+        });
+        internal_observer.setup_notebook();
+        internal_observer
     }
 
     /// Receives a message and updates the interface
     /// accordingly
-    fn message_receiver(&mut self, message: Message) {
+    fn message_receiver(&self, message: Message) {
         match message {
             Message::Publish(publish) => {
                 self.add_publish(publish);
@@ -109,7 +119,7 @@ impl InternalObserver {
 
     /// Re-enables the interface and shows information
     /// about the result of the subscribe operation
-    fn subscribed(&mut self, result: Result<Suback, ClientError>) {
+    fn subscribed(&self, result: Result<Suback, ClientError>) {
         self.sensitive(true);
         match result {
             Ok(suback) => {
@@ -126,7 +136,7 @@ impl InternalObserver {
 
     /// Re-enables the interface and shows information
     /// about the result of the publish operation
-    fn published(&mut self, result: Result<Option<Puback>, ClientError>) {
+    fn published(&self, result: Result<Option<Puback>, ClientError>) {
         self.sensitive(true);
         if let Err(e) = result {
             self.icon(Icon::Error);
@@ -138,7 +148,7 @@ impl InternalObserver {
     }
 
     /// Adds a new received publish packet to the feed
-    fn add_publish(&mut self, publish: Publish) {
+    fn add_publish(&self, publish: Publish) {
         let list: ListBox = self.builder.object("sub_msgs").unwrap();
         let row = ListBoxRow::new();
         row.add(&Self::create_box(
@@ -155,7 +165,7 @@ impl InternalObserver {
     /// Re-enables the interface and shows information
     /// about the result of the connect operation. If
     /// it succeed it switches to the connected/content menu
-    fn connected(&mut self, result: Result<Connack, ClientError>) {
+    fn connected(&self, result: Result<Connack, ClientError>) {
         if let Err(e) = result {
             self.connection_info(None);
             self.sensitive(true);
@@ -170,7 +180,7 @@ impl InternalObserver {
 
     /// Re-enables the interfaces and shows information
     /// about the result of the unsubscribe operation
-    fn unsubscribed(&mut self, result: Result<Unsuback, ClientError>) {
+    fn unsubscribed(&self, result: Result<Unsuback, ClientError>) {
         self.sensitive(true);
         match result {
             Ok(unsuback) => {
@@ -182,6 +192,24 @@ impl InternalObserver {
                 self.icon(Icon::Error);
                 self.status_message(&format!("No se pudo desuscribir: {}", error));
             }
+        }
+    }
+
+    #[doc(hidden)]
+    /// Sets up the 'connect_switch_page' signal
+    fn setup_notebook(self: &Rc<Self>) {
+        let internal_clone = self.clone();
+        let notebook: Notebook = self.builder.object("box_connected").unwrap();
+        notebook.connect_switch_page(move |notebook, widget, new_page_number| {
+            internal_clone.handle_switch_notebook_tab(notebook, widget, new_page_number);
+        });
+    }
+
+    #[doc(hidden)]
+    /// Updates publications tab label.
+    fn handle_switch_notebook_tab(&self, _: &Notebook, _: &Widget, new_page_number: u32) {
+        if new_page_number == PUBLICATIONS_TAB {
+            self.pub_counter.reset_new_messages_amount();
         }
     }
 

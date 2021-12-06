@@ -11,10 +11,10 @@ use crate::interface::client_observer::ClientObserver;
 use crate::client::{Client, ClientError};
 
 use gtk::glib::GString;
-use gtk::prelude::{ComboBoxTextExt, LabelExt, NotebookExt, SwitchExt};
+use gtk::prelude::{ComboBoxTextExt, SwitchExt};
 use gtk::{
     prelude::{BuilderExtManual, ButtonExt, EntryExt, TextBufferExt},
-    Builder, Button, Entry, Label, Notebook, Switch, TextBuffer, Widget,
+    Builder, Button, Entry, Label, Notebook, Switch, TextBuffer,
 };
 use gtk::{ComboBoxText, ListBox};
 use packets::connect::{Connect, ConnectBuilder, LastWill};
@@ -28,9 +28,6 @@ use packets::unsubscribe::Unsubscribe;
 
 use self::subscription_list::SubscriptionList;
 use self::utils::{Icon, InterfaceUtils};
-
-#[doc(hidden)]
-const PUBLICATIONS_TAB: u32 = 2;
 
 /// Controller for the client. It both creates the
 /// internal client and handles all the user inputs
@@ -67,7 +64,6 @@ impl Controller {
         self.setup_publish();
         self.setup_disconnect();
         self.setup_unsubscribe();
-        self.setup_notebook();
     }
 
     #[doc(hidden)]
@@ -116,16 +112,6 @@ impl Controller {
         let unsubscribe: Button = self.builder.object("unsub_btn").unwrap();
         unsubscribe.connect_clicked(move |button: &Button| {
             cont_clone.handle_unsubscribe(button);
-        });
-    }
-
-    #[doc(hidden)]
-    /// Sets up the 'connect_switch_page' signal
-    fn setup_notebook(self: &Rc<Self>) {
-        let cont_clone = self.clone();
-        let nb: Notebook = self.builder.object("box_connected").unwrap();
-        nb.connect_switch_page(move |notebook, widget, new_page_number| {
-            cont_clone.handle_switch_notebook_tab(notebook, widget, new_page_number);
         });
     }
 
@@ -399,15 +385,6 @@ impl Controller {
             self.sensitive(true);
             self.status_message(&format!("No se pudo desuscribir: {}", e));
             self.icon(Icon::Error);
-        }
-    }
-
-    #[doc(hidden)]
-    /// Updates publications tab label.
-    fn handle_switch_notebook_tab(&self, _: &Notebook, _: &Widget, new_page_number: u32) {
-        if new_page_number == PUBLICATIONS_TAB {
-            let feed_label: Label = self.builder.object("label_incoming").unwrap();
-            feed_label.set_text("PUBLICACIONES");
         }
     }
 
