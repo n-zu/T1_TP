@@ -92,7 +92,10 @@ impl Server {
             Ok(_) => {
                 Ok(self.process_packet_given_control_byte(control_byte_buff[0], stream, id)?)
             }
-            Err(error) if error.kind() == io::ErrorKind::UnexpectedEof => {
+            Err(error)
+                if error.kind() == io::ErrorKind::UnexpectedEof
+                    || error.kind() == io::ErrorKind::ConnectionReset =>
+            {
                 Err(ServerError::new_kind(
                     "Cliente se desconecto sin avisar",
                     ServerErrorKind::ClientDisconnected,
@@ -104,13 +107,26 @@ impl Server {
 
     /// Receives through the channel the packets to be published, and
     /// publishes them
-    fn publish_dispatcher_loop(&self, receiver: Receiver<Message>) -> ServerResult<()> {
+    fn publish_dispatcher_loop(self: &Arc<Self>, receiver: Receiver<Message>) -> ServerResult<()> {
+        let lock = self.pool.lock()?;
+        let threadpool_copy = lock.clone();
+        drop(lock);
+
         for message in receiver {
             let id = message.client_id;
+            let publish = message.packet;
             logging::log(LogKind::Publishing(&id));
-            self.clients_manager
-                .read()?
-                .send_publish(&id, message.packet)?;
+            let sv_copy = self.clone();
+            threadpool_copy
+                .spawn(move || {
+                    sv_copy
+                        .clients_manager
+                        .read()
+                        .unwrap()
+                        .client_do(&id, |mut client| client.send_publish(publish))
+                        .unwrap();
+                })
+                .unwrap();
         }
         Ok(())
     }

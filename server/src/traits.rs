@@ -1,24 +1,11 @@
-use std::{
-    io::{self, Read, Write},
-    time::Duration,
-};
+use std::io;
 
-pub trait Id {
-    type T;
-    fn id(&self) -> Self::T;
+pub trait Close {
+    fn close(&mut self) -> io::Result<()>;
 }
 
-#[derive(Debug)]
-pub struct StreamError {}
-
-pub trait BidirectionalStream: Read + Write + Send + Sync + 'static {
-    fn try_clone(&self) -> Result<Self, StreamError>
+pub trait TryClone {
+    fn try_clone(&self) -> Option<Self>
     where
         Self: Sized;
-
-    fn close(&mut self) -> io::Result<()>;
-
-    fn change_read_timeout(&mut self, dur: Option<Duration>) -> io::Result<()>;
-
-    fn change_write_timeout(&mut self, dur: Option<Duration>) -> io::Result<()>;
 }

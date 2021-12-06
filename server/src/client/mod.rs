@@ -1,14 +1,19 @@
+use core::fmt;
+use std::time::{Duration, SystemTime};
 use std::{io::Write, vec};
 
 use packets::{connect::Connect, qos::QoSLevel, traits::MQTTEncoding};
 use packets::{puback::Puback, publish::Publish};
 
+use crate::traits::Close;
 use crate::{
     logging::{self, LogKind},
     network_connection::NetworkConnection,
     server::{server_error::ServerErrorKind, ClientId, ServerError, ServerResult},
-    traits::{BidirectionalStream, Id},
 };
+
+#[cfg(test)]
+mod tests;
 
 /// Represents the state of a client on the server
 ///
@@ -16,10 +21,11 @@ use crate::{
 /// session. It does not handle things like retained messages,
 /// since they do not correspond to the client session
 /// (see [MQTT-4.1.0-1])
+#[derive(Debug)]
 pub struct Client<S, I>
 where
-    S: BidirectionalStream,
-    I: Id,
+    S: Write + Send + Sync + 'static,
+    I: fmt::Display,
 {
     /// Id of the client.
     ///
@@ -44,13 +50,13 @@ where
     /// received on the new connection
     connect: Connect,
     /// Unacknowledged packets
-    unacknowledged: Vec<Publish>,
+    unacknowledged: Vec<(SystemTime, Publish)>,
 }
 
 impl<S, I> Client<S, I>
 where
-    S: BidirectionalStream,
-    I: Id,
+    S: Write + Send + Sync + 'static,
+    I: fmt::Display,
 {
     /// Create a new connected client
     pub fn new(connect: Connect, network_connection: NetworkConnection<S, I>) -> Self {
@@ -114,13 +120,16 @@ where
     ///
     /// If the client was already disconnected, it silently does
     /// nothing
-    pub fn disconnect(&mut self, gracefully: bool) -> ServerResult<Option<Publish>> {
+    pub fn disconnect(&mut self, gracefully: bool) -> ServerResult<Option<Publish>>
+    where
+        S: Close,
+    {
         if let Some(mut connection) = self.connection.take() {
             connection.close()?;
             if gracefully {
-                self.connect.last_will().take();
+                self.connect.take_last_will();
                 Ok(None)
-            } else if let Some(last_will) = self.connect.last_will().take() {
+            } else if let Some(last_will) = self.connect.take_last_will() {
                 let packet_identifier: Option<u16>;
                 if last_will.qos != QoSLevel::QoSLevel0 {
                     packet_identifier = Some(rand::random());
@@ -175,17 +184,20 @@ where
     pub fn reconnect(
         &mut self,
         new_connect: Connect,
-        new_stream: NetworkConnection<S, I>,
-    ) -> ServerResult<Option<Publish>> {
+        new_connection: NetworkConnection<S, I>,
+    ) -> ServerResult<Option<Publish>>
+    where
+        S: Close,
+    {
         self.check_reconnect_id(&new_connect)?;
 
         logging::log(LogKind::Reconnecting(&self.id));
-        if *self.connect.clean_session() {
+        if *new_connect.clean_session() {
             self.unacknowledged = vec![];
         }
 
         let last_will = self.disconnect(false)?;
-        self.connection = Some(new_stream);
+        self.connection = Some(new_connection);
         self.connect = new_connect;
         Ok(last_will)
     }
@@ -193,9 +205,9 @@ where
     /// Returns the maximum idle time between communication with
     /// the client before the server decides to disconnect it
     /// (see [MQTT-3.1.2-24])
-    pub fn keep_alive(&self) -> u32 {
+    pub fn keep_alive(&self) -> f32 {
         let keep_alive = self.connect.keep_alive();
-        (keep_alive as f32 * 1.5) as u32
+        keep_alive as f32 * 1.5
     }
 
     /// Returns the username of the client, if specified.
@@ -206,58 +218,93 @@ where
 
     /// Returns the connection id, if the client is connected.
     /// Otherwise, it returns None
-    pub fn connection_id(&self) -> Option<I>
-    where
-        I: Clone + Copy,
-    {
+    pub fn connection_id(&self) -> Option<&I> {
         self.connection.as_ref().map(|connection| connection.id())
     }
 
+    /// Removes from the unacknowledged list, the packet whose
+    /// *packet_id* matches the *packet_id* of the received [Puback]
+    /// packet. If no packet meets this condition, it returns an
+    /// error of kind [ServerErrorKind::Other]
     pub fn acknowledge(&mut self, puback: Puback) -> ServerResult<()> {
         logging::log(LogKind::Acknowledge(&self.id, puback.packet_id()));
-        self.unacknowledged.retain(|publish| {
+        let idx = self.unacknowledged.iter().position(|publish| {
             puback.packet_id()
-                != publish
+                == publish
+                    .1
                     .packet_id()
                     .expect("Se esperaba un paquete con identificador (QoS > 0)")
         });
-        Ok(())
+        if let Some(idx) = idx {
+            self.unacknowledged.remove(idx);
+            Ok(())
+        } else {
+            Err(ServerError::new_msg(&format!(
+                "No se encontro el paquete con id {} en los unacknowledged",
+                puback.packet_id()
+            )))
+        }
     }
 
-    pub fn send_unacknowledged(&mut self) -> ServerResult<()>
-    where
-        S: Write,
-    {
-        for publish in self.unacknowledged.iter() {
-            logging::log(LogKind::SendingUnacknowledged(
-                &self.id,
-                publish.packet_id().unwrap(),
-            ));
-            self.connection
-                .as_mut()
-                .unwrap()
-                .write_all(&publish.encode()?)?;
+    /// Sends the packets that have not been acknowledged by
+    /// the client.
+    ///
+    /// *inflight_messages* is the number of packets to be sent.
+    /// If it is None or greater thatn the number of unacknowledged
+    /// packets, all packets will be sent.
+    ///
+    /// *min_elapsed_time* is the minimum time that must have elapsed
+    /// between the last time the packet was sent and the moment the
+    /// method is executed, for the packet to be sent. If it is None,
+    /// *inflight_messages* packets will be sent
+    pub fn send_unacknowledged(
+        &mut self,
+        inflight_messages: Option<usize>,
+        min_elapsed_time: Option<Duration>,
+    ) -> ServerResult<()> {
+        let inflight_messages = inflight_messages.unwrap_or(self.unacknowledged.len());
+        let inflight_messages = std::cmp::min(inflight_messages, self.unacknowledged.len());
+        let mut messages_sent = 0;
+
+        let now = SystemTime::now();
+
+        while messages_sent < inflight_messages {
+            let (last_time_published, publish) = self.unacknowledged.remove(0);
+            if let Some(min_elapsed_time) = min_elapsed_time {
+                if now.duration_since(last_time_published).unwrap() > min_elapsed_time {
+                    logging::log(LogKind::SendingUnacknowledged(
+                        &self.id,
+                        publish.packet_id().unwrap(),
+                    ));
+                    self.send_packet(&publish)?;
+                    self.unacknowledged.push((now, publish));
+                } else {
+                    // No se envio, no actualizo la hora
+                    self.unacknowledged.push((last_time_published, publish));
+                    break;
+                }
+            } else {
+                logging::log(LogKind::SendingUnacknowledged(
+                    &self.id,
+                    publish.packet_id().unwrap(),
+                ));
+                self.send_packet(&publish)?;
+                self.unacknowledged.push((now, publish));
+            }
+            messages_sent += 1;
         }
         Ok(())
     }
 
-    fn add_unacknowledged(&mut self, mut publish: Publish) {
-        publish.set_dup(true);
-        self.unacknowledged.push(publish);
-    }
-
-    pub fn send_publish(&mut self, publish: Publish) -> ServerResult<()>
-    where
-        S: Write,
-    {
+    /// Sends a [Publish] packet to the client and, if applicable,
+    /// adds it to the unacknowledged packet list
+    pub fn send_publish(&mut self, mut publish: Publish) -> ServerResult<()> {
         if self.connected() {
             self.send_packet(&publish)?;
-            if publish.qos() == QoSLevel::QoSLevel1 {
-                // TODO: que pasa si el paquete ya existe en el HashMap?
-                self.add_unacknowledged(publish);
-            }
-        } else if publish.qos() == QoSLevel::QoSLevel1 {
-            self.add_unacknowledged(publish);
+        }
+        if publish.qos() == QoSLevel::QoSLevel1 {
+            publish.set_dup(true);
+            self.unacknowledged.push((SystemTime::now(), publish));
         }
         Ok(())
     }

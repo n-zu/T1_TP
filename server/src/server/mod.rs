@@ -36,10 +36,14 @@ pub use server_error::ServerError;
 /// of the [Connect] packet
 const CONNECTION_WAIT_TIMEOUT: Duration = Duration::from_secs(180);
 /// How often unacknowledged packets are sent
-const UNACK_RESENDING_FREQ: Duration = Duration::from_secs(1);
+const UNACK_RESENDING_FREQ: Duration = Duration::from_millis(500);
 /// How long the server sleeps between each failed TCP connection
 /// atempt
 const ACCEPT_SLEEP_DUR: Duration = Duration::from_millis(100);
+
+const MIN_ELAPSED_TIME: Option<Duration> = Some(Duration::from_secs(1));
+
+const INFLIGHT_MESSAGES: Option<usize> = None;
 
 use packets::publish::Publish;
 use packets::qos::QoSLevel;
@@ -52,7 +56,7 @@ use crate::{
     server::server_error::ServerErrorKind,
     thread_joiner::ThreadJoiner,
     topic_handler::{Message, TopicHandler},
-    traits::{BidirectionalStream, Id, StreamError},
+    traits::{Close, TryClone},
 };
 
 pub use self::server_controller::ServerController;
@@ -124,7 +128,7 @@ impl Server {
     pub fn new(config: Config, threadpool_size: usize) -> Arc<Self> {
         logging::log::<SocketAddr>(LogKind::StartingServer(config.ip(), config.port()));
         Arc::new(Self {
-            clients_manager: RwLock::new(ClientsManager::new(config.accounts_path())),
+            clients_manager: RwLock::new(ClientsManager::new(Some(config.accounts_path()))),
             config,
             topic_handler: TopicHandler::new(),
             client_thread_joiner: Mutex::new(ThreadJoiner::new()),
@@ -183,11 +187,11 @@ impl Server {
             Ok(connect) => {
                 network_connection
                     .stream_mut()
-                    .change_read_timeout(Some(UNACK_RESENDING_FREQ))?;
+                    .set_read_timeout(Some(UNACK_RESENDING_FREQ))?;
                 let connect_info = self
                     .clients_manager
                     .write()?
-                    .new_session(network_connection, connect)?;
+                    .new_session(network_connection.try_clone()?, connect)?;
                 Ok(connect_info)
             }
             Err(err) => {
@@ -216,33 +220,37 @@ impl Server {
         id: &ClientIdArg,
         mut network_connection: NetworkConnection<TcpStream, SocketAddr>,
     ) -> ServerResult<DisconnectInfo> {
-        let mut timeout_counter = 0;
-        let keep_alive = self
+        let mut timeout_counter_ms = 0;
+        let keep_alive_ms = self
             .clients_manager
             .read()?
-            .get_client_property(id, |client| Ok(client.keep_alive()))?;
+            .get_client_property(id, |client| Ok((client.keep_alive() * 1000f32) as u128))?;
         let mut gracefully = true;
 
         loop {
             match self.process_packet(&mut network_connection, id) {
                 Ok(packet_type) => {
-                    timeout_counter = 0;
+                    timeout_counter_ms = 0;
                     logging::log(LogKind::PacketProcessing(id, packet_type));
                     if packet_type == PacketType::Disconnect {
                         break;
                     }
                 }
                 Err(err) if err.kind() == ServerErrorKind::Timeout => {
-                    timeout_counter += 1;
-                    self.clients_manager.read()?.send_unacknowledged(id)?;
+                    timeout_counter_ms += UNACK_RESENDING_FREQ.as_millis();
+                    self.clients_manager.read()?.client_do(id, |mut client| {
+                        client.send_unacknowledged(INFLIGHT_MESSAGES, MIN_ELAPSED_TIME)
+                    })?;
                 }
                 Err(err) => {
-                    logging::log(LogKind::UnexpectedError(id, err.to_string()));
+                    if err.kind() != ServerErrorKind::ClientDisconnected {
+                        logging::log(LogKind::UnexpectedError(id, err.to_string()));
+                    }
                     gracefully = false;
                     break;
                 }
             }
-            if keep_alive != 0 && timeout_counter > keep_alive {
+            if keep_alive_ms != 0 && timeout_counter_ms > keep_alive_ms {
                 logging::log(LogKind::KeepAliveTimeout(id));
                 gracefully = false;
                 break;
@@ -279,12 +287,13 @@ impl Server {
         // En caso de que haya ocurrido una reconexion y el cliente
         // tenia un last will, se publica
         let disconnect_info = self.client_loop(&connect_info.id, network_connection)?;
-        if let Some(last_will) = disconnect_info.publish_last_will {
-            self.send_last_will(last_will, &connect_info.id)?;
-        }
         if disconnect_info.clean_session {
             self.topic_handler.remove_client(&connect_info.id)?;
         }
+        if let Some(last_will) = disconnect_info.publish_last_will {
+            self.send_last_will(last_will, &connect_info.id)?;
+        }
+
         logging::log(LogKind::SuccesfulClientEnd(&connect_info.id));
         Ok(())
     }
@@ -347,7 +356,7 @@ impl Server {
         let handle = thread::spawn(move || {
             if let Err(err) = sv_copy._run_client(network_connection) {
                 // Si llega un error a este punto ya no se puede solucionar
-                logging::log::<&str>(LogKind::UnhandledError(err.to_string()))
+                logging::log::<&str>(LogKind::UnhandledError(err))
             }
         });
         self.client_thread_joiner
@@ -416,35 +425,21 @@ impl Server {
     }
 }
 
-impl BidirectionalStream for TcpStream {
-    fn try_clone(&self) -> Result<Self, StreamError>
+impl TryClone for TcpStream {
+    fn try_clone(&self) -> Option<Self>
     where
         Self: Sized,
     {
-        if let Ok(copy) = self.try_clone() {
-            Ok(copy)
+        if let Ok(clone) = TcpStream::try_clone(self) {
+            Some(clone)
         } else {
-            Err(StreamError {})
+            None
         }
-    }
-
-    fn close(&mut self) -> io::Result<()> {
-        self.shutdown(Shutdown::Both)
-    }
-
-    fn change_read_timeout(&mut self, dur: Option<Duration>) -> io::Result<()> {
-        self.set_read_timeout(dur)
-    }
-
-    fn change_write_timeout(&mut self, dur: Option<Duration>) -> io::Result<()> {
-        self.set_write_timeout(dur)
     }
 }
 
-impl Id for SocketAddr {
-    type T = SocketAddr;
-
-    fn id(&self) -> Self::T {
-        *self
+impl Close for TcpStream {
+    fn close(&mut self) -> io::Result<()> {
+        self.shutdown(Shutdown::Both)
     }
 }

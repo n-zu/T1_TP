@@ -8,6 +8,7 @@ use tracing_subscriber::{fmt, prelude::__tracing_subscriber_SubscriberExt, Regis
 mod client;
 mod clients_manager;
 mod config;
+mod iomock;
 mod logging;
 mod network_connection;
 mod server;
@@ -27,14 +28,12 @@ pub fn init() {
 
     tracing::subscriber::set_global_default(subscriber).unwrap();
 
-    let threadpool_size = 20;
+    let threadpool_size = 8;
     let server = Server::new(config, threadpool_size);
     let _controller = server.run().unwrap();
 
     info!("Presione [ENTER] para detener la ejecucion del servidor");
 
     let mut buf = [0u8; 1];
-    std::io::stdin()
-        .read_exact(&mut buf)
-        .expect("Error al leer de stdin");
+    std::io::stdin().read_exact(&mut buf).unwrap_or(());
 }

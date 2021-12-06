@@ -1,12 +1,13 @@
-use std::io;
+use std::io::{self};
 
 use crate::{
     server::{server_error::ServerErrorKind, ServerError, ServerResult},
-    traits::{BidirectionalStream, Id},
+    traits::{Close, TryClone},
 };
 
 /// Information related to the current session of
 /// the client
+#[derive(Debug)]
 pub struct NetworkConnection<S, I> {
     id: I,
     stream: S,
@@ -19,11 +20,8 @@ impl<S, I> NetworkConnection<S, I> {
     pub fn stream_mut(&mut self) -> &mut S {
         &mut self.stream
     }
-    pub fn id(&self) -> I
-    where
-        I: Clone + Copy,
-    {
-        self.id
+    pub fn id(&self) -> &I {
+        &self.id
     }
 }
 
@@ -43,32 +41,34 @@ impl<S: io::Write, I> io::Write for NetworkConnection<S, I> {
     }
 }
 
-impl<S, I: Clone + Copy> Id for NetworkConnection<S, I> {
-    type T = I;
-
-    fn id(&self) -> Self::T {
-        self.id
+impl<S, I> PartialEq for NetworkConnection<S, I>
+where
+    S: PartialEq,
+    I: PartialEq,
+{
+    fn eq(&self, other: &Self) -> bool {
+        self.id == other.id && self.stream == other.stream
     }
 }
 
-impl<S, I> NetworkConnection<S, I>
-where
-    S: BidirectionalStream,
-    I: Id,
-{
+impl<S, I> NetworkConnection<S, I> {
     pub fn new(id: I, stream: S) -> Self {
         Self { id, stream }
     }
 
-    pub fn close(&mut self) -> io::Result<()> {
+    pub fn close(&mut self) -> io::Result<()>
+    where
+        S: Close,
+    {
         self.stream.close()
     }
 
     pub fn try_clone(&self) -> ServerResult<Self>
     where
         I: Clone + Copy,
+        S: TryClone,
     {
-        if let Ok(stream_copy) = self.stream.try_clone() {
+        if let Some(stream_copy) = self.stream.try_clone() {
             Ok(Self {
                 stream: stream_copy,
                 id: self.id,
