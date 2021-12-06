@@ -155,7 +155,12 @@ impl Server {
                 )
             }
         });
-        started_receiver.recv().expect("Error de channel MPSC");
+        if let Err(err) = started_receiver.recv() {
+            println!(
+                "Error leyendo de stdin: {}\nCerrando servidor...",
+                err.to_string()
+            );
+        }
 
         let server_controller = ServerController::new(shutdown_sender, server_handle);
         Ok(server_controller)

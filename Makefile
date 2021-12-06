@@ -21,13 +21,16 @@ online-config:
 
 stress:
 	@docker image load -i server/mqtt-stresser.tar
-	@make online-config
+	@make online-config > /dev/null
+	@rm -f /tmp/srv-input
 	@mkfifo /tmp/srv-input
-	@cat /tmp/srv-input | (cd server; cargo run --release > /dev/null) &
+	@(cd server; cargo build --release)
+	@printf "Ejecutando stress test con flags:\n\033[2;37m$(SFLAGS)\n"
+	@(cd server; cat /tmp/srv-input | cargo run --release > /dev/null) & \
 	docker run --rm inovex/mqtt-stresser -broker tcp://$$(hostname -I | grep -Eo '^[^ ]+'):1883 \
 		-username fdelu -password fdelu \
-		$(SFLAGS)
-	@echo "\n" > /tmp/srv-input
-	@rm /tmp/srv-input
+		$(SFLAGS); \
+	printf "\n" > /tmp/srv-input
+	@rm -f /tmp/srv-input
 	@git restore server/config.txt
 	@sleep 0.5
