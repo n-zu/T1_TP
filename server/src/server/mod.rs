@@ -384,9 +384,9 @@ impl Server {
         listener.set_nonblocking(true)?;
         while recv_result.is_err() {
             match self.accept_client(&listener) {
-                Ok(conntection_stream) => {
+                Ok(connection_stream) => {
                     // TODO: Agregar network_connection.addr al mensaje de error
-                    self.run_client(conntection_stream)
+                    self.run_client(connection_stream)
                         .unwrap_or_else(|err| error!("Error - {}", err.to_string()));
                 }
                 Err(err) if err.kind() == ServerErrorKind::Idle => {
