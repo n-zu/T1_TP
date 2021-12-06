@@ -41,7 +41,7 @@ const UNACK_RESENDING_FREQ: Duration = Duration::from_millis(500);
 /// atempt
 const ACCEPT_SLEEP_DUR: Duration = Duration::from_millis(100);
 
-const MIN_ELAPSED_TIME: Option<Duration> = Some(Duration::from_secs(1));
+const MIN_ELAPSED_TIME: Option<Duration> = Some(Duration::from_millis(2000));
 
 const INFLIGHT_MESSAGES: Option<usize> = None;
 
