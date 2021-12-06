@@ -1,3 +1,4 @@
+use std::cell::RefCell;
 use std::collections::HashMap;
 
 use gtk::{
@@ -9,7 +10,7 @@ use packets::{qos::QoSLevel, topic_filter::TopicFilter};
 pub struct SubscriptionList {
     list: ListBox,
     unsub_entry: Entry,
-    subs: HashMap<String, Box>,
+    subs: RefCell<HashMap<String, Box>>,
 }
 
 impl SubscriptionList {
@@ -18,13 +19,13 @@ impl SubscriptionList {
         Self {
             list,
             unsub_entry,
-            subs: HashMap::new(),
+            subs: RefCell::new(HashMap::new()),
         }
     }
 
     /// Removes the given topic from the SubsList and updates the view accordingly
-    pub fn remove_sub(&mut self, topic: &str) {
-        if let Some(box_) = self.subs.remove(topic) {
+    pub fn remove_sub(&self, topic: &str) {
+        if let Some(box_) = self.subs.borrow_mut().remove(topic) {
             let row: Widget = box_.parent().unwrap();
             self.list.remove(&row);
             self.list.show_all();
@@ -32,26 +33,26 @@ impl SubscriptionList {
     }
 
     /// Removes the given topics from the SubsList and updates the view accordingly
-    pub fn remove_subs(&mut self, topics: &[TopicFilter]) {
+    pub fn remove_subs(&self, topics: &[TopicFilter]) {
         for topic in topics {
             self.remove_sub(topic.name());
         }
     }
 
     /// Adds the given topics to the SubsList and updates the view accordingly
-    pub fn add_subs(&mut self, topics: &[TopicFilter]) {
+    pub fn add_subs(&self, topics: &[TopicFilter]) {
         for topic in topics {
             self.add_sub(topic.name(), topic.qos());
         }
     }
 
     /// Adds the given topic to the SubsList and updates the view accordingly
-    pub fn add_sub(&mut self, topic: &str, qos: QoSLevel) {
+    pub fn add_sub(&self, topic: &str, qos: QoSLevel) {
         self.remove_sub(topic);
         let box_ = self.create_sub_box(topic, qos);
         self.list.add(&box_);
         self.list.show_all();
-        self.subs.insert(topic.to_string(), box_);
+        self.subs.borrow_mut().insert(topic.to_string(), box_);
     }
 
     #[doc(hidden)]
