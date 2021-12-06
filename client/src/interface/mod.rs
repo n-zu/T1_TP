@@ -2,6 +2,7 @@ use std::convert::TryFrom;
 use std::{rc::Rc, sync::Mutex};
 
 mod client_observer;
+mod publication_counter;
 mod subscription_list;
 mod utils;
 
@@ -9,17 +10,17 @@ use crate::interface::client_observer::ClientObserver;
 
 use crate::client::{Client, ClientError};
 
-use gtk::prelude::{ComboBoxTextExt, SwitchExt};
-
 use gtk::glib::GString;
+use gtk::prelude::{ComboBoxTextExt, LabelExt, NotebookExt, SwitchExt};
 use gtk::{
     prelude::{BuilderExtManual, ButtonExt, EntryExt, TextBufferExt},
-    Builder, Button, Entry, Switch, TextBuffer,
+    Builder, Button, Entry, Label, Notebook, Switch, TextBuffer, Widget,
 };
 use gtk::{ComboBoxText, ListBox};
 use packets::connect::{Connect, ConnectBuilder, LastWill};
-use packets::topic::Topic;
+use packets::topic_filter::TopicFilter;
 
+use crate::interface::publication_counter::PublicationCounter;
 use packets::publish::Publish;
 use packets::qos::QoSLevel;
 use packets::subscribe::Subscribe;
@@ -27,6 +28,9 @@ use packets::unsubscribe::Unsubscribe;
 
 use self::subscription_list::SubscriptionList;
 use self::utils::{Icon, InterfaceUtils};
+
+#[doc(hidden)]
+const PUBLICATIONS_TAB: u32 = 2;
 
 /// Controller for the client. It both creates the
 /// internal client and handles all the user inputs
@@ -63,6 +67,7 @@ impl Controller {
         self.setup_publish();
         self.setup_disconnect();
         self.setup_unsubscribe();
+        self.setup_notebook();
     }
 
     #[doc(hidden)]
@@ -115,25 +120,48 @@ impl Controller {
     }
 
     #[doc(hidden)]
+    /// Sets up the 'connect_switch_page' signal
+    fn setup_notebook(self: &Rc<Self>) {
+        let cont_clone = self.clone();
+        let nb: Notebook = self.builder.object("box_connected").unwrap();
+        nb.connect_switch_page(move |notebook, widget, new_page_number| {
+            cont_clone.handle_switch_notebook_tab(notebook, widget, new_page_number);
+        });
+    }
+
+    #[doc(hidden)]
     /// Retrieves all the necessary input data from the UI in order to create and connect
     /// a new Client
     fn _connect(&self) -> Result<(), ClientError> {
         let address_entry: Entry = self.builder.object("con_host").unwrap();
         let port_entry: Entry = self.builder.object("con_port").unwrap();
+        let con_user_entry: Entry = self.builder.object("con_usr").unwrap();
+        let con_client_id_entry: Entry = self.builder.object("con_cli").unwrap();
         let full_addr = format!(
             "{}:{}",
             &address_entry.text().to_string(),
             &port_entry.text().to_string()
         );
+        let full_client = format!(
+            "Usuario: {} - ID Cliente: {}",
+            con_user_entry.text().to_string(),
+            con_client_id_entry.text().to_string()
+        );
 
         let connect = self._create_connect_packet()?;
         let sub_box: ListBox = self.builder.object("sub_subs").unwrap();
         let unsub_entry: Entry = self.builder.object("unsub_top").unwrap();
+        let notebook: Notebook = self.builder.object("box_connected").unwrap();
+        let feed_label: Label = self.builder.object("label_incoming").unwrap();
         let subs_list = SubscriptionList::new(sub_box, unsub_entry);
-        let observer = ClientObserver::new(self.builder.clone(), subs_list);
+        let publication_counter = PublicationCounter::new(notebook, feed_label);
+        let observer = ClientObserver::new(self.builder.clone(), subs_list, publication_counter);
         let client = Client::new(&full_addr, observer, connect)?;
 
-        self.connection_info(Some(&format!("Conectado a {}", full_addr)));
+        self.connection_info(Some(&format!(
+            "Conectado a {} ({})",
+            full_addr, full_client
+        )));
         self.client.lock()?.replace(client);
 
         Ok(())
@@ -156,11 +184,7 @@ impl Controller {
         // Get the values from the entries
         let user_name = user_entry.text().to_string();
         let password = password_entry.text().to_string();
-        let keep_alive = keep_alive_entry
-            .text()
-            .to_string()
-            .parse::<u16>()
-            .unwrap_or(0);
+        let keep_alive = keep_alive_entry.text().to_string().parse::<u16>()?;
         let client_id = id_entry.text().to_string();
         let clean_session = clean_session_switch.is_active();
         let last_will_retain = last_will_retain_switch.is_active();
@@ -232,7 +256,7 @@ impl Controller {
             .parse::<u8>()
             .unwrap();
 
-        let topic = Topic::new(&topic_entry.text().to_string(), QoSLevel::try_from(qos)?)?;
+        let topic = TopicFilter::new(&topic_entry.text().to_string(), QoSLevel::try_from(qos)?)?;
 
         let packet = Subscribe::new(vec![topic], rand::random());
 
@@ -349,7 +373,7 @@ impl Controller {
     /// a new SUBSCRIBE packet
     fn _unsubscribe(&self) -> Result<(), ClientError> {
         let topic_entry: Entry = self.builder.object("unsub_top").unwrap();
-        let text = vec![Topic::new(
+        let text = vec![TopicFilter::new(
             &topic_entry.text().to_string(),
             QoSLevel::QoSLevel0,
         )?];
@@ -375,6 +399,15 @@ impl Controller {
             self.sensitive(true);
             self.status_message(&format!("No se pudo desuscribir: {}", e));
             self.icon(Icon::Error);
+        }
+    }
+
+    #[doc(hidden)]
+    /// Updates publications tab label.
+    fn handle_switch_notebook_tab(&self, _: &Notebook, _: &Widget, new_page_number: u32) {
+        if new_page_number == PUBLICATIONS_TAB {
+            let feed_label: Label = self.builder.object("label_incoming").unwrap();
+            feed_label.set_text("PUBLICACIONES");
         }
     }
 

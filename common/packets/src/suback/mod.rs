@@ -1,6 +1,6 @@
 use crate::{
     packet_error::{ErrorKind, PacketError, PacketResult},
-    topic::Topic,
+    topic_filter::TopicFilter,
 };
 
 mod decoding;
@@ -24,7 +24,7 @@ const FAILURE: u8 = 0x80;
 pub struct Suback {
     return_codes: Vec<u8>,
     subscribe_packet_id: u16,
-    topics: Vec<Topic>,
+    topics: Vec<TopicFilter>,
 }
 
 impl Suback {
@@ -34,11 +34,11 @@ impl Suback {
     }
 
     /// Set the suback's subscribe topics
-    pub fn set_topics(&mut self, topics: Vec<Topic>) {
+    pub fn set_topics(&mut self, topics: Vec<TopicFilter>) {
         self.topics = topics;
     }
     /// Get the suback's subscribe topics
-    pub fn topics(&self) -> &Vec<Topic> {
+    pub fn topics(&self) -> &Vec<TopicFilter> {
         &self.topics
     }
 

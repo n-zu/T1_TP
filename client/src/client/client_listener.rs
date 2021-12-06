@@ -329,7 +329,7 @@ mod tests {
     use packets::qos::QoSLevel;
     use packets::qos::QoSLevel::*;
     use packets::subscribe::Subscribe;
-    use packets::topic::Topic;
+    use packets::topic_filter::TopicFilter;
     use packets::traits::MQTTEncoding;
     use packets::unsubscribe::Unsubscribe;
 
@@ -382,7 +382,11 @@ mod tests {
     fn test_unsuback() {
         let observer = ObserverMock::new();
         let pending_ack = Arc::new(Mutex::new(Some(PendingAck::Unsubscribe(
-            Unsubscribe::new(123, vec![Topic::new("topic", QoSLevel::QoSLevel0).unwrap()]).unwrap(),
+            Unsubscribe::new(
+                123,
+                vec![TopicFilter::new("topic", QoSLevel::QoSLevel0).unwrap()],
+            )
+            .unwrap(),
         ))));
         let stop = Arc::new(AtomicBool::new(false));
         let stream = Cursor::new(vec![0b10110000, 2, 0, 123]);
@@ -408,7 +412,11 @@ mod tests {
     fn test_unsuback_different_id() {
         let observer = ObserverMock::new();
         let pending_ack = Arc::new(Mutex::new(Some(PendingAck::Unsubscribe(
-            Unsubscribe::new(25, vec![Topic::new("topic", QoSLevel::QoSLevel0).unwrap()]).unwrap(),
+            Unsubscribe::new(
+                25,
+                vec![TopicFilter::new("topic", QoSLevel::QoSLevel0).unwrap()],
+            )
+            .unwrap(),
         ))));
         let stop = Arc::new(AtomicBool::new(false));
         let stream = Cursor::new(vec![0b10110000, 2, 0, 123]);
@@ -460,7 +468,7 @@ mod tests {
     #[test]
     fn test_suback() {
         let observer = ObserverMock::new();
-        let topic = Topic::new("topic", QoSLevel1).unwrap();
+        let topic = TopicFilter::new("topic", QoSLevel1).unwrap();
         let pending_ack = Arc::new(Mutex::new(Some(PendingAck::Subscribe(Subscribe::new(
             vec![topic],
             123,
@@ -488,7 +496,7 @@ mod tests {
     #[test]
     fn test_suback_different_id() {
         let observer = ObserverMock::new();
-        let topic = Topic::new("topic", QoSLevel1).unwrap();
+        let topic = TopicFilter::new("topic", QoSLevel1).unwrap();
         let pending_ack = Arc::new(Mutex::new(Some(PendingAck::Subscribe(Subscribe::new(
             vec![topic],
             34,
@@ -669,7 +677,11 @@ mod tests {
     fn test_pingresp_unexpected() {
         let observer = ObserverMock::new();
         let pending_ack = Arc::new(Mutex::new(Some(PendingAck::Unsubscribe(
-            Unsubscribe::new(25, vec![Topic::new("topic", QoSLevel::QoSLevel0).unwrap()]).unwrap(),
+            Unsubscribe::new(
+                25,
+                vec![TopicFilter::new("topic", QoSLevel::QoSLevel0).unwrap()],
+            )
+            .unwrap(),
         ))));
         let stop = Arc::new(AtomicBool::new(false));
         let stream = Cursor::new(vec![0b11010000, 0b00000000]);
@@ -716,7 +728,7 @@ mod tests {
         if let Message::Publish(publish) = msgs.remove(0) {
             assert_eq!(publish.packet_id(), None);
             assert_eq!(publish.topic_name(), "topic");
-            assert_eq!(publish.payload(), Some(&"msg".to_string()));
+            assert_eq!(publish.payload(), "msg");
         }
         assert_eq!(*sender.times_called.lock().unwrap(), 0);
     }
@@ -748,7 +760,7 @@ mod tests {
         if let Message::Publish(publish) = msgs.remove(0) {
             assert_eq!(publish.packet_id(), Some(123));
             assert_eq!(publish.topic_name(), "topic");
-            assert_eq!(publish.payload(), Some(&"msg".to_string()));
+            assert_eq!(publish.payload(), "msg");
         }
         assert_eq!(*sender.times_called.lock().unwrap(), 1);
     }

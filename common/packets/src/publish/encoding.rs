@@ -41,7 +41,7 @@ impl MQTTEncoding for Publish {
         let mut bytes = vec![];
         bytes.append(&mut self.fixed_header()?);
         bytes.append(&mut self.variable_header());
-        bytes.append(&mut Vec::from(self.payload.as_ref().unwrap().as_bytes()));
+        bytes.append(&mut Vec::from(self.payload.as_bytes()));
         Ok(bytes)
     }
 }
@@ -83,7 +83,7 @@ impl Publish {
             qos,
             retain_flag,
             dup_flag,
-            payload: Some(topic_message.to_string()),
+            payload: topic_message.to_string(),
         })
     }
 
@@ -128,7 +128,7 @@ impl Publish {
     fn fixed_header(&self) -> PacketResult<MQTTBytes> {
         let mut fixed_header = vec![];
         let variable_header_len = self.variable_header().len();
-        let message_len = self.payload.as_ref().unwrap().as_bytes().len();
+        let message_len = self.payload.as_bytes().len();
         let remaining_length = RemainingLength::from_uncoded(variable_header_len + message_len)?;
         let control_byte = build_control_byte(PacketType::Publish, self.reserved_bits());
         fixed_header.push(control_byte);

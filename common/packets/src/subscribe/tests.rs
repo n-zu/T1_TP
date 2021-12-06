@@ -96,7 +96,7 @@ fn test_invalid_qos() {
 
 #[test]
 fn test_subscribe_encode_1_topic() {
-    let topic = Topic::new("topic", QoSLevel::QoSLevel1).unwrap();
+    let topic = TopicFilter::new("topic", QoSLevel::QoSLevel1).unwrap();
     let topics = vec![topic];
     let subscribe = Subscribe::new(topics, 1);
     let packet = subscribe.encode().unwrap();
@@ -115,8 +115,8 @@ fn test_subscribe_encode_1_topic() {
 
 #[test]
 fn test_subscribe_encode_2_topics() {
-    let topic1 = Topic::new("topic1", QoSLevel::QoSLevel0).unwrap();
-    let topic2 = Topic::new("topic2", QoSLevel::QoSLevel1).unwrap();
+    let topic1 = TopicFilter::new("topic1", QoSLevel::QoSLevel0).unwrap();
+    let topic2 = TopicFilter::new("topic2", QoSLevel::QoSLevel1).unwrap();
     let topics = vec![topic1, topic2];
     let subscribe = Subscribe::new(topics, 2);
     let packet = subscribe.encode().unwrap();
