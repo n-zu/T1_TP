@@ -23,7 +23,7 @@ const CLEAN_SESSION: u8 = 0x02;
 #[doc(hidden)]
 const RESERVED_BITS: u8 = 0x0;
 
-#[derive(Debug)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct LastWill {
     pub retain_flag: bool,
     pub qos: QoSLevel,
@@ -47,7 +47,7 @@ impl LastWill {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct Connect {
     client_id: String,
     clean_session: bool,
@@ -81,6 +81,12 @@ impl Connect {
     /// Get a reference to the connect's last will.
     pub fn last_will(&self) -> Option<&LastWill> {
         self.last_will.as_ref()
+    }
+
+    /// Take the [LastWill] packet, replacing it with
+    /// None. If the packet was already None, return None
+    pub fn take_last_will(&mut self) -> Option<LastWill> {
+        self.last_will.take()
     }
 
     /// Get a reference to the connect's keep alive.
