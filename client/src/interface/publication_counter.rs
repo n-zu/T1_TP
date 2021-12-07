@@ -17,11 +17,13 @@ pub struct PublicationCounter {
 impl PublicationCounter {
     /// Returns a new PublicationCounter struct
     pub fn new(notebook: Notebook, feed_label: Label) -> PublicationCounter {
-        PublicationCounter {
+        let publication_counter = PublicationCounter {
             new_messages_amount: RefCell::new(0),
             notebook,
             feed_label,
-        }
+        };
+        publication_counter.reset_new_messages_amount();
+        publication_counter
     }
 
     /// Updates new messages amount by one and sets the corresponding label for the publications tab.
@@ -52,11 +54,5 @@ impl PublicationCounter {
             self.new_messages_amount.borrow()
         );
         self.feed_label.set_text(&new_label);
-    }
-}
-
-impl Drop for PublicationCounter {
-    fn drop(&mut self) {
-        self.feed_label.set_text(PUBLICATIONS_LABEL);
     }
 }
