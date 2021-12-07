@@ -4,6 +4,7 @@ use core::fmt;
 use std::{
     collections::HashMap,
     io::{Read, Write},
+    ops::DerefMut,
     sync::Mutex,
 };
 
@@ -59,11 +60,11 @@ where
 
     pub fn client_do<F>(&self, id: &ClientIdArg, action: F) -> ServerResult<()>
     where
-        F: FnOnce(std::sync::MutexGuard<'_, Client<S, I>>) -> ServerResult<()>,
+        F: FnOnce(&mut Client<S, I>) -> ServerResult<()>,
     {
         match self.clients.get(id) {
             Some(session) => {
-                action(session.lock()?)?;
+                action(session.lock()?.deref_mut())?;
                 Ok(())
             }
             None => Err(ServerError::new_kind(
@@ -75,10 +76,10 @@ where
 
     pub fn get_client_property<F, T>(&self, id: &ClientIdArg, action: F) -> ServerResult<T>
     where
-        F: FnOnce(std::sync::MutexGuard<'_, Client<S, I>>) -> ServerResult<T>,
+        F: FnOnce(&mut Client<S, I>) -> ServerResult<T>,
     {
         match self.clients.get(id) {
-            Some(session) => action(session.lock()?),
+            Some(session) => action(session.lock()?.deref_mut()),
             None => Err(ServerError::new_kind(
                 &format!("No existe el cliente con id <{}>", id),
                 ServerErrorKind::ClientNotFound,
@@ -108,7 +109,7 @@ where
         }
 
         let publish_last_will =
-            self.get_client_property(id, |mut session| session.disconnect(gracefully))?;
+            self.get_client_property(id, |session| session.disconnect(gracefully))?;
         let clean_session;
         // Si la funcion anterior no devolvio error, entonces existe el cliente
         if self

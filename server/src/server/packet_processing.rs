@@ -49,7 +49,7 @@ impl Server {
                 let packet = Puback::read_from(stream, control_byte)?;
                 self.clients_manager
                     .read()?
-                    .client_do(id, |mut client| client.acknowledge(packet))?;
+                    .client_do(id, |client| client.acknowledge(packet))?;
             }
             PacketType::Subscribe => {
                 let subscribe = Subscribe::read_from(stream, control_byte)?;
@@ -63,7 +63,7 @@ impl Server {
                 let _packet = PingReq::read_from(stream, control_byte)?;
                 self.clients_manager
                     .read()?
-                    .client_do(id, |mut client| client.send_packet(&PingResp::new()))?;
+                    .client_do(id, |client| client.send_packet(&PingResp::new()))?;
             }
             PacketType::Disconnect => {
                 let _packet = Disconnect::read_from(stream, control_byte)?;
@@ -123,7 +123,7 @@ impl Server {
                         .clients_manager
                         .read()
                         .unwrap()
-                        .client_do(&id, |mut client| client.send_publish(publish))
+                        .client_do(&id, |client| client.send_publish(publish))
                         .unwrap();
                 })
                 .unwrap();
@@ -162,9 +162,9 @@ impl Server {
         debug!("<{}>: Procesando PUBLISH", id);
         publish.set_max_qos(QoSLevel::QoSLevel1);
         if let Some(packet_id) = publish.packet_id() {
-            self.clients_manager.read()?.client_do(id, |mut client| {
-                client.send_packet(&Puback::new(packet_id)?)
-            })?;
+            self.clients_manager
+                .read()?
+                .client_do(id, |client| client.send_packet(&Puback::new(packet_id)?))?;
         }
         self.broadcast_publish(publish)
     }
@@ -177,11 +177,11 @@ impl Server {
         subscribe.set_max_qos(QoSLevel::QoSLevel1);
         self.clients_manager
             .read()?
-            .client_do(id, |mut client| client.send_packet(&subscribe.response()?))?;
+            .client_do(id, |client| client.send_packet(&subscribe.response()?))?;
 
         let retained_messages = self.topic_handler.subscribe(&subscribe, id)?;
         if !retained_messages.is_empty() {
-            self.clients_manager.read()?.client_do(id, |mut client| {
+            self.clients_manager.read()?.client_do(id, |client| {
                 for retained in retained_messages {
                     client.send_publish(retained)?;
                 }
@@ -198,7 +198,7 @@ impl Server {
         debug!("<{}>: Recibido UNSUBSCRIBE", id);
         let packet_id = unsubscribe.packet_id();
         self.topic_handler.unsubscribe(unsubscribe, id)?;
-        self.clients_manager.read()?.client_do(id, |mut client| {
+        self.clients_manager.read()?.client_do(id, |client| {
             client.send_packet(&Unsuback::new(packet_id)?)?;
             Ok(())
         })?;
