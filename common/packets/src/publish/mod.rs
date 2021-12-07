@@ -1,5 +1,5 @@
 use crate::qos::QoSLevel;
-use serde::{Serialize, Deserialize};
+use serde::{Deserialize, Serialize};
 
 mod decoding;
 mod encoding;

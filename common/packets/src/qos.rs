@@ -1,6 +1,6 @@
 use crate::packet_error::{ErrorKind, PacketError};
+use serde::{Deserialize, Serialize};
 use std::convert::TryFrom;
-use serde::{Serialize, Deserialize};
 
 #[derive(Debug, PartialEq, Eq, Clone, Copy, Serialize, Deserialize)]
 pub enum QoSLevel {
