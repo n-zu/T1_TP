@@ -12,3 +12,4 @@ tracing = "0.1.29"
 tracing-appender = "0.2"
 threadpool = { path = "../common/threadpool" }
 rand = "0.8.4"
+serde = { version = "1.0.130", features = ["derive"] }

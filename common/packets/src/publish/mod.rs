@@ -1,4 +1,5 @@
 use crate::qos::QoSLevel;
+use serde::{Serialize, Deserialize};
 
 mod decoding;
 mod encoding;
@@ -17,7 +18,7 @@ const MULTI_LEVEL_WILDCARD: char = '#';
 #[doc(hidden)]
 const MSG_INVALID_PACKET_ID: &str = "Packet identifier must be greater than zero";
 
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Debug, PartialEq, Clone, Serialize, Deserialize)]
 /// Publish packet structure for server/client side
 pub struct Publish {
     pub packet_id: Option<u16>,

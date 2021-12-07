@@ -1,4 +1,4 @@
-#![allow(dead_code)]
+use serde::{Serialize, Deserialize};
 
 use std::{
     collections::HashMap,
@@ -30,7 +30,7 @@ pub struct Message {
 }
 
 #[doc(hidden)]
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 struct SubscriptionData {
     qos: QoSLevel,
 }
@@ -40,6 +40,7 @@ pub struct TopicHandler {
 }
 
 #[doc(hidden)]
+#[derive(Serialize, Deserialize)]
 /// Represents a Topic within a Topic Handler. A Topic node contains its subtopics, subscribers
 /// multi level subscriber and single level subscriber
 struct Topic {
@@ -49,6 +50,7 @@ struct Topic {
     singlelevel_subscriptions: RwLock<Subscriptions>,
     retained_message: RwLock<Option<Publish>>,
 }
+
 
 impl Debug for Topic {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
