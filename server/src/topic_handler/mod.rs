@@ -112,7 +112,6 @@ impl Topic {
         Ok(())
     }
 
-    #[doc(hidden)]
     /// Subscribe a client id into a topic
     fn subscribe(
         &self,
@@ -133,8 +132,69 @@ impl Topic {
         }
     }
 
+    /// Unsubscribe a given client id from a given topic name
+    fn unsubscribe(
+        &self,
+        topic_name: Option<&str>,
+        client_id: &str,
+    ) -> Result<(), TopicHandlerError> {
+        match topic_name {
+            Some(topic) => {
+                let (current, rest) = Self::split(topic);
+                match (current, rest) {
+                    (SINGLE_LEVEL_WILDCARD, Some(rest)) => {
+                        return self.remove_single_level_subscription(
+                            &(current.to_string() + SEP + rest),
+                            client_id,
+                        );
+                    }
+                    (MULTI_LEVEL_WILDCARD, _) => {
+                        let mut multilevel_subscribers = self.multilevel_subscribers.write()?;
+                        multilevel_subscribers.remove(client_id);
+                        return Ok(());
+                    }
+                    _ => {
+                        let subtopics = self.subtopics.read()?;
+
+                        if let Some(subtopic) = subtopics.get(current) {
+                            subtopic.unsubscribe(rest, client_id)?;
+                            if subtopic.is_empty()? {
+                                drop(subtopics);
+                                self.subtopics.write()?.remove(current);
+                            }
+                        }
+                    }
+                }
+            }
+            None => {
+                self.subscribers.write()?.remove(client_id);
+            }
+        }
+        Ok(())
+    }
+
+    /// Removes all the information from a given client_id
+    fn remove_client(&self, client_id: &str) -> Result<(), TopicHandlerError> {
+        let mut to_be_cleaned = Vec::new();
+        for (name, subtopic) in self.subtopics.read()?.deref() {
+            subtopic.remove_client(client_id)?;
+            if subtopic.is_empty()? {
+                to_be_cleaned.push(name.to_string());
+            }
+        }
+        if !to_be_cleaned.is_empty() {
+            let mut subtopics = self.subtopics.write()?;
+            for name in to_be_cleaned {
+                subtopics.remove(&name);
+            }
+        }
+        self.remove_subscriber(client_id)?;
+        Ok(())
+    }
+
     #[doc(hidden)]
-    /// Gets the retained message of a given topic in a Vec
+    /// Gets the retained message in a Vec
+    ///
     /// The Vec will be empty if there is no retained message
     fn get_retained(&self, max_qos: QoSLevel) -> Result<Vec<Publish>, TopicHandlerError> {
         if let Some(retained) = self.retained_message.read()?.deref() {
@@ -147,7 +207,7 @@ impl Topic {
     }
 
     #[doc(hidden)]
-    /// Helper function for subscribe_rec() that walks through the current tree level according to
+    /// Helper function for subscribe() that walks through the current tree level according to
     /// the remaining part of the topic name currently being processed
     fn handle_sub_level(
         &self,
@@ -193,18 +253,16 @@ impl Topic {
         is_root: bool,
     ) -> Result<Vec<Publish>, TopicHandlerError> {
         let mut single_level_subscriptions = self.singlelevel_subscriptions.write()?;
-
         let single_level_subscribers = single_level_subscriptions
             .entry(topic.to_string())
             .or_insert_with(HashMap::new);
-
         single_level_subscribers.insert(client_id.to_string(), data.clone());
-
-        self.get_retained_messages_rec(Some(topic), data.qos, is_root)
+        self.get_retained_messages(Some(topic), data.qos, is_root)
     }
 
     #[doc(hidden)]
     /// Adds a new client id with its data into a given topic's multi level subscriptions
+    ///
     /// Returns the matching retained messages
     fn add_multi_level_subscription(
         &self,
@@ -215,12 +273,12 @@ impl Topic {
     ) -> Result<Vec<Publish>, TopicHandlerError> {
         let mut multilevel_subscribers = self.multilevel_subscribers.write()?;
         multilevel_subscribers.insert(client_id.to_string(), data.clone());
-        self.get_retained_messages_rec(Some(topic), data.qos, is_root)
+        self.get_retained_messages(Some(topic), data.qos, is_root)
     }
 
     #[doc(hidden)]
-    /// recursively gets all the matching retained messages of a given topic
-    fn get_retained_messages_rec(
+    /// Gets all the matching retained messages of a given topic
+    fn get_retained_messages(
         &self,
         topic: Option<&str>,
         max_qos: QoSLevel,
@@ -233,7 +291,7 @@ impl Topic {
     }
 
     #[doc(hidden)]
-    /// Helper function for get_retained_messages_rec() that walks through the current
+    /// Helper function for get_retained_messages() that walks through the current
     /// tree level according to the remaining part of the topic name currently being processed
     fn handle_retained_messages_level(
         &self,
@@ -246,7 +304,7 @@ impl Topic {
                 let mut messages = self.get_retained(max_qos)?;
                 for (name, child) in self.subtopics.read()?.deref() {
                     if !(unmatch && name.starts_with(UNMATCH_WILDCARD)) {
-                        messages.extend(child.get_retained_messages_rec(
+                        messages.extend(child.get_retained_messages(
                             Some(MULTI_LEVEL_WILDCARD),
                             max_qos,
                             false,
@@ -259,7 +317,7 @@ impl Topic {
                 let mut messages = vec![];
                 for (name, child) in self.subtopics.read()?.deref() {
                     if !(unmatch && name.starts_with(UNMATCH_WILDCARD)) {
-                        messages.extend(child.get_retained_messages_rec(rest, max_qos, false)?);
+                        messages.extend(child.get_retained_messages(rest, max_qos, false)?);
                     }
                 }
                 Ok(messages)
@@ -267,7 +325,7 @@ impl Topic {
             (name, rest) => {
                 let mut messages = vec![];
                 if let Some(child) = self.subtopics.read()?.get(name) {
-                    messages.extend(child.get_retained_messages_rec(rest, max_qos, false)?);
+                    messages.extend(child.get_retained_messages(rest, max_qos, false)?);
                 }
                 Ok(messages)
             }
@@ -314,48 +372,6 @@ impl Topic {
     }
 
     #[doc(hidden)]
-    /// Unsubscribe a given client id from a given topic name
-    fn unsubscribe(
-        &self,
-        topic_name: Option<&str>,
-        client_id: &str,
-    ) -> Result<(), TopicHandlerError> {
-        match topic_name {
-            Some(topic) => {
-                let (current, rest) = Self::split(topic);
-                match (current, rest) {
-                    (SINGLE_LEVEL_WILDCARD, Some(rest)) => {
-                        return self.remove_single_level_subscription(
-                            &(current.to_string() + SEP + rest),
-                            client_id,
-                        );
-                    }
-                    (MULTI_LEVEL_WILDCARD, _) => {
-                        let mut multilevel_subscribers = self.multilevel_subscribers.write()?;
-                        multilevel_subscribers.remove(client_id);
-                        return Ok(());
-                    }
-                    _ => {
-                        let subtopics = self.subtopics.read()?;
-
-                        if let Some(subtopic) = subtopics.get(current) {
-                            subtopic.unsubscribe(rest, client_id)?;
-                            if subtopic.is_empty()? {
-                                drop(subtopics);
-                                self.subtopics.write()?.remove(current);
-                            }
-                        }
-                    }
-                }
-            }
-            None => {
-                self.subscribers.write()?.remove(client_id);
-            }
-        }
-        Ok(())
-    }
-
-    #[doc(hidden)]
     /// Removes a client id from a given topic name
     fn remove_single_level_subscription(
         &self,
@@ -369,26 +385,6 @@ impl Topic {
                 single_level_subscriptions.remove(topic_name);
             }
         };
-        Ok(())
-    }
-
-    #[doc(hidden)]
-    /// Removes all the information from a given client_id
-    fn remove_client(&self, client_id: &str) -> Result<(), TopicHandlerError> {
-        let mut to_be_cleaned = Vec::new();
-        for (name, subtopic) in self.subtopics.read()?.deref() {
-            subtopic.remove_client(client_id)?;
-            if subtopic.is_empty()? {
-                to_be_cleaned.push(name.to_string());
-            }
-        }
-        if !to_be_cleaned.is_empty() {
-            let mut subtopics = self.subtopics.write()?;
-            for name in to_be_cleaned {
-                subtopics.remove(&name);
-            }
-        }
-        self.remove_subscriber(client_id)?;
         Ok(())
     }
 
