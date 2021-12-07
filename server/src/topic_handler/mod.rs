@@ -20,8 +20,8 @@ type Subscribers = HashMap<String, SubscriptionData>; // key: client_id
 type Subscriptions = HashMap<String, Subscribers>; // key: topic filter { key: client_id }
 
 const SEP: &str = "/";
-const MULTILEVEL_WILDCARD: &str = "#";
-const SINGLELEVEL_WILDCARD: &str = "+";
+const MULTI_LEVEL_WILDCARD: &str = "#";
+const SINGLE_LEVEL_WILDCARD: &str = "+";
 const UNMATCH_WILDCARD: &str = "$";
 
 pub struct Message {
@@ -64,7 +64,8 @@ impl Debug for Topic {
 }
 
 impl Topic {
-    pub fn new() -> Self {
+    /// Returns a new Topic struct
+    fn new() -> Self {
         Topic {
             subtopics: RwLock::new(HashMap::new()),
             subscribers: RwLock::new(HashMap::new()),
@@ -74,12 +75,410 @@ impl Topic {
         }
     }
 
-    pub fn is_empty(&self) -> Result<bool, TopicHandlerError> {
+    /// Sends a Publish packet to the clients who are subscribed into a certain topic
+    fn publish(
+        &self,
+        topic_name: Option<&str>,
+        sender: Sender<Message>,
+        packet: &Publish,
+        is_root: bool,
+    ) -> Result<(), TopicHandlerError> {
+        let matching = self.current_matching_subs(topic_name, is_root)?;
+        let mut packet_no_retain = packet.clone();
+        packet_no_retain.set_retain_flag(false);
+        TopicHandler::send_publish(&sender, &packet_no_retain, &matching)?;
+        match topic_name {
+            Some(topic) => {
+                let (current, rest) = Self::split(topic);
+                let mut subtopics = self.subtopics.read()?;
+                if !subtopics.contains_key(current)
+                    && packet.retain_flag()
+                    && !packet.payload().is_empty()
+                {
+                    drop(subtopics);
+                    self.subtopics
+                        .write()?
+                        .insert(current.to_string(), Topic::new());
+                    subtopics = self.subtopics.read()?;
+                }
+                if let Some(subtopic) = subtopics.get(current) {
+                    subtopic.publish(rest, sender, packet, false)?;
+                    if subtopic.is_empty()? {
+                        drop(subtopics);
+                        self.subtopics.write()?.remove(current);
+                    }
+                }
+            }
+            None => {
+                self.update_retained_message(packet)?;
+            }
+        }
+        Ok(())
+    }
+
+    /// Subscribe a client id into a topic
+    fn subscribe(
+        &self,
+        topic_name: Option<&str>,
+        client_id: &str,
+        sub_data: SubscriptionData,
+        is_root: bool,
+    ) -> Result<Vec<Publish>, TopicHandlerError> {
+        match topic_name {
+            Some(topic) => self.handle_sub_level(topic, client_id, sub_data, is_root),
+            None => {
+                self.subscribers
+                    .write()?
+                    .insert(client_id.to_string(), sub_data.clone());
+
+                self.get_retained(sub_data.qos)
+            }
+        }
+    }
+
+    /// Unsubscribe a given client id from a given topic name
+    fn unsubscribe(
+        &self,
+        topic_name: Option<&str>,
+        client_id: &str,
+    ) -> Result<(), TopicHandlerError> {
+        match topic_name {
+            Some(topic) => {
+                let (current, rest) = Self::split(topic);
+                match (current, rest) {
+                    (SINGLE_LEVEL_WILDCARD, Some(rest)) => {
+                        return self.remove_single_level_subscription(
+                            &(current.to_string() + SEP + rest),
+                            client_id,
+                        );
+                    }
+                    (MULTI_LEVEL_WILDCARD, _) => {
+                        let mut multilevel_subscribers = self.multilevel_subscribers.write()?;
+                        multilevel_subscribers.remove(client_id);
+                        return Ok(());
+                    }
+                    _ => {
+                        let subtopics = self.subtopics.read()?;
+
+                        if let Some(subtopic) = subtopics.get(current) {
+                            subtopic.unsubscribe(rest, client_id)?;
+                            if subtopic.is_empty()? {
+                                drop(subtopics);
+                                self.subtopics.write()?.remove(current);
+                            }
+                        }
+                    }
+                }
+            }
+            None => {
+                self.subscribers.write()?.remove(client_id);
+            }
+        }
+        Ok(())
+    }
+
+    /// Removes all the information from a given client_id
+    fn remove_client(&self, client_id: &str) -> Result<(), TopicHandlerError> {
+        let mut to_be_cleaned = Vec::new();
+        for (name, subtopic) in self.subtopics.read()?.deref() {
+            subtopic.remove_client(client_id)?;
+            if subtopic.is_empty()? {
+                to_be_cleaned.push(name.to_string());
+            }
+        }
+        if !to_be_cleaned.is_empty() {
+            let mut subtopics = self.subtopics.write()?;
+            for name in to_be_cleaned {
+                subtopics.remove(&name);
+            }
+        }
+        self.remove_subscriber(client_id)?;
+        Ok(())
+    }
+
+    #[doc(hidden)]
+    /// Gets the retained message in a Vec
+    ///
+    /// The Vec will be empty if there is no retained message
+    fn get_retained(&self, max_qos: QoSLevel) -> Result<Vec<Publish>, TopicHandlerError> {
+        if let Some(retained) = self.retained_message.read()?.deref() {
+            let mut retained = retained.clone();
+            retained.set_max_qos(max_qos);
+            Ok(vec![retained])
+        } else {
+            Ok(vec![])
+        }
+    }
+
+    #[doc(hidden)]
+    /// Helper function for subscribe() that walks through the current tree level according to
+    /// the remaining part of the topic name currently being processed
+    fn handle_sub_level(
+        &self,
+        topic: &str,
+        user_id: &str,
+        sub_data: SubscriptionData,
+        is_root: bool,
+    ) -> Result<Vec<Publish>, TopicHandlerError> {
+        let (current, rest) = Self::split(topic);
+        match (current, rest) {
+            (SINGLE_LEVEL_WILDCARD, _) => {
+                self.add_single_level_subscription(topic, user_id, sub_data, is_root)
+            }
+            (MULTI_LEVEL_WILDCARD, _) => {
+                self.add_multi_level_subscription(topic, user_id, sub_data, is_root)
+            }
+            _ => {
+                let mut subtopics = self.subtopics.read()?;
+                if subtopics.get(current).is_none() {
+                    drop(subtopics);
+                    self.subtopics
+                        .write()?
+                        .insert(current.to_string(), Topic::new());
+                    subtopics = self.subtopics.read()?;
+                }
+
+                let subtopic = subtopics.get(current).ok_or_else(|| {
+                    TopicHandlerError::new("Unexpected error, subtopic not created")
+                })?;
+                subtopic.subscribe(rest, user_id, sub_data, false)
+            }
+        }
+    }
+
+    #[doc(hidden)]
+    /// Adds a new client id with its data into a given topic's single level subscriptions
+    /// Returns the matching retained messages
+    fn add_single_level_subscription(
+        &self,
+        topic: &str,
+        client_id: &str,
+        data: SubscriptionData,
+        is_root: bool,
+    ) -> Result<Vec<Publish>, TopicHandlerError> {
+        let mut single_level_subscriptions = self.singlelevel_subscriptions.write()?;
+        let single_level_subscribers = single_level_subscriptions
+            .entry(topic.to_string())
+            .or_insert_with(HashMap::new);
+        single_level_subscribers.insert(client_id.to_string(), data.clone());
+        self.get_retained_messages(Some(topic), data.qos, is_root)
+    }
+
+    #[doc(hidden)]
+    /// Adds a new client id with its data into a given topic's multi level subscriptions
+    ///
+    /// Returns the matching retained messages
+    fn add_multi_level_subscription(
+        &self,
+        topic: &str,
+        client_id: &str,
+        data: SubscriptionData,
+        is_root: bool,
+    ) -> Result<Vec<Publish>, TopicHandlerError> {
+        let mut multilevel_subscribers = self.multilevel_subscribers.write()?;
+        multilevel_subscribers.insert(client_id.to_string(), data.clone());
+        self.get_retained_messages(Some(topic), data.qos, is_root)
+    }
+
+    #[doc(hidden)]
+    /// Gets all the matching retained messages of a given topic
+    fn get_retained_messages(
+        &self,
+        topic: Option<&str>,
+        max_qos: QoSLevel,
+        unmatch: bool,
+    ) -> Result<Vec<Publish>, TopicHandlerError> {
+        match topic {
+            Some(topic) => self.handle_retained_messages_level(topic, max_qos, unmatch),
+            None => self.get_retained(max_qos),
+        }
+    }
+
+    #[doc(hidden)]
+    /// Helper function for get_retained_messages() that walks through the current
+    /// tree level according to the remaining part of the topic name currently being processed
+    fn handle_retained_messages_level(
+        &self,
+        topic: &str,
+        max_qos: QoSLevel,
+        unmatch: bool,
+    ) -> Result<Vec<Publish>, TopicHandlerError> {
+        match Self::split(topic) {
+            (MULTI_LEVEL_WILDCARD, _) => {
+                let mut messages = self.get_retained(max_qos)?;
+                for (name, child) in self.subtopics.read()?.deref() {
+                    if !(unmatch && name.starts_with(UNMATCH_WILDCARD)) {
+                        messages.extend(child.get_retained_messages(
+                            Some(MULTI_LEVEL_WILDCARD),
+                            max_qos,
+                            false,
+                        )?);
+                    }
+                }
+                Ok(messages)
+            }
+            (SINGLE_LEVEL_WILDCARD, rest) => {
+                let mut messages = vec![];
+                for (name, child) in self.subtopics.read()?.deref() {
+                    if !(unmatch && name.starts_with(UNMATCH_WILDCARD)) {
+                        messages.extend(child.get_retained_messages(rest, max_qos, false)?);
+                    }
+                }
+                Ok(messages)
+            }
+            (name, rest) => {
+                let mut messages = vec![];
+                if let Some(child) = self.subtopics.read()?.get(name) {
+                    messages.extend(child.get_retained_messages(rest, max_qos, false)?);
+                }
+                Ok(messages)
+            }
+        }
+    }
+
+    #[doc(hidden)]
+    /// If the packet is a retained message, it either updates the retained message of the topic or
+    /// it removes its retained message if it the packet has a zero-length payload ([MQTT-3.3.1-11])
+    fn update_retained_message(&self, packet: &Publish) -> Result<(), TopicHandlerError> {
+        if packet.retain_flag() {
+            let mut retained = self.retained_message.write()?;
+            if packet.payload().is_empty() {
+                *retained = None;
+            } else {
+                *retained = Some(packet.clone());
+            }
+        }
+        Ok(())
+    }
+
+    #[doc(hidden)]
+    /// Gets the matching subscriptions of the given topic for the given topic name
+    fn current_matching_subs(
+        &self,
+        topic_name: Option<&str>,
+        is_root: bool,
+    ) -> Result<Vec<Subscription>, TopicHandlerError> {
+        let mut matching = Vec::new();
+        if !(is_root && Self::starts_with_unmatch(topic_name)) {
+            matching.extend(Self::current_matching_single_level_subs(
+                topic_name,
+                self.singlelevel_subscriptions.read()?.deref(),
+            ));
+
+            matching.extend(self.multilevel_subscribers.read()?.clone());
+        }
+
+        if topic_name.is_none() {
+            matching.extend(self.subscribers.read()?.clone());
+        }
+
+        Ok(matching)
+    }
+
+    #[doc(hidden)]
+    /// Removes a client id from a given topic name
+    fn remove_single_level_subscription(
+        &self,
+        topic_name: &str,
+        client_id: &str,
+    ) -> Result<(), TopicHandlerError> {
+        let mut single_level_subscriptions = self.singlelevel_subscriptions.write()?;
+        if let Some(subscribers) = single_level_subscriptions.get_mut(topic_name) {
+            subscribers.remove(client_id);
+            if subscribers.is_empty() {
+                single_level_subscriptions.remove(topic_name);
+            }
+        };
+        Ok(())
+    }
+
+    #[doc(hidden)]
+    /// Removes a client id's subscriptions
+    fn remove_subscriber(&self, client_id: &str) -> Result<(), TopicHandlerError> {
+        let subs_read = self.subscribers.read()?;
+        if subs_read.contains_key(client_id) {
+            drop(subs_read);
+            self.subscribers.write()?.remove(client_id);
+        }
+        self.multilevel_subscribers.write()?.remove(client_id);
+        self.singlelevel_subscriptions
+            .write()?
+            .retain(|_, subscribers| {
+                subscribers.remove(client_id);
+                !subscribers.is_empty()
+            });
+        Ok(())
+    }
+
+    #[doc(hidden)]
+    /// Returns true if all the subtopics, subscribers, subscription and retained messages
+    /// are empty
+    fn is_empty(&self) -> Result<bool, TopicHandlerError> {
         Ok(self.subtopics.read()?.is_empty()
             && self.subscribers.read()?.is_empty()
             && self.multilevel_subscribers.read()?.is_empty()
             && self.singlelevel_subscriptions.read()?.is_empty()
             && self.retained_message.read()?.is_none())
+    }
+
+    #[doc(hidden)]
+    /// Returns true if the given topic name starts with the unmatch wildcard
+    fn starts_with_unmatch(topic_name: Option<&str>) -> bool {
+        if let Some(name) = topic_name {
+            return name.starts_with(UNMATCH_WILDCARD);
+        }
+        false
+    }
+
+    #[doc(hidden)]
+    /// Returns all the matching subscriptions for a given topic name
+    fn current_matching_single_level_subs(
+        topic_name: Option<&str>,
+        single_level_subscriptions: &Subscriptions,
+    ) -> Vec<Subscription> {
+        let mut matching = Vec::new();
+
+        if let Some(topic) = topic_name {
+            for (topic_filter, subscribers) in single_level_subscriptions {
+                if Self::topic_filter_matches(topic_filter, topic) {
+                    matching.extend(subscribers.clone());
+                }
+            }
+        }
+        matching
+    }
+
+    #[doc(hidden)]
+    /// Returns true if a certain topic name matches a given topic filter
+    fn topic_filter_matches(topic_filter: &str, topic_name: &str) -> bool {
+        let name = topic_name.split(SEP).collect::<Vec<&str>>();
+        let filter = topic_filter.split(SEP).collect::<Vec<&str>>();
+
+        if filter.len() > name.len() {
+            return false;
+        }
+        if filter.len() < name.len() && filter[filter.len() - 1] != MULTI_LEVEL_WILDCARD {
+            return false;
+        }
+        for (i, filter_part) in filter.iter().enumerate() {
+            if filter_part == &MULTI_LEVEL_WILDCARD {
+                return true;
+            } else if filter_part == &SINGLE_LEVEL_WILDCARD.to_string() {
+                continue;
+            } else if filter_part != &name[i].to_string() {
+                return false;
+            }
+        }
+        true
+    }
+
+    #[doc(hidden)]
+    /// Internal/Custom split function
+    fn split(topic: &str) -> (&str, Option<&str>) {
+        match topic.split_once(SEP) {
+            Some((splitted, rest)) => (splitted, Some(rest)),
+            None => (topic, None),
+        }
     }
 }
 
@@ -98,20 +497,17 @@ impl TopicHandler {
         let topics = packet.topics();
         let topics: Vec<&packets::topic_filter::TopicFilter> = topics.iter().collect();
         let mut retained = Vec::new();
-
         for topic_filter in topics {
             let data = SubscriptionData {
                 qos: topic_filter.qos(),
             };
-            retained.extend(Self::subscribe_rec(
-                &self.root,
+            retained.extend(self.root.subscribe(
                 Some(topic_filter.name()),
                 client_id,
                 data,
                 true,
             )?);
         }
-
         Ok(retained)
     }
 
@@ -122,9 +518,7 @@ impl TopicHandler {
         sender: Sender<Message>,
     ) -> Result<(), TopicHandlerError> {
         let full_topic = packet.topic_name();
-
-        Self::publish_rec(&self.root, Some(full_topic), sender, packet, true)?;
-
+        self.root.publish(Some(full_topic), sender, packet, true)?;
         Ok(())
     }
 
@@ -135,125 +529,15 @@ impl TopicHandler {
         client_id: &str,
     ) -> Result<(), TopicHandlerError> {
         for topic_name in packet.topic_filters() {
-            Self::unsubscribe_rec(&self.root, Some(topic_name.name()), client_id)?;
+            self.root.unsubscribe(Some(topic_name.name()), client_id)?;
         }
         Ok(())
     }
 
     /// Removes a client and all of its subscriptions
     pub fn remove_client(&self, client_id: &str) -> Result<(), TopicHandlerError> {
-        Self::remove_client_rec(&self.root, client_id)?;
+        self.root.remove_client(client_id)?;
         Ok(())
-    }
-
-    #[doc(hidden)]
-    /// remove_client recursive function
-    fn remove_client_rec(node: &Topic, user_id: &str) -> Result<(), TopicHandlerError> {
-        let mut to_be_cleaned = Vec::new();
-        for (name, subtopic) in node.subtopics.read()?.deref() {
-            Self::remove_client_rec(subtopic, user_id)?;
-            if subtopic.is_empty()? {
-                to_be_cleaned.push(name.to_string());
-            }
-        }
-
-        if !to_be_cleaned.is_empty() {
-            let mut subtopics = node.subtopics.write()?;
-            for name in to_be_cleaned {
-                subtopics.remove(&name);
-            }
-        }
-
-        Self::remove_subscriber(node, user_id)?;
-
-        Ok(())
-    }
-
-    #[doc(hidden)]
-    /// Removes a client id's subscriptions in the given node
-    fn remove_subscriber(node: &Topic, client_id: &str) -> Result<(), TopicHandlerError> {
-        let subs_read = node.subscribers.read()?;
-        if subs_read.contains_key(client_id) {
-            drop(subs_read);
-            node.subscribers.write()?.remove(client_id);
-        }
-        node.multilevel_subscribers.write()?.remove(client_id);
-
-        node.singlelevel_subscriptions
-            .write()?
-            .retain(|_, subscribers| {
-                subscribers.remove(client_id);
-                !subscribers.is_empty()
-            });
-        Ok(())
-    }
-
-    #[doc(hidden)]
-    /// Returns true if a certain topic name matches a given topic filter
-    fn topic_filter_matches(topic_filter: &str, topic_name: &str) -> bool {
-        let name = topic_name.split(SEP).collect::<Vec<&str>>();
-        let filter = topic_filter.split(SEP).collect::<Vec<&str>>();
-
-        if filter.len() > name.len() {
-            return false;
-        }
-        if filter.len() < name.len() && filter[filter.len() - 1] != MULTILEVEL_WILDCARD {
-            return false;
-        }
-
-        for (i, filter_part) in filter.iter().enumerate() {
-            if filter_part == &MULTILEVEL_WILDCARD {
-                return true;
-            } else if filter_part == &SINGLELEVEL_WILDCARD.to_string() {
-                continue;
-            } else if filter_part != &name[i].to_string() {
-                return false;
-            }
-        }
-
-        true
-    }
-
-    #[doc(hidden)]
-    /// Returns all the matching subscriptions for a given topic name
-    fn current_matching_single_level_subs(
-        topic_name: Option<&str>,
-        singlelevel_subscriptions: &Subscriptions,
-    ) -> Vec<Subscription> {
-        let mut matching = Vec::new();
-
-        if let Some(topic) = topic_name {
-            for (topic_filter, subscribers) in singlelevel_subscriptions {
-                if Self::topic_filter_matches(topic_filter, topic) {
-                    matching.extend(subscribers.clone());
-                }
-            }
-        }
-        matching
-    }
-
-    #[doc(hidden)]
-    /// Gets the matching subscriptions of the given topic for the given topic name
-    fn current_matching_subs(
-        node: &Topic,
-        topic_name: Option<&str>,
-        is_root: bool,
-    ) -> Result<Vec<Subscription>, TopicHandlerError> {
-        let mut matching = Vec::new();
-        if !(is_root && Self::starts_with_unmatch(topic_name)) {
-            matching.extend(Self::current_matching_single_level_subs(
-                topic_name,
-                node.singlelevel_subscriptions.read()?.deref(),
-            ));
-
-            matching.extend(node.multilevel_subscribers.read()?.clone());
-        }
-
-        if topic_name.is_none() {
-            matching.extend(node.subscribers.read()?.clone());
-        }
-
-        Ok(matching)
     }
 
     #[doc(hidden)]
@@ -273,315 +557,6 @@ impl TopicHandler {
         }
         Ok(())
     }
-
-    #[doc(hidden)]
-    /// If the packet is a retained message, it either updates the retained message of the topic or
-    /// it removes its retained message if it the packet has a zero-lenght payload ([MQTT-3.3.1-11])
-    fn update_retained_message(topic: &Topic, packet: &Publish) -> Result<(), TopicHandlerError> {
-        if packet.retain_flag() {
-            let mut retained = topic.retained_message.write()?;
-            if packet.payload().is_empty() {
-                *retained = None;
-            } else {
-                *retained = Some(packet.clone());
-            }
-        }
-        Ok(())
-    }
-
-    // Lo tuve que hacer recursivo porque sino era un caos el tema de mantener todos los
-    // locks desbloqueados, ya que no los podia dropear porque perdia las referencias internas
-    #[doc(hidden)]
-    /// publish recursive function
-    fn publish_rec(
-        node: &Topic,
-        topic_name: Option<&str>,
-        sender: Sender<Message>,
-        packet: &Publish,
-        is_root: bool,
-    ) -> Result<(), TopicHandlerError> {
-        let matching = Self::current_matching_subs(node, topic_name, is_root)?;
-        let mut packet_no_retain = packet.clone();
-        packet_no_retain.set_retain_flag(false);
-        Self::send_publish(&sender, &packet_no_retain, &matching)?;
-
-        match topic_name {
-            Some(topic) => {
-                let (current, rest) = Self::split(topic);
-                let mut subtopics = node.subtopics.read()?;
-                if !subtopics.contains_key(current)
-                    && packet.retain_flag()
-                    && !packet.payload().is_empty()
-                {
-                    drop(subtopics);
-                    node.subtopics
-                        .write()?
-                        .insert(current.to_string(), Topic::new());
-                    subtopics = node.subtopics.read()?;
-                }
-
-                if let Some(subtopic) = subtopics.get(current) {
-                    Self::publish_rec(subtopic, rest, sender, packet, false)?;
-                    if subtopic.is_empty()? {
-                        drop(subtopics);
-                        node.subtopics.write()?.remove(current);
-                    }
-                }
-            }
-            None => {
-                Self::update_retained_message(node, packet)?;
-            }
-        }
-
-        Ok(())
-    }
-
-    #[doc(hidden)]
-    /// Adds a new client id with its data into a given topic's single level subscriptions
-    /// Returns the matching retained messages
-    fn add_single_level_subscription(
-        node: &Topic,
-        topic: &str,
-        client_id: &str,
-        data: SubscriptionData,
-        is_root: bool,
-    ) -> Result<Vec<Publish>, TopicHandlerError> {
-        let mut single_level_subscriptions = node.singlelevel_subscriptions.write()?;
-
-        let single_level_subscribers = single_level_subscriptions
-            .entry(topic.to_string())
-            .or_insert_with(HashMap::new);
-
-        single_level_subscribers.insert(client_id.to_string(), data.clone());
-
-        Self::get_retained_messages_rec(node, Some(topic), data.qos, is_root)
-    }
-
-    #[doc(hidden)]
-    /// Adds a new client id with its data into a given topic's multi level subscriptions
-    /// Returns the matching retained messages
-    fn add_multi_level_subscription(
-        node: &Topic,
-        topic: &str,
-        client_id: &str,
-        data: SubscriptionData,
-        is_root: bool,
-    ) -> Result<Vec<Publish>, TopicHandlerError> {
-        let mut multilevel_subscribers = node.multilevel_subscribers.write()?;
-        multilevel_subscribers.insert(client_id.to_string(), data.clone());
-
-        Self::get_retained_messages_rec(node, Some(topic), data.qos, is_root)
-    }
-
-    #[doc(hidden)]
-    /// Helper function for subscribe_rec() that walks through the current tree level according to
-    /// the remaining part of the topic name currently being processed
-    fn handle_sub_level(
-        node: &Topic,
-        topic: &str,
-        user_id: &str,
-        sub_data: SubscriptionData,
-        is_root: bool,
-    ) -> Result<Vec<Publish>, TopicHandlerError> {
-        let (current, rest) = Self::split(topic);
-        match (current, rest) {
-            (SINGLELEVEL_WILDCARD, _) => {
-                Self::add_single_level_subscription(node, topic, user_id, sub_data, is_root)
-            }
-            (MULTILEVEL_WILDCARD, _) => {
-                Self::add_multi_level_subscription(node, topic, user_id, sub_data, is_root)
-            }
-            _ => {
-                let mut subtopics = node.subtopics.read()?;
-                if subtopics.get(current).is_none() {
-                    drop(subtopics);
-                    node.subtopics
-                        .write()?
-                        .insert(current.to_string(), Topic::new());
-                    subtopics = node.subtopics.read()?;
-                }
-
-                let subtopic = subtopics.get(current).ok_or_else(|| {
-                    TopicHandlerError::new("Unexpected error, subtopic not created")
-                })?;
-                Self::subscribe_rec(subtopic, rest, user_id, sub_data, false)
-            }
-        }
-    }
-
-    #[doc(hidden)]
-    /// Subscribe recursive function
-    fn subscribe_rec(
-        node: &Topic,
-        topic_name: Option<&str>,
-        user_id: &str,
-        sub_data: SubscriptionData,
-        is_root: bool,
-    ) -> Result<Vec<Publish>, TopicHandlerError> {
-        match topic_name {
-            Some(topic) => Self::handle_sub_level(node, topic, user_id, sub_data, is_root),
-            None => {
-                node.subscribers
-                    .write()?
-                    .insert(user_id.to_string(), sub_data.clone());
-
-                Self::get_retained(node, sub_data.qos)
-            }
-        }
-    }
-
-    #[doc(hidden)]
-    /// Removes a client id from a given topic (String) from a given Topic node
-    fn remove_single_level_subscription(
-        node: &Topic,
-        topic: &str,
-        client_id: &str,
-    ) -> Result<(), TopicHandlerError> {
-        let mut single_level_subscriptions = node.singlelevel_subscriptions.write()?;
-        if let Some(subscribers) = single_level_subscriptions.get_mut(topic) {
-            subscribers.remove(client_id);
-            if subscribers.is_empty() {
-                single_level_subscriptions.remove(topic);
-            }
-        };
-        Ok(())
-    }
-
-    #[doc(hidden)]
-    /// unsubscribe recursive function
-    fn unsubscribe_rec(
-        node: &Topic,
-        topic_name: Option<&str>,
-        client_id: &str,
-    ) -> Result<(), TopicHandlerError> {
-        match topic_name {
-            Some(topic) => {
-                let (current, rest) = Self::split(topic);
-                match (current, rest) {
-                    (SINGLELEVEL_WILDCARD, Some(rest)) => {
-                        return Self::remove_single_level_subscription(
-                            node,
-                            &(current.to_string() + SEP + rest),
-                            client_id,
-                        );
-                    }
-                    (MULTILEVEL_WILDCARD, _) => {
-                        let mut multilevel_subscribers = node.multilevel_subscribers.write()?;
-                        multilevel_subscribers.remove(client_id);
-                        return Ok(());
-                    }
-                    _ => {
-                        let subtopics = node.subtopics.read()?;
-
-                        if let Some(subtopic) = subtopics.get(current) {
-                            Self::unsubscribe_rec(subtopic, rest, client_id)?;
-                            if subtopic.is_empty()? {
-                                drop(subtopics);
-                                node.subtopics.write()?.remove(current);
-                            }
-                        }
-                    }
-                }
-            }
-            None => {
-                node.subscribers.write()?.remove(client_id);
-            }
-        }
-
-        Ok(())
-    }
-
-    #[doc(hidden)]
-    /// Internal/Custom split function
-    fn split(topic: &str) -> (&str, Option<&str>) {
-        match topic.split_once(SEP) {
-            Some((splitted, rest)) => (splitted, Some(rest)),
-            None => (topic, None),
-        }
-    }
-
-    #[doc(hidden)]
-    /// Returns true if the given topic name starts with the unmatch wildcard
-    fn starts_with_unmatch(topic_name: Option<&str>) -> bool {
-        if let Some(name) = topic_name {
-            return name.starts_with(UNMATCH_WILDCARD);
-        }
-        false
-    }
-
-    #[doc(hidden)]
-    /// Gets the retained message of a given topic in a Vec
-    /// The Vec will be empty if there is no retained message
-    fn get_retained(node: &Topic, max_qos: QoSLevel) -> Result<Vec<Publish>, TopicHandlerError> {
-        if let Some(retained) = node.retained_message.read()?.deref() {
-            let mut retained = retained.clone();
-            retained.set_max_qos(max_qos);
-            Ok(vec![retained])
-        } else {
-            Ok(vec![])
-        }
-    }
-
-    #[doc(hidden)]
-    /// Helper function for get_retained_messages_rec() that walks through the current
-    /// tree level according to the remaining part of the topic name currently being processed
-    fn handle_retained_messages_level(
-        node: &Topic,
-        topic: &str,
-        max_qos: QoSLevel,
-        unmatch: bool,
-    ) -> Result<Vec<Publish>, TopicHandlerError> {
-        match Self::split(topic) {
-            (MULTILEVEL_WILDCARD, _) => {
-                let mut messages = Self::get_retained(node, max_qos)?;
-                for (name, child) in node.subtopics.read()?.deref() {
-                    if !(unmatch && name.starts_with(UNMATCH_WILDCARD)) {
-                        messages.extend(Self::get_retained_messages_rec(
-                            child,
-                            Some(MULTILEVEL_WILDCARD),
-                            max_qos,
-                            false,
-                        )?);
-                    }
-                }
-                Ok(messages)
-            }
-            (SINGLELEVEL_WILDCARD, rest) => {
-                let mut messages = vec![];
-                for (name, child) in node.subtopics.read()?.deref() {
-                    if !(unmatch && name.starts_with(UNMATCH_WILDCARD)) {
-                        messages.extend(Self::get_retained_messages_rec(
-                            child, rest, max_qos, false,
-                        )?);
-                    }
-                }
-                Ok(messages)
-            }
-            (name, rest) => {
-                let mut messages = vec![];
-                if let Some(child) = node.subtopics.read()?.get(name) {
-                    messages.extend(Self::get_retained_messages_rec(
-                        child, rest, max_qos, false,
-                    )?);
-                }
-                Ok(messages)
-            }
-        }
-    }
-
-    #[doc(hidden)]
-    /// recursively gets all the matching retained messages of a given topic
-    fn get_retained_messages_rec(
-        node: &Topic,
-        topic: Option<&str>,
-        max_qos: QoSLevel,
-        unmatch: bool,
-    ) -> Result<Vec<Publish>, TopicHandlerError> {
-        match topic {
-            Some(topic) => Self::handle_retained_messages_level(node, topic, max_qos, unmatch),
-            None => Self::get_retained(node, max_qos),
-        }
-    }
 }
 
 #[cfg(test)]
@@ -589,7 +564,7 @@ mod tests {
     use std::vec;
     use std::{collections::HashSet, sync::mpsc::channel};
 
-    use crate::topic_handler::TopicHandler;
+    use crate::topic_handler::Topic;
     use packets::publish::Publish;
     use packets::qos::QoSLevel;
     use packets::subscribe::Subscribe;
@@ -998,35 +973,32 @@ mod tests {
     fn test_topic_filter_matches() {
         // name, filter
 
-        assert!(TopicHandler::topic_filter_matches("top", "top"));
-        assert!(TopicHandler::topic_filter_matches("top/sub", "top/sub"));
-        assert!(TopicHandler::topic_filter_matches("+/sub", "top/sub"));
-        assert!(TopicHandler::topic_filter_matches(
-            "top/+/leaf",
-            "top/sub/leaf"
-        ));
-        assert!(TopicHandler::topic_filter_matches("top/#", "top/sub/leaf"));
-        assert!(TopicHandler::topic_filter_matches(
+        assert!(Topic::topic_filter_matches("top", "top"));
+        assert!(Topic::topic_filter_matches("top/sub", "top/sub"));
+        assert!(Topic::topic_filter_matches("+/sub", "top/sub"));
+        assert!(Topic::topic_filter_matches("top/+/leaf", "top/sub/leaf"));
+        assert!(Topic::topic_filter_matches("top/#", "top/sub/leaf"));
+        assert!(Topic::topic_filter_matches(
             "top/+/+/green",
             "top/sub/leaf/green"
         ));
-        assert!(TopicHandler::topic_filter_matches(
+        assert!(Topic::topic_filter_matches(
             "top/+/+/#",
             "top/sub/leaf/green"
         ));
-        assert!(TopicHandler::topic_filter_matches(
+        assert!(Topic::topic_filter_matches(
             "top/+/+/#",
             "top/sub/leaf/green"
         ));
-        assert!(TopicHandler::topic_filter_matches(
+        assert!(Topic::topic_filter_matches(
             "top/+/+/#",
             "top/sub/leaf/green/#00FF00"
         ));
-        assert!(TopicHandler::topic_filter_matches(
+        assert!(Topic::topic_filter_matches(
             "top/+//#",
             "top/sub//green/#00FF00"
         ));
-        assert!(TopicHandler::topic_filter_matches("+", "fdelu"));
+        assert!(Topic::topic_filter_matches("+", "fdelu"));
     }
 
     #[test]
@@ -1657,7 +1629,7 @@ mod tests {
         let (sender, receiver) = channel();
 
         handler.subscribe(&subscribe, "user").unwrap();
-        handler.publish(&publish_1, sender.clone()).unwrap();
+        handler.publish(&publish_1, sender).unwrap();
 
         let msg = receiver.recv().unwrap();
         assert_eq!(msg.client_id, "user");
