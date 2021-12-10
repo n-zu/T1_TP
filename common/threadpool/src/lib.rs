@@ -63,7 +63,7 @@ impl ThreadManager {
         let (ready_sender, ready_receiver) = channel();
 
         let ready_sender_clone = ready_sender.clone();
-        let threads = Self::intialize_threads(amount, ready_sender_clone);
+        let threads = Self::initialize_threads(amount, ready_sender_clone);
         ThreadManager {
             threads,
             ready_receiver,
@@ -123,7 +123,7 @@ impl ThreadManager {
     }
 
     // Crea el vector de amount threads workers, inicializándolos con sus canales de comunicación
-    fn intialize_threads(amount: usize, ready_sender: Sender<WorkerId>) -> Vec<ThreadInfo> {
+    fn initialize_threads(amount: usize, ready_sender: Sender<WorkerId>) -> Vec<ThreadInfo> {
         let mut threads = Vec::new();
         for i in 0..amount {
             let (alive_sender, alive_receiver) = channel();
