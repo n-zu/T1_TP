@@ -1,8 +1,7 @@
-use super::*;
 use crate::packet_error::ErrorKind;
 use crate::traits::MQTTDecoding;
 use crate::traits::MQTTEncoding;
-use crate::unsuback::PacketError;
+
 use crate::unsuback::Unsuback;
 use std::io::Cursor;
 
@@ -16,8 +15,11 @@ fn test_reserved_bits_other_than_0_should_raise_invalid_reserved_bits() {
     let control_byte = 0b10110001;
     let reserved_bits_buffer = [0b1111u8; 1];
     let mut stream = Cursor::new(reserved_bits_buffer);
-    let result = Unsuback::read_from(&mut stream, control_byte).unwrap_err();
-    assert_eq!(result.kind(), ErrorKind::InvalidReservedBits);
+    let result = Unsuback::read_from(&mut stream, control_byte)
+        .unwrap_err()
+        .kind();
+    let expected_error = ErrorKind::InvalidReservedBits;
+    assert_eq!(result, expected_error);
 }
 
 #[test]
@@ -25,8 +27,11 @@ fn test_control_packet_type_other_than_11_should_raise_invalid_control_packet_ty
     let control_byte = 0b000;
     let control_packet_type_buffer = [0b1111u8; 1];
     let mut stream = Cursor::new(control_packet_type_buffer);
-    let result = Unsuback::read_from(&mut stream, control_byte).unwrap_err();
-    assert_eq!(result.kind(), ErrorKind::InvalidControlPacketType);
+    let result = Unsuback::read_from(&mut stream, control_byte)
+        .unwrap_err()
+        .kind();
+    let expected_error = ErrorKind::InvalidControlPacketType;
+    assert_eq!(result, expected_error);
 }
 
 #[test]
@@ -46,8 +51,10 @@ fn test_valid_unsuback_packet_with_packet_id_0_should_raise_invalid_protocol_err
     let remaining_length = 2;
     let data_buffer: Vec<u8> = vec![remaining_length, 0, 0];
     let mut stream = Cursor::new(data_buffer);
-    let result = Unsuback::read_from(&mut stream, control_byte).unwrap_err();
-    let expected_error = PacketError::new_kind(MSG_INVALID_PACKET_ID, ErrorKind::InvalidProtocol);
+    let result = Unsuback::read_from(&mut stream, control_byte)
+        .unwrap_err()
+        .kind();
+    let expected_error = ErrorKind::InvalidProtocol;
     assert_eq!(expected_error, result);
 }
 
@@ -63,8 +70,8 @@ fn test_returns_same_identifier() {
 
 #[test]
 fn test_unsuback_with_packet_id_0_should_raise_invalid_protocol_error() {
-    let result = Unsuback::new(0).unwrap_err();
-    let expected_error = PacketError::new_kind(MSG_INVALID_PACKET_ID, ErrorKind::InvalidProtocol);
+    let result = Unsuback::new(0).unwrap_err().kind();
+    let expected_error = ErrorKind::InvalidProtocol;
     assert_eq!(expected_error, result)
 }
 

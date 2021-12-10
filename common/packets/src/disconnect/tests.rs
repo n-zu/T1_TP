@@ -1,5 +1,6 @@
 use std::{io::Cursor, vec};
 
+use crate::packet_error::ErrorKind;
 use crate::{disconnect::Disconnect, traits::MQTTDecoding, traits::MQTTEncoding};
 
 // server_side tests
@@ -14,33 +15,39 @@ fn test_valid_disconnect() {
 }
 
 #[test]
-fn test_remaining_length_not_zero_should_fail() {
+fn test_remaining_length_other_than_zero_should_raise_error() {
     let mut bytes = vec![];
     let control_byte = 0b11100000;
-    bytes.push(0b00000001); // remaining_length
+    bytes.push(0b1); // remaining_length
     let mut stream = Cursor::new(bytes);
     let packet = Disconnect::read_from(&mut stream, control_byte);
-    assert!(packet.is_err());
+    let result = packet.err().unwrap().kind();
+    let expected_error = ErrorKind::UnexpectedEof;
+    assert_eq!(result, expected_error);
 }
 
 #[test]
-fn test_invalid_packet_type() {
+fn test_invalid_packet_type_should_raise_error() {
     let mut bytes = vec![];
     let control_byte = 0b11110000;
-    bytes.push(0b00000000); // remaining_length
+    bytes.push(0b0); // remaining_length
     let mut stream = Cursor::new(bytes);
     let packet = Disconnect::read_from(&mut stream, control_byte);
-    assert!(packet.is_err());
+    let result = packet.err().unwrap().kind();
+    let expected_error = ErrorKind::InvalidControlPacketType;
+    assert_eq!(result, expected_error);
 }
 
 #[test]
-fn test_invalid_reserved_bytes() {
+fn test_invalid_reserved_bytes_should_raise_error() {
     let mut bytes = vec![];
     let control_byte = 0b11100100;
     bytes.push(0b00000000); // remaining_length
     let mut stream = Cursor::new(bytes);
     let packet = Disconnect::read_from(&mut stream, control_byte);
-    assert!(packet.is_err());
+    let result = packet.err().unwrap().kind();
+    let expected_error = ErrorKind::InvalidReservedBits;
+    assert_eq!(result, expected_error);
 }
 
 // client_side tests
