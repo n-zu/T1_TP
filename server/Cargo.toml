@@ -7,7 +7,7 @@ edition = "2018"
 
 [dependencies]
 packets = { path = "../common/packets" }
-tracing-subscriber = "0.3.1"
+tracing-subscriber = {version = "0.3.1", features = ["json"]}
 tracing = "0.1.29"
 tracing-appender = "0.2"
 threadpool = { path = "../common/threadpool" }

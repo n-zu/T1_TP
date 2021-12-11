@@ -1,4 +1,4 @@
-use std::convert::TryFrom;
+use std::{convert::TryFrom, fmt};
 
 use crate::packet_error::PacketError;
 
@@ -39,6 +39,8 @@ const MSG_SERVER_UNAVAILABLE: &str =
 const MSG_BAD_USER_NAME_OR_PASSWORD: &str = "The data in the user name or password is malformed";
 #[doc(hidden)]
 const MSG_NOT_AUTHORIZED: &str = "The Client is not authorized to connect";
+#[doc(hidden)]
+const MSG_ACCEPTED: &str = "Connection accepted";
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Connack {
@@ -85,5 +87,20 @@ impl TryFrom<u8> for ConnackReturnCode {
                 invalid
             ))),
         }
+    }
+}
+
+impl fmt::Display for ConnackReturnCode {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let msg =
+        match self {
+            ConnackReturnCode::Accepted => MSG_ACCEPTED,
+            ConnackReturnCode::UnacceptableProtocolVersion => MSG_UNACCEPTABLE_PROTOCOL_VERSION,
+            ConnackReturnCode::IdentifierRejected => MSG_IDENTIFIER_REJECTED,
+            ConnackReturnCode::ServerUnavailable => MSG_SERVER_UNAVAILABLE,
+            ConnackReturnCode::BadUserNameOrPassword => MSG_BAD_USER_NAME_OR_PASSWORD,
+            ConnackReturnCode::NotAuthorized => MSG_NOT_AUTHORIZED,
+        };
+        write!(f, "{}", msg)
     }
 }

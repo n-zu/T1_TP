@@ -1,6 +1,6 @@
 port=1883
-dump_path=foo.txt
-dump_time=10
+dump_path=
+dump_time=
 log_path=logs
 accounts_path=accounts.csv
 ip=localhost

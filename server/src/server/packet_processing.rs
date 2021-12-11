@@ -10,19 +10,11 @@ impl Server {
     {
         let sv_copy = self.clone();
         let id_copy = id.to_owned();
-        self.pool
-            .lock()?
-            .spawn(move || match action(sv_copy, &id_copy) {
-                Ok(()) => debug!(
-                    "ThreadPool: Paquete de cliente <{}> procesado con exito",
-                    id_copy
-                ),
-                Err(err) => error!(
-                    "ThreadPool: Error procesando paquete de cliente <{}>: {}",
-                    id_copy,
-                    err.to_string()
-                ),
-            })?;
+        self.pool.lock()?.spawn(move || {
+            action(sv_copy, &id_copy).unwrap_or_else(|e| {
+                error!("Error de ThreadPool: {}", e);
+            });
+        })?;
         Ok(())
     }
 
@@ -39,7 +31,6 @@ impl Server {
         id: &ClientIdArg,
     ) -> ServerResult<PacketType> {
         let packet_type = PacketType::try_from(control_byte)?;
-        logging::log(LogKind::PacketProcessing(id, packet_type));
         match packet_type {
             PacketType::Publish => {
                 let publish = Publish::read_from(stream, control_byte)?;
@@ -75,6 +66,7 @@ impl Server {
                 ))
             }
         }
+        info!("Procesando {}", packet_type);
         Ok(packet_type)
     }
 
@@ -105,6 +97,25 @@ impl Server {
         }
     }
 
+    #[instrument(skip(self, threadpool_copy, message), fields(client_id_receiver = %message.client_id))]
+    fn publish_dispatch(self: &Arc<Self>, threadpool_copy: &ThreadPool, message: Message) -> ServerResult<()> {
+        let client_id_receiver = message.client_id;
+        let publish = message.packet;
+        info!("Enviando PUBLISH");
+        let sv_copy = self.clone();
+        threadpool_copy
+            .spawn(move || {
+                sv_copy
+                    .clients_manager
+                    .read()
+                    .unwrap()
+                    .client_do(&client_id_receiver, |mut client| client.send_publish(publish))
+                    .unwrap();
+            })
+            .unwrap();
+        Ok(())
+    }
+
     /// Receives through the channel the packets to be published, and
     /// publishes them
     fn publish_dispatcher_loop(self: &Arc<Self>, receiver: Receiver<Message>) -> ServerResult<()> {
@@ -113,20 +124,7 @@ impl Server {
         drop(lock);
 
         for message in receiver {
-            let id = message.client_id;
-            let publish = message.packet;
-            logging::log(LogKind::Publishing(&id));
-            let sv_copy = self.clone();
-            threadpool_copy
-                .spawn(move || {
-                    sv_copy
-                        .clients_manager
-                        .read()
-                        .unwrap()
-                        .client_do(&id, |mut client| client.send_publish(publish))
-                        .unwrap();
-                })
-                .unwrap();
+            self.publish_dispatch(&threadpool_copy, message)?;
         }
         Ok(())
     }
@@ -135,8 +133,7 @@ impl Server {
     fn broadcast_publish(self: &Arc<Self>, publish: Publish) -> ServerResult<()> {
         let (sender, receiver) = mpsc::channel();
         let sv_copy = self.clone();
-        let handler: JoinHandle<ServerResult<()>> = thread::spawn(move || {
-            logging::log::<&str>(LogKind::ThreadStart(thread::current().id()));
+        let handler = thread::spawn::<_, ServerResult<()>>(move || {
             sv_copy.publish_dispatcher_loop(receiver)?;
             Ok(())
         });
@@ -159,7 +156,6 @@ impl Server {
         mut publish: Publish,
         id: &ClientIdArg,
     ) -> ServerResult<()> {
-        debug!("<{}>: Procesando PUBLISH", id);
         publish.set_max_qos(QoSLevel::QoSLevel1);
         if let Some(packet_id) = publish.packet_id() {
             self.clients_manager.read()?.client_do(id, |mut client| {
@@ -173,7 +169,6 @@ impl Server {
     /// [Subscribe] packet
     /// Send the corresponding Suback
     fn handle_subscribe(&self, mut subscribe: Subscribe, id: &ClientIdArg) -> ServerResult<()> {
-        debug!("<{}>: Recibido SUBSCRIBE", id);
         subscribe.set_max_qos(QoSLevel::QoSLevel1);
         self.clients_manager
             .read()?
@@ -195,7 +190,6 @@ impl Server {
     /// [Unsubscribe] packet
     /// Send the corresponding [Unsuback]
     fn handle_unsubscribe(&self, unsubscribe: Unsubscribe, id: &ClientIdArg) -> ServerResult<()> {
-        debug!("<{}>: Recibido UNSUBSCRIBE", id);
         let packet_id = unsubscribe.packet_id();
         self.topic_handler.unsubscribe(unsubscribe, id)?;
         self.clients_manager.read()?.client_do(id, |mut client| {
@@ -207,12 +201,13 @@ impl Server {
 
     /// Sends the LastWill packet, previously converted to the
     /// [Publish] format
+    #[instrument(skip(self, last_will) fields(client_id = %id))]
     pub fn send_last_will(
         self: &Arc<Self>,
         mut last_will: Publish,
         id: &ClientIdArg,
     ) -> ServerResult<()> {
-        debug!("<{}>: Enviando LAST WILL", id);
+        info!("Enviando LAST WILL");
         last_will.set_max_qos(QoSLevel::QoSLevel1);
 
         self.broadcast_publish(last_will)
@@ -221,13 +216,14 @@ impl Server {
     /// Waits until it receives the [Connect] packet. In case the
     /// read fails due to timeout, it returns an error of kind
     /// [ServerErrorKind::Timeout]
+    #[instrument(skip(self, network_connection))]
     pub fn wait_for_connect(
         &self,
-        connection_stream: &mut NetworkConnection<TcpStream, SocketAddr>,
+        network_connection: &mut NetworkConnection<TcpStream, SocketAddr>,
     ) -> ServerResult<Connect> {
-        match Connect::new_from_zero(connection_stream) {
+        match Connect::new_from_zero(network_connection) {
             Ok(connect) => {
-                info!("<{}>: Recibido CONNECT", connection_stream.id());
+                info!("Recibido CONNECT");
                 Ok(connect)
             }
             Err(err) => Err(ServerError::from(err)),

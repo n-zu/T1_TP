@@ -1,6 +1,12 @@
-use std::{sync::{Arc, atomic::{AtomicBool, Ordering}}, thread::JoinHandle};
+use std::{
+    sync::{
+        atomic::{AtomicBool, Ordering},
+        Arc,
+    },
+    thread::JoinHandle
+};
 
-use crate::logging::{self, LogKind};
+use tracing::error;
 
 use super::ServerResult;
 
@@ -26,12 +32,9 @@ impl ServerController {
     fn shutdown(&mut self) -> ServerResult<()> {
         self.shutdown_bool.store(true, Ordering::Relaxed);
         let sv_thread_id = self.handle.as_ref().unwrap().thread().id();
-        match self.handle.take().unwrap().join() {
-            Ok(()) => logging::log::<&str>(LogKind::ThreadEndOk(sv_thread_id)),
-            Err(err) => {
-                logging::log::<&str>(LogKind::ThreadEndErr(sv_thread_id, &format!("{:?}", err)))
-            }
-        }
+        self.handle.take().unwrap().join().unwrap_or_else(|e| {
+            error!("{:?}: Thread joineado con panic: {:?}", sv_thread_id, e);
+        });
         Ok(())
     }
 }

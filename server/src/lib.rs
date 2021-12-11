@@ -9,7 +9,6 @@ mod client;
 mod clients_manager;
 mod config;
 mod iomock;
-mod logging;
 mod network_connection;
 mod server;
 mod thread_joiner;
@@ -21,10 +20,9 @@ pub fn init() {
 
     let file_appender = tracing_appender::rolling::hourly(config.log_path(), "logs.log");
     let (file_writer, _guard) = tracing_appender::non_blocking(file_appender);
-
     let subscriber = Registry::default()
-        .with(fmt::Layer::default().with_writer(file_writer))
-        .with(fmt::Layer::default().with_writer(std::io::stdout));
+        .with(fmt::Layer::default().json().with_thread_names(true).with_writer(file_writer))
+        .with(fmt::Layer::default().with_thread_names(true).pretty().with_writer(std::io::stdout));
 
     tracing::subscriber::set_global_default(subscriber).unwrap();
 

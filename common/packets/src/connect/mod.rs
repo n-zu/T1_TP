@@ -3,7 +3,7 @@ use crate::qos::QoSLevel;
 mod decoding;
 mod encoding;
 pub use encoding::ConnectBuilder;
-use serde::{Deserialize, Serialize};
+use serde::{Serialize, Deserialize};
 #[cfg(test)]
 mod tests;
 

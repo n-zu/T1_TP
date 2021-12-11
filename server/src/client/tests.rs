@@ -18,16 +18,6 @@ use crate::{
 
 use super::Client;
 
-macro_rules! assert_approx {
-    ($x:expr, $y:expr, $e:expr) => {
-        let max = if $x > $y { $x } else { $y };
-
-        if !(($x - $y).abs() / (max) < $e) {
-            panic!();
-        }
-    };
-}
-
 fn make_publish(qos: QoSLevel) -> Publish {
     if qos == QoSLevel::QoSLevel0 {
         Publish::new(false, QoSLevel::QoSLevel0, false, "top", "message", None).unwrap()
@@ -94,8 +84,7 @@ fn test_keep_alive_returns_correct_value() {
     let network_connection = NetworkConnection::new(0, IOMock::new());
 
     let client = Client::new(connect, network_connection);
-
-    assert_approx!(client.keep_alive(), 1.5, f32::EPSILON);
+    assert_eq!(client.keep_alive(), Some(Duration::from_millis(1500)));
 }
 
 #[test]

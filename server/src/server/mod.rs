@@ -5,15 +5,16 @@ use std::{
     io::{self, Read, Write},
     net::{Shutdown, SocketAddr, TcpListener, TcpStream},
     sync::{
+        atomic::{AtomicBool, Ordering},
         mpsc::{self, Receiver, Sender},
-        Arc, Mutex, RwLock, atomic::{AtomicBool, Ordering},
+        Arc, Mutex, RwLock,
     },
-    thread::{self, JoinHandle},
+    thread::{self},
     time::{Duration, SystemTime},
 };
 
 use threadpool::ThreadPool;
-use tracing::{debug, error, info};
+use tracing::{error, info, instrument, warn};
 
 use packets::{
     connack::Connack,
@@ -50,9 +51,8 @@ use packets::publish::Publish;
 use packets::qos::QoSLevel;
 
 use crate::{
-    clients_manager::{ClientsManager, ConnectInfo, DisconnectInfo},
+    clients_manager::{simple_login::SimpleLogin, ClientsManager, ConnectInfo, DisconnectInfo},
     config::Config,
-    logging::{self, LogKind},
     network_connection::NetworkConnection,
     server::server_error::ServerErrorKind,
     thread_joiner::ThreadJoiner,
@@ -126,6 +126,7 @@ pub struct Server {
 
 impl Server {
     /// Creates and returns a server in a valid state
+    #[instrument]
     pub fn new(config: Config, threadpool_size: usize) -> Option<Arc<Self>> {
         info!("Creando servidor");
         match Server::try_restore(&config, threadpool_size) {
@@ -136,7 +137,9 @@ impl Server {
                 } else {
                     info!("No se encontro un archivo de DUMP - Creando servidor en blanco");
                     let server = Arc::new(Self {
-                        clients_manager: RwLock::new(ClientsManager::new(Some(config.accounts_path()))),
+                        clients_manager: RwLock::new(ClientsManager::new(Some(Box::new(
+                            SimpleLogin::new(config.accounts_path()).unwrap(),
+                        )))),
                         config,
                         topic_handler: TopicHandler::new(),
                         client_thread_joiner: Mutex::new(ThreadJoiner::new()),
@@ -155,28 +158,23 @@ impl Server {
     ///
     /// This method does not return until the server initializes everything
     /// necessary to start accepting connections
+    #[instrument(skip(self) fields(ip = %self.config.ip(), port = %self.config.port()))]
     pub fn run(self: Arc<Self>) -> io::Result<ServerController> {
         let shutdown_bool = Arc::new(AtomicBool::new(false));
         let shutdown_bool_copy = shutdown_bool.clone();
-
         let (started_sender, started_receiver) = mpsc::channel();
 
-        let server_handle = thread::spawn(move || {
-            logging::log::<&str>(LogKind::ThreadStart(thread::current().id()));
+        let server_handle = thread::Builder::new().name("server_loop".to_owned()).spawn(move || {
             if let Err(err) = self.server_loop(shutdown_bool, started_sender) {
                 error!(
                     "Error inesperado del servidor: {} - Se recomienda apagarlo",
                     err.to_string()
                 )
             }
+        })?;
+        started_receiver.recv().unwrap_or_else(|e| {
+            error!("Error iniciando el servidor: {}", e);
         });
-        if let Err(err) = started_receiver.recv() {
-            println!(
-                "Error leyendo de stdin: {}\nCerrando servidor...",
-                err.to_string()
-            );
-        }
-
         let server_controller = ServerController::new(shutdown_bool_copy, server_handle);
         Ok(server_controller)
     }
@@ -198,33 +196,21 @@ impl Server {
     /// [ServerErrorKind::ConnectionRefused], with the return code that the Connack
     /// must contain. If the error it returns is not of that kind, a Connack should
     /// not be send.
+    #[instrument(skip(self, network_connection))]
     fn connect_client(
         self: &Arc<Self>,
         network_connection: &mut NetworkConnection<TcpStream, SocketAddr>,
     ) -> ServerResult<ConnectInfo> {
-        logging::log(LogKind::Connecting(&network_connection.id()));
-        match self.wait_for_connect(network_connection) {
-            Ok(connect) => {
-                network_connection
-                    .stream_mut()
-                    .set_read_timeout(Some(UNACK_RESENDING_FREQ))?;
-                let connect_info = self
-                    .clients_manager
-                    .write()?
-                    .new_session(network_connection.try_clone()?, connect)?;
-                Ok(connect_info)
-            }
-            Err(err) => {
-                return Err(ServerError::new_kind(
-                    &format!(
-                        "Error recibiendo CONNECT de cliente <{:?}>: {}",
-                        network_connection.id(),
-                        err.to_string()
-                    ),
-                    ServerErrorKind::ProtocolViolation,
-                ));
-            }
-        }
+        info!("Conectando cliente");
+        let connect = self.wait_for_connect(network_connection)?;
+        network_connection
+            .stream_mut()
+            .set_read_timeout(Some(UNACK_RESENDING_FREQ))?;
+        let connect_info = self
+            .clients_manager
+            .write()?
+            .new_session(network_connection.try_clone()?, connect)?;
+        Ok(connect_info)
     }
 
     /// Process a client until it disconnects. This includes receiving the
@@ -235,45 +221,48 @@ impl Server {
     ///
     /// Returns information related to the disconnection, as well as the
     /// Last will [Publish] that, if it is not None, must be published.
+    #[instrument(skip(self, id, network_connection))]
     fn client_loop(
         self: &Arc<Self>,
         id: &ClientIdArg,
         mut network_connection: NetworkConnection<TcpStream, SocketAddr>,
     ) -> ServerResult<DisconnectInfo> {
-        let mut timeout_counter_ms = 0;
-        let keep_alive_ms = self
+        let mut timeout_counter = Duration::ZERO;
+        let keep_alive_opt = self
             .clients_manager
             .read()?
-            .get_client_property(id, |client| Ok((client.keep_alive() * 1000f32) as u128))?;
+            .get_client_property(id, |client| Ok(client.keep_alive()))?;
+
         let mut gracefully = true;
 
         loop {
             match self.process_packet(&mut network_connection, id) {
                 Ok(packet_type) => {
-                    timeout_counter_ms = 0;
-                    logging::log(LogKind::PacketProcessing(id, packet_type));
+                    timeout_counter = Duration::ZERO;
                     if packet_type == PacketType::Disconnect {
                         break;
                     }
                 }
                 Err(err) if err.kind() == ServerErrorKind::Timeout => {
-                    timeout_counter_ms += UNACK_RESENDING_FREQ.as_millis();
+                    timeout_counter += UNACK_RESENDING_FREQ;
                     self.clients_manager.read()?.client_do(id, |mut client| {
                         client.send_unacknowledged(INFLIGHT_MESSAGES, MIN_ELAPSED_TIME)
                     })?;
                 }
                 Err(err) => {
                     if err.kind() != ServerErrorKind::ClientDisconnected {
-                        logging::log(LogKind::UnexpectedError(id, err.to_string()));
+                        error!("Error inesperado: {}", err);
                     }
                     gracefully = false;
                     break;
                 }
             }
-            if keep_alive_ms != 0 && timeout_counter_ms > keep_alive_ms {
-                logging::log(LogKind::KeepAliveTimeout(id));
-                gracefully = false;
-                break;
+            if let Some(keep_alive) = keep_alive_opt {
+                if timeout_counter > keep_alive {
+                    warn!("KeepAlive Timeout");
+                    gracefully = false;
+                    break;
+                }
             }
         }
         self.clients_manager
@@ -291,12 +280,13 @@ impl Server {
     ///
     /// In case a Client TakeOver occurs and the previous session had LastWill,
     /// it is also published.
+    #[instrument(skip(self, connect_info, network_connection) fields(client_id = %connect_info.id))]
     fn manage_succesfull_connection(
         self: &Arc<Self>,
         connect_info: ConnectInfo,
         mut network_connection: NetworkConnection<TcpStream, SocketAddr>,
     ) -> ServerResult<()> {
-        logging::log(LogKind::Connected(&connect_info.id));
+        info!("Cliente aceptado");
         network_connection.write_all(
             &Connack::new(connect_info.session_present, connect_info.return_code).encode()?,
         )?;
@@ -313,14 +303,13 @@ impl Server {
         if let Some(last_will) = disconnect_info.publish_last_will {
             self.send_last_will(last_will, &connect_info.id)?;
         }
-
-        logging::log(LogKind::SuccesfulClientEnd(&connect_info.id));
         Ok(())
     }
 
     /// Send a [Connack] to the client if the connection failed due to one
     /// of the errors listed in section *3.2.2.3* of the MQTT v3.1.1 protocol
     /// Otherwise, it returns a [ServerError]
+    #[instrument(skip(self, network_connection, error))]
     fn manage_failed_connection(
         &self,
         mut network_connection: NetworkConnection<TcpStream, SocketAddr>,
@@ -328,30 +317,21 @@ impl Server {
     ) -> ServerResult<()> {
         match error.kind() {
             ServerErrorKind::ConnectionRefused(return_code) => {
-                logging::log(LogKind::ConnectionRefusedError(
-                    &network_connection.id(),
-                    error.to_string(),
-                ));
+                warn!("Conexion rechazada: {} - {}", return_code, error);
                 network_connection.write_all(&Connack::new(false, return_code).encode()?)?;
                 Ok(())
             }
-            _ => {
-                logging::log(LogKind::UnexpectedError(
-                    &network_connection.id(),
-                    error.to_string(),
-                ));
-                Err(error)
-            }
+            _ => Err(error),
         }
     }
 
     // Metodo usado para procesar los errores mas facilmente
     #[doc(hidden)]
+    #[instrument(skip(self, network_connection) name="run_client", fields(socket_addr = %network_connection.id()))]
     fn _run_client(
         self: Arc<Self>,
         mut network_connection: NetworkConnection<TcpStream, SocketAddr>,
     ) -> ServerResult<()> {
-        logging::log::<&str>(LogKind::ThreadStart(thread::current().id()));
         match self.connect_client(&mut network_connection) {
             Ok(connect_info) => {
                 self.manage_succesfull_connection(connect_info, network_connection)?
@@ -368,16 +348,17 @@ impl Server {
 
     /// Creates a new thread in which the client will be handled. Adds that
     /// thread to the list of threads pending to be joined
+    #[instrument(skip(self, network_connection), fields(socket_addr = %network_connection.id()))]
     fn run_client(
         self: &Arc<Self>,
         network_connection: NetworkConnection<TcpStream, SocketAddr>,
     ) -> ServerResult<()> {
         let sv_copy = self.clone();
         let handle = thread::spawn(move || {
-            if let Err(err) = sv_copy._run_client(network_connection) {
+            sv_copy._run_client(network_connection).unwrap_or_else(|e| {
                 // Si llega un error a este punto ya no se puede solucionar
-                logging::log::<&str>(LogKind::UnhandledError(err))
-            }
+                error!("Error no manejado: {}", e);
+            });
         });
         self.client_thread_joiner
             .lock()?
@@ -387,6 +368,7 @@ impl Server {
 
     /// Accepts clients and processes them as log as a shutdown signal is not
     /// received from the [ServerController] corresponding to this server
+    #[instrument(skip(self, shutdown_bool, started_sender) fields(ip = %self.config.ip(), port = %self.config.port()))]
     fn server_loop(
         self: Arc<Self>,
         shutdown_bool: Arc<AtomicBool>,
@@ -430,6 +412,7 @@ impl Server {
     ///
     /// If no connection has been received, it returns an error of kind
     /// [ServerErrorKind::Idle]
+    #[instrument(skip(self, listener) fields(socket_addr))]
     fn accept_client(
         self: &Arc<Self>,
         listener: &TcpListener,
@@ -439,13 +422,12 @@ impl Server {
                 Err(ServerError::new_kind("Idle", ServerErrorKind::Idle))
             }
             Err(error) => {
-                logging::log::<&str>(LogKind::IncomingConnectionError(&error.to_string()));
+                error!("Error aceptando conexion TCP: {}", error);
                 Err(ServerError::from(error))
             }
-            Ok((stream, addr)) => {
-                logging::log(LogKind::AcceptedIncoming(&addr));
+            Ok((stream, socket_addr)) => {
                 stream.set_read_timeout(Some(CONNECTION_WAIT_TIMEOUT))?;
-                Ok(NetworkConnection::new(addr, stream))
+                Ok(NetworkConnection::new(socket_addr, stream))
             }
         }
     }

@@ -5,10 +5,10 @@ use std::{io::Write, vec};
 use packets::{connect::Connect, qos::QoSLevel, traits::MQTTEncoding};
 use packets::{puback::Puback, publish::Publish};
 use serde::{Deserialize, Serialize};
+use tracing::{instrument, info};
 
 use crate::traits::Close;
 use crate::{
-    logging::{self, LogKind},
     network_connection::NetworkConnection,
     server::{server_error::ServerErrorKind, ClientId, ServerError, ServerResult},
 };
@@ -41,7 +41,7 @@ where
     ///
     /// If the client is currently disconnected, it is
     /// None
-    #[serde(skip, default="Default::default")]
+    #[serde(skip, default = "Default::default")]
     connection: Option<NetworkConnection<S, I>>,
     /// [Connect] packet received in the last client
     /// session.
@@ -193,7 +193,6 @@ where
     {
         self.check_reconnect_id(&new_connect)?;
 
-        logging::log(LogKind::Reconnecting(&self.id));
         if *new_connect.clean_session() {
             self.unacknowledged = vec![];
         }
@@ -207,9 +206,13 @@ where
     /// Returns the maximum idle time between communication with
     /// the client before the server decides to disconnect it
     /// (see [MQTT-3.1.2-24])
-    pub fn keep_alive(&self) -> f32 {
-        let keep_alive = self.connect.keep_alive();
-        keep_alive as f32 * 1.5
+    pub fn keep_alive(&self) -> Option<Duration> {
+        if self.connect.keep_alive() == 0 {
+            None
+        } else {
+            let keep_alive = self.connect.keep_alive();
+            Some(Duration::from_millis(1500 * keep_alive as u64))
+        }
     }
 
     /// Returns the username of the client, if specified.
@@ -228,8 +231,9 @@ where
     /// *packet_id* matches the *packet_id* of the received [Puback]
     /// packet. If no packet meets this condition, it returns an
     /// error of kind [ServerErrorKind::Other]
+    #[instrument(skip(self, puback) fields(client_id = %self.id, packet_id = %puback.packet_id()))]
     pub fn acknowledge(&mut self, puback: Puback) -> ServerResult<()> {
-        logging::log(LogKind::Acknowledge(&self.id, puback.packet_id()));
+        info!("Acknowledge");
         let idx = self.unacknowledged.iter().position(|publish| {
             puback.packet_id()
                 == publish
@@ -274,10 +278,6 @@ where
             let (last_time_published, publish) = self.unacknowledged.remove(0);
             if let Some(min_elapsed_time) = min_elapsed_time {
                 if now.duration_since(last_time_published).unwrap() > min_elapsed_time {
-                    logging::log(LogKind::SendingUnacknowledged(
-                        &self.id,
-                        publish.packet_id().unwrap(),
-                    ));
                     self.send_packet(&publish)?;
                     self.unacknowledged.push((now, publish));
                 } else {
@@ -286,10 +286,6 @@ where
                     break;
                 }
             } else {
-                logging::log(LogKind::SendingUnacknowledged(
-                    &self.id,
-                    publish.packet_id().unwrap(),
-                ));
                 self.send_packet(&publish)?;
                 self.unacknowledged.push((now, publish));
             }

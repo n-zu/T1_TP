@@ -2,9 +2,11 @@
 
 use std::io::{self, Read};
 
+use serde::{Deserialize, Serialize};
+
 use crate::traits::{Close, TryClone};
 
-#[derive(Debug)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct IOMock {
     pub closed: bool,
     pub buf: Vec<u8>,

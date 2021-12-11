@@ -1,21 +1,22 @@
-mod login;
+pub mod simple_login;
 
 use core::fmt;
 use std::{
     collections::HashMap,
     io::{Read, Write},
     sync::Mutex,
+    vec,
 };
 
 use packets::{connack::ConnackReturnCode, connect::Connect, publish::Publish};
 use serde::{Deserialize, Serialize};
-use tracing::debug;
+use tracing::{info, instrument};
 
 use crate::{
     client::Client,
     network_connection::NetworkConnection,
     server::{server_error::ServerErrorKind, ClientId, ClientIdArg, ServerError, ServerResult},
-    traits::Close,
+    traits::{Close, Login, LoginResult},
 };
 
 const GENERIC_ID_SUFFIX: &str = "__CLIENT__";
@@ -29,7 +30,8 @@ where
     #[serde(bound(serialize = "Client<S, I>: Serialize<>"))]
     #[serde(bound(deserialize = "Client<S, I>: Deserialize<'de>"))]
     clients: HashMap<ClientId, Mutex<Client<S, I>>>,
-    accounts_path: Option<String>,
+    #[serde(skip, default = "Default::default")]
+    login: Option<Box<dyn Login>>,
     generic_ids_counter: u32,
 }
 
@@ -52,10 +54,10 @@ where
     S: Read + Write + Send + Sync + 'static,
     I: fmt::Display + Clone + std::hash::Hash + Eq,
 {
-    pub fn new(accounts_path: Option<&str>) -> Self {
+    pub fn new(login: Option<Box<dyn Login>>) -> Self {
         Self {
             clients: HashMap::new(),
-            accounts_path: accounts_path.map(|x| x.to_owned()),
+            login,
             generic_ids_counter: 0,
         }
     }
@@ -121,11 +123,9 @@ where
             .lock()?
             .clean_session()
         {
-            debug!("<{}>: Terminando sesion con clean_session = true", id);
             self.clients.remove(id);
             clean_session = true;
         } else {
-            debug!("<{}>: Terminando sesion con clean_session = false", id);
             clean_session = false;
         }
         Ok(DisconnectInfo {
@@ -167,7 +167,10 @@ where
             ));
         }
 
-        let accounts_path = match &self.accounts_path {
+        // No precisamos chequear las ids tomadas con check_taken_ids
+        // porque en modo sin autenticacion cualquier cliente puede
+        // hacer TakeOver
+        let login = match &mut self.login {
             None => return Ok(()),
             Some(path) => path,
         };
@@ -180,14 +183,25 @@ where
                 ))
             }
         };
-        let password = login::search_password(accounts_path, user_name)?;
-        if password == *connect.password().unwrap_or(&String::new()) {
-            self.check_taken_ids(connect.client_id(), user_name)
-        } else {
-            Err(ServerError::new_kind(
-                "Contraseña incorrecta",
+        let password = match connect.password() {
+            Some(password) => password,
+            None => {
+                return Err(ServerError::new_kind(
+                    "Clientes sin contraseña no estan permitidos",
+                    ServerErrorKind::ConnectionRefused(ConnackReturnCode::BadUserNameOrPassword),
+                ))
+            }
+        };
+        match login.login(user_name, password)? {
+            LoginResult::UsernameNotFound => Err(ServerError::new_kind(
+                "Usuario invalido",
+                ServerErrorKind::ConnectionRefused(ConnackReturnCode::NotAuthorized),
+            )),
+            LoginResult::InvalidPassword => Err(ServerError::new_kind(
+                "Contraseña invalida",
                 ServerErrorKind::ConnectionRefused(ConnackReturnCode::BadUserNameOrPassword),
-            ))
+            )),
+            LoginResult::Accepted => self.check_taken_ids(connect.client_id(), user_name),
         }
     }
 
@@ -211,6 +225,7 @@ where
         }
     }
 
+    #[instrument(skip(self, network_connection, connect) fields(socket_addr = %network_connection.id(), client_id = %connect.client_id()))]
     pub fn new_session(
         &mut self,
         network_connection: NetworkConnection<S, I>,
@@ -232,6 +247,7 @@ where
 
         // Hay una sesion_presente en el servidor con la misma ID
         if let Some(old_client) = self.clients.get_mut(&id) {
+            info!("Reconectando");
             takeover_last_will = old_client
                 .get_mut()?
                 .reconnect(connect, network_connection)?;
@@ -254,22 +270,23 @@ where
     where
         S: Close,
     {
-        for (id, client) in &self.clients {
-            debug!("<{}>: Desconectando", id);
+        for (_id, client) in &self.clients {
             client.lock()?.disconnect(gracefully)?;
         }
-        let mut clean_session_ids = vec![];
+        let mut clean_session_clients_id = vec![];
 
         self.clients.retain(|_id, client| match client.get_mut() {
-            Ok(client) => if client.clean_session() {
-                clean_session_ids.push(client.id().to_owned());
-                true
-            } else {
-                false
+            Ok(client) => {
+                if client.clean_session() {
+                    clean_session_clients_id.push(client.id().to_string());
+                    true
+                } else {
+                    false
+                }
             }
             Err(_) => false,
         });
-        Ok(clean_session_ids)
+        Ok(clean_session_clients_id)
     }
 }
 
