@@ -4,13 +4,16 @@ use std::{
     collections::HashMap,
     fs::File,
     io::{BufRead, BufReader, Read},
+    time::Duration,
 };
 
+use serde::{Deserialize, Serialize};
+
 /// Config struct contains information which is needed from a Server
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Config {
     port: u16,
-    dump_path: String,
-    dump_time: u32,
+    dump_info: Option<(String, Duration)>,
     log_path: String,
     accounts_path: String,
     ip: String,
@@ -56,10 +59,18 @@ impl Config {
             })
             .collect::<Option<HashMap<_, _>>>()?;
 
+        let dump_info;
+        let dump_path = config.remove(DUMP_PATH_KEY)?;
+        if !dump_path.is_empty() {
+            let dump_time = Duration::from_secs(config.remove(DUMP_TIME_KEY)?.parse().ok()?);
+            dump_info = Some((dump_path, dump_time));
+        } else {
+            dump_info = None;
+        }
+
         Some(Config {
             port: config.remove(PORT_KEY)?.parse().ok()?,
-            dump_path: config.remove(DUMP_PATH_KEY)?,
-            dump_time: config.remove(DUMP_TIME_KEY)?.parse().ok()?,
+            dump_info,
             log_path: config.remove(LOG_PATH_KEY)?,
             accounts_path: config.remove(ACCOUNTS_PATH_KEY)?,
             ip: config.remove(IP_KEY)?,
@@ -71,14 +82,14 @@ impl Config {
         self.port
     }
 
-    /// Returns path to the dump file
-    pub fn dump_path(&self) -> &str {
-        &self.dump_path
-    }
-
-    /// Returns the time interval between two consecutive dumps
-    pub fn dump_time(&self) -> u32 {
-        self.dump_time
+    /// Returns dump info, if specified. Otherwise,
+    /// it returns None
+    pub fn dump_info(&self) -> Option<(&str, Duration)> {
+        if let Some(dump_info) = &self.dump_info {
+            Some((&dump_info.0, dump_info.1))
+        } else {
+            None
+        }
     }
 
     /// Returns the path to the logs directory
@@ -100,12 +111,12 @@ impl Config {
 
 #[cfg(test)]
 mod tests {
-    use std::io::Cursor;
+    use std::{io::Cursor, time::Duration};
 
     use crate::config::Config;
 
     #[test]
-    fn valid_file() {
+    fn test_valid_file() {
         let cursor = Cursor::new(
             "port=8080
 dump_path=foo.txt
@@ -117,15 +128,15 @@ ip=localhost",
 
         let config = Config::new_from_file(cursor).unwrap();
         assert_eq!(config.port(), 8080);
-        assert_eq!(config.dump_path(), "foo.txt");
-        assert_eq!(config.dump_time(), 10);
+        assert_eq!(config.dump_info().unwrap().0, "foo.txt");
+        assert_eq!(config.dump_info().unwrap().1, Duration::from_secs(10));
         assert_eq!(config.log_path(), "bar.txt");
         assert_eq!(config.accounts_path(), "baz.csv");
         assert_eq!(config.ip(), "localhost");
     }
 
     #[test]
-    fn valid_file_with_whitespace() {
+    fn test_valid_file_with_whitespace() {
         let cursor = Cursor::new(
             "port=8080
     dump_path=foo.txt
@@ -137,15 +148,15 @@ accounts_path=baz.csv
 
         let config = Config::new_from_file(cursor).unwrap();
         assert_eq!(config.port(), 8080);
-        assert_eq!(config.dump_path(), "foo.txt");
-        assert_eq!(config.dump_time(), 10);
+        assert_eq!(config.dump_info().unwrap().0, "foo.txt");
+        assert_eq!(config.dump_info().unwrap().1, Duration::from_secs(10));
         assert_eq!(config.log_path(), "bar.txt");
         assert_eq!(config.accounts_path(), "baz.csv");
         assert_eq!(config.ip(), "localhost");
     }
 
     #[test]
-    fn invalid_key() {
+    fn test_invalid_key() {
         let cursor = Cursor::new(
             "invalid_key=8080
 dump_path=foo.txt
@@ -159,7 +170,7 @@ ip=localhost",
     }
 
     #[test]
-    fn invalid_value() {
+    fn test_invalid_value() {
         let cursor = Cursor::new(
             "port=WWWW
 dump_path=foo.txt
@@ -170,5 +181,25 @@ ip=localhost",
         );
 
         assert!(Config::new_from_file(cursor).is_none());
+    }
+
+    #[test]
+    fn test_no_dump_info() {
+        let cursor = Cursor::new(
+            "port=8080
+dump_path=
+dump_time=
+log_path=bar.txt
+accounts_path=baz.csv
+ip=localhost",
+        );
+
+        let config = Config::new_from_file(cursor).unwrap();
+
+        assert_eq!(config.port(), 8080);
+        assert!(config.dump_info().is_none());
+        assert_eq!(config.log_path(), "bar.txt");
+        assert_eq!(config.accounts_path(), "baz.csv");
+        assert_eq!(config.ip(), "localhost");
     }
 }

@@ -26,6 +26,7 @@ use packets::{
     unsuback::Unsuback, unsubscribe::Unsubscribe,
 };
 
+mod dump;
 mod packet_processing;
 mod server_controller;
 pub mod server_error;
@@ -125,15 +126,27 @@ pub struct Server {
 
 impl Server {
     /// Creates and returns a server in a valid state
-    pub fn new(config: Config, threadpool_size: usize) -> Arc<Self> {
-        logging::log::<SocketAddr>(LogKind::StartingServer(config.ip(), config.port()));
-        Arc::new(Self {
-            clients_manager: RwLock::new(ClientsManager::new(Some(config.accounts_path()))),
-            config,
-            topic_handler: TopicHandler::new(),
-            client_thread_joiner: Mutex::new(ThreadJoiner::new()),
-            pool: Mutex::new(ThreadPool::new(threadpool_size)),
-        })
+    pub fn new(config: Config, threadpool_size: usize) -> Option<Arc<Self>> {
+        info!("Creando servidor");
+        match Server::try_restore(&config, threadpool_size) {
+            Ok(server) => {
+                if let Some(server) = server {
+                    info!("Se encontro un archivo de DUMP - Creando servidor con su informacion");
+                    Some(server)
+                } else {
+                    info!("No se encontro un archivo de DUMP - Creando servidor en blanco");
+                    let server = Arc::new(Self {
+                        clients_manager: RwLock::new(ClientsManager::new(Some(config.accounts_path()))),
+                        config,
+                        topic_handler: TopicHandler::new(),
+                        client_thread_joiner: Mutex::new(ThreadJoiner::new()),
+                        pool: Mutex::new(ThreadPool::new(threadpool_size)),
+                    });
+                    Some(server)
+                }
+            }
+            Err(_err) => None,
+        }
     }
 
     /// Run the server in a new thread.

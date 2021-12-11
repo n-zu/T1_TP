@@ -247,7 +247,7 @@ where
         })
     }
 
-    pub fn finish_all_sessions(&mut self, gracefully: bool) -> ServerResult<()>
+    pub fn finish_all_sessions(&mut self, gracefully: bool) -> ServerResult<Vec<ClientId>>
     where
         S: Close,
     {
@@ -255,11 +255,18 @@ where
             debug!("<{}>: Desconectando", id);
             client.lock()?.disconnect(gracefully)?;
         }
+        let mut clean_session_ids = vec![];
+
         self.clients.retain(|_id, client| match client.get_mut() {
-            Ok(client) => client.clean_session(),
+            Ok(client) => if client.clean_session() {
+                clean_session_ids.push(client.id().to_owned());
+                true
+            } else {
+                false
+            }
             Err(_) => false,
         });
-        Ok(())
+        Ok(clean_session_ids)
     }
 }
 

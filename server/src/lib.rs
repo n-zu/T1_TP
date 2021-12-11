@@ -29,7 +29,7 @@ pub fn init() {
     tracing::subscriber::set_global_default(subscriber).unwrap();
 
     let threadpool_size = 8;
-    let server = Server::new(config, threadpool_size);
+    let server = Server::new(config, threadpool_size).unwrap();
     let _controller = server.run().unwrap();
 
     info!("Presione [ENTER] para detener la ejecucion del servidor");
