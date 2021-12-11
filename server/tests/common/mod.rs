@@ -13,14 +13,14 @@ use std::{
 
 pub fn start_server() -> (ServerController, u32) {
     let mut port = random_port();
-    let mut server = Server::new(build_config(port), 20);
+    let mut server = Server::new(build_config(port), 20).unwrap();
     for _ in 0..50 {
         // Intento crear el servidor bindeando a 50 puertos al azar
         if let Ok(controller) = server.run() {
             return (controller, port);
         } else {
             port = random_port();
-            server = Server::new(build_config(port), 20);
+            server = Server::new(build_config(port), 20).unwrap();
         }
     }
     panic!("No se pudo crear servidor para ejecutar el test");

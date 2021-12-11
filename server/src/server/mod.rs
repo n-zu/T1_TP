@@ -156,12 +156,14 @@ impl Server {
     /// This method does not return until the server initializes everything
     /// necessary to start accepting connections
     pub fn run(self: Arc<Self>) -> io::Result<ServerController> {
-        let (shutdown_sender, shutdown_receiver) = mpsc::channel();
+        let shutdown_bool = Arc::new(AtomicBool::new(false));
+        let shutdown_bool_copy = shutdown_bool.clone();
+
         let (started_sender, started_receiver) = mpsc::channel();
 
         let server_handle = thread::spawn(move || {
             logging::log::<&str>(LogKind::ThreadStart(thread::current().id()));
-            if let Err(err) = self.server_loop(shutdown_receiver, started_sender) {
+            if let Err(err) = self.server_loop(shutdown_bool, started_sender) {
                 error!(
                     "Error inesperado del servidor: {} - Se recomienda apagarlo",
                     err.to_string()
@@ -175,7 +177,7 @@ impl Server {
             );
         }
 
-        let server_controller = ServerController::new(shutdown_sender, server_handle);
+        let server_controller = ServerController::new(shutdown_bool_copy, server_handle);
         Ok(server_controller)
     }
 
