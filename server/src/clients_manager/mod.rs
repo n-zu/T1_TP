@@ -8,6 +8,7 @@ use std::{
 };
 
 use packets::{connack::ConnackReturnCode, connect::Connect, publish::Publish};
+use serde::{Deserialize, Serialize};
 use tracing::debug;
 
 use crate::{
@@ -19,12 +20,14 @@ use crate::{
 
 const GENERIC_ID_SUFFIX: &str = "__CLIENT__";
 
-#[derive(Debug)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct ClientsManager<S, I>
 where
     S: Read + Write + Send + Sync + 'static,
     I: fmt::Display,
 {
+    #[serde(bound(serialize = "Client<S, I>: Serialize<>"))]
+    #[serde(bound(deserialize = "Client<S, I>: Deserialize<'de>"))]
     clients: HashMap<ClientId, Mutex<Client<S, I>>>,
     accounts_path: Option<String>,
     generic_ids_counter: u32,

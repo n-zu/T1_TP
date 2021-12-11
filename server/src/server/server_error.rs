@@ -55,6 +55,7 @@ pub enum ServerErrorKind {
     ClientDisconnected,
     ClientNotFound,
     ConnectionRefused(ConnackReturnCode),
+    DumpError,
     Timeout,
     PoinsonedLock,
     Irrecoverable,

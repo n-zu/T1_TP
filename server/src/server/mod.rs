@@ -6,10 +6,10 @@ use std::{
     net::{Shutdown, SocketAddr, TcpListener, TcpStream},
     sync::{
         mpsc::{self, Receiver, Sender},
-        Arc, Mutex, RwLock,
+        Arc, Mutex, RwLock, atomic::{AtomicBool, Ordering},
     },
     thread::{self, JoinHandle},
-    time::Duration,
+    time::{Duration, SystemTime},
 };
 
 use threadpool::ThreadPool;
@@ -387,32 +387,38 @@ impl Server {
     /// received from the [ServerController] corresponding to this server
     fn server_loop(
         self: Arc<Self>,
-        shutdown_receiver: Receiver<()>,
+        shutdown_bool: Arc<AtomicBool>,
         started_sender: Sender<()>,
     ) -> ServerResult<()> {
-        let mut recv_result = shutdown_receiver.try_recv();
         let listener = TcpListener::bind(format!("{}:{}", self.config.ip(), self.config.port()))?;
+        let mut time_last_dump = SystemTime::now();
+        let dump_info_opt = self.config.dump_info();
         started_sender.send(())?;
 
         listener.set_nonblocking(true)?;
-        while recv_result.is_err() {
+        while !shutdown_bool.load(Ordering::Relaxed) {
             match self.accept_client(&listener) {
                 Ok(connection_stream) => {
-                    // TODO: Agregar network_connection.addr al mensaje de error
+                    let socket_addr = *connection_stream.id();
                     self.run_client(connection_stream)
-                        .unwrap_or_else(|err| error!("Error - {}", err.to_string()));
+                        .unwrap_or_else(|e| error!("{}: Error - {}", socket_addr, e));
                 }
                 Err(err) if err.kind() == ServerErrorKind::Idle => {
                     thread::sleep(ACCEPT_SLEEP_DUR);
                 }
-                Err(err) => {
-                    logging::log::<&str>(LogKind::IncomingConnectionError(&err.to_string()));
+                Err(e) => {
+                    error!("Error de nueva conexion: {}", e);
                     break;
                 }
             }
-            recv_result = shutdown_receiver.try_recv();
+            if let Some(dump_info) = dump_info_opt {
+                if SystemTime::now().duration_since(time_last_dump).unwrap() >= dump_info.1 {
+                    self.dump().unwrap();
+                    time_last_dump = SystemTime::now();
+                }
+            }
         }
-        logging::log::<&str>(LogKind::ServerShutdown);
+        info!("Apagando servidor");
         self.clients_manager.write()?.finish_all_sessions(false)?;
         Ok(())
     }

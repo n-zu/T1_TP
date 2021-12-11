@@ -4,6 +4,7 @@ use std::{io::Write, vec};
 
 use packets::{connect::Connect, qos::QoSLevel, traits::MQTTEncoding};
 use packets::{puback::Puback, publish::Publish};
+use serde::{Deserialize, Serialize};
 
 use crate::traits::Close;
 use crate::{
@@ -21,7 +22,7 @@ mod tests;
 /// session. It does not handle things like retained messages,
 /// since they do not correspond to the client session
 /// (see [MQTT-4.1.0-1])
-#[derive(Debug)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct Client<S, I>
 where
     S: Write + Send + Sync + 'static,
@@ -40,6 +41,7 @@ where
     ///
     /// If the client is currently disconnected, it is
     /// None
+    #[serde(skip, default="Default::default")]
     connection: Option<NetworkConnection<S, I>>,
     /// [Connect] packet received in the last client
     /// session.
