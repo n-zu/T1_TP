@@ -128,31 +128,31 @@ where
     {
         if let Some(mut connection) = self.connection.take() {
             connection.close()?;
-            if gracefully {
-                self.connect.take_last_will();
-                Ok(None)
-            } else if let Some(last_will) = self.connect.take_last_will() {
-                let packet_identifier: Option<u16>;
-                if last_will.qos != QoSLevel::QoSLevel0 {
-                    packet_identifier = Some(rand::random());
-                } else {
-                    packet_identifier = None;
-                }
-                let publish_last_will = Publish::new(
-                        false,
-                        last_will.qos,
-                        last_will.retain_flag,
-                        &last_will.topic_name,
-                        &last_will.topic_message,
-                        packet_identifier
-                    ).expect("Se esperaba un formato de Publish valido al crearlo con los datos del LastWill");
-                Ok(Some(publish_last_will))
-            } else {
-                Ok(None)
-            }
         }
-        // El cliente ya estaba desconectado
-        else {
+
+        if gracefully {
+            self.connect.take_last_will();
+            Ok(None)
+        } else if let Some(last_will) = self.connect.take_last_will() {
+            let packet_identifier: Option<u16>;
+            if last_will.qos != QoSLevel::QoSLevel0 {
+                packet_identifier = Some(rand::random());
+            } else {
+                packet_identifier = None;
+            }
+            let publish_last_will = Publish::new(
+                false,
+                last_will.qos,
+                last_will.retain_flag,
+                &last_will.topic_name,
+                &last_will.topic_message,
+                packet_identifier,
+            )
+            .expect(
+                "Se esperaba un formato de Publish valido al crearlo con los datos del LastWill",
+            );
+            Ok(Some(publish_last_will))
+        } else {
             Ok(None)
         }
     }

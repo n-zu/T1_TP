@@ -154,7 +154,7 @@ impl Server {
 
     /// Publish the packet so that all clients subscribed
     /// to the topics can receive them
-    fn handle_publish(
+    pub fn handle_publish(
         self: &Arc<Self>,
         mut publish: Publish,
         id: &ClientIdArg,

@@ -36,8 +36,8 @@ fn random_port() -> u32 {
 fn build_config(port: u32) -> Config {
     let cursor = Cursor::new(format!(
         "port={}
-         dump_path=tests/files/dump.txt
-         dump_time=10
+         dump_path=
+         dump_time=
          log_path=tests/files/logs
          accounts_path=tests/files/test_accounts.csv
          ip=localhost",

@@ -47,6 +47,12 @@ pub struct ConnectInfo {
     pub takeover_last_will: Option<Publish>,
 }
 
+#[derive(Debug)]
+pub struct ShutdownInfo {
+    pub clean_session_ids: Vec<ClientId>,
+    pub last_will_packets: Vec<(ClientId, Publish)>,
+}
+
 impl<S, I> ClientsManager<S, I>
 where
     S: Read + Write + Send + Sync + 'static,
@@ -250,28 +256,34 @@ where
         })
     }
 
-    pub fn finish_all_sessions(&mut self, gracefully: bool) -> ServerResult<Vec<ClientId>>
+    pub fn shutdown(&mut self, gracefully: bool) -> ServerResult<ShutdownInfo>
     where
         S: Close,
     {
-        for (id, client) in &self.clients {
-            debug!("<{}>: Desconectando", id);
-            client.lock()?.disconnect(gracefully)?;
-        }
         let mut clean_session_ids = vec![];
+        let mut last_will_packets = vec![];
+
+        for (id, client) in &self.clients {
+            if let Some(last_will) = client.lock()?.disconnect(gracefully)? {
+                last_will_packets.push((id.to_owned(), last_will));
+            }
+        }
 
         self.clients.retain(|_id, client| match client.get_mut() {
             Ok(client) => {
                 if client.clean_session() {
                     clean_session_ids.push(client.id().to_owned());
-                    true
-                } else {
                     false
+                } else {
+                    true
                 }
             }
             Err(_) => false,
         });
-        Ok(clean_session_ids)
+        Ok(ShutdownInfo {
+            clean_session_ids,
+            last_will_packets,
+        })
     }
 }
 

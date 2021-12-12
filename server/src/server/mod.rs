@@ -35,7 +35,7 @@ pub mod server_error;
 pub use server_error::ServerError;
 
 /// Maximum time between the client connection and the sending
-/// of the [Connect] packet
+/// of the [`Connect`] packet
 const CONNECTION_WAIT_TIMEOUT: Duration = Duration::from_secs(180);
 /// How often unacknowledged packets are sent
 const UNACK_RESENDING_FREQ: Duration = Duration::from_millis(500);
@@ -43,7 +43,7 @@ const UNACK_RESENDING_FREQ: Duration = Duration::from_millis(500);
 /// atempt
 const ACCEPT_SLEEP_DUR: Duration = Duration::from_millis(100);
 
-const MIN_ELAPSED_TIME: Option<Duration> = Some(Duration::from_millis(2000));
+const MIN_ELAPSED_TIME: Option<Duration> = None;
 
 const INFLIGHT_MESSAGES: Option<usize> = None;
 
@@ -179,7 +179,6 @@ impl Server {
                 err.to_string()
             );
         }
-
         let server_controller = ServerController::new(shutdown_bool_copy, server_handle);
         Ok(server_controller)
     }
@@ -424,7 +423,6 @@ impl Server {
             }
         }
         info!("Apagando servidor");
-        self.clients_manager.write()?.finish_all_sessions(false)?;
         Ok(())
     }
 
@@ -470,5 +468,16 @@ impl TryClone for TcpStream {
 impl Close for TcpStream {
     fn close(&mut self) -> io::Result<()> {
         self.shutdown(Shutdown::Both)
+    }
+}
+
+impl Drop for Server {
+    fn drop(&mut self) {
+        self.dump().unwrap_or_else(|e| {
+            error!(
+                "Error realizando el Dump durante el apagado del servidor: {}",
+                e
+            );
+        });
     }
 }
