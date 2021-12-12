@@ -1,4 +1,10 @@
-use std::{sync::{Arc, atomic::{AtomicBool, Ordering}}, thread::JoinHandle};
+use std::{
+    sync::{
+        atomic::{AtomicBool, Ordering},
+        Arc,
+    },
+    thread::JoinHandle,
+};
 
 use crate::logging::{self, LogKind};
 

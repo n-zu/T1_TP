@@ -41,7 +41,7 @@ where
     ///
     /// If the client is currently disconnected, it is
     /// None
-    #[serde(skip, default="Default::default")]
+    #[serde(skip, default = "Default::default")]
     connection: Option<NetworkConnection<S, I>>,
     /// [Connect] packet received in the last client
     /// session.

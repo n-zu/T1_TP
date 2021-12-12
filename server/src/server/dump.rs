@@ -16,11 +16,8 @@ use crate::{
 
 use super::{server_error::ServerErrorKind, ServerError, ServerResult};
 
-impl Server {
-    pub fn try_restore(
-        config: &Config,
-        threadpool_size: usize,
-    ) -> ServerResult<Option<Arc<Server>>> {
+impl<C: Config> Server<C> {
+    pub fn try_restore(config: &C, threadpool_size: usize) -> ServerResult<Option<Arc<Server<C>>>> {
         let dump_path = match config.dump_info() {
             Some(dump_info) => dump_info.0,
             None => return Ok(None),
@@ -32,7 +29,7 @@ impl Server {
             Err(err) => return Err(ServerError::from(err)),
         };
 
-        let (topic_handler, clients_manager) = Server::restore_from_json(&json_str)?;
+        let (topic_handler, clients_manager) = Server::<C>::restore_from_json(&json_str)?;
         let clean_sessions_clients_id = clients_manager.write()?.finish_all_sessions(true)?;
 
         for client_id in clean_sessions_clients_id {

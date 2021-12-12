@@ -261,11 +261,13 @@ where
         let mut clean_session_ids = vec![];
 
         self.clients.retain(|_id, client| match client.get_mut() {
-            Ok(client) => if client.clean_session() {
-                clean_session_ids.push(client.id().to_owned());
-                true
-            } else {
-                false
+            Ok(client) => {
+                if client.clean_session() {
+                    clean_session_ids.push(client.id().to_owned());
+                    true
+                } else {
+                    false
+                }
             }
             Err(_) => false,
         });

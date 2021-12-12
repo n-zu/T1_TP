@@ -5,8 +5,9 @@ use std::{
     io::{self, Read, Write},
     net::{Shutdown, SocketAddr, TcpListener, TcpStream},
     sync::{
+        atomic::{AtomicBool, Ordering},
         mpsc::{self, Receiver, Sender},
-        Arc, Mutex, RwLock, atomic::{AtomicBool, Ordering},
+        Arc, Mutex, RwLock,
     },
     thread::{self, JoinHandle},
     time::{Duration, SystemTime},
@@ -51,13 +52,12 @@ use packets::qos::QoSLevel;
 
 use crate::{
     clients_manager::{ClientsManager, ConnectInfo, DisconnectInfo},
-    config::Config,
     logging::{self, LogKind},
     network_connection::NetworkConnection,
     server::server_error::ServerErrorKind,
     thread_joiner::ThreadJoiner,
     topic_handler::{Message, TopicHandler},
-    traits::{Close, TryClone},
+    traits::*,
 };
 
 pub use self::server_controller::ServerController;
@@ -82,7 +82,7 @@ pub type ClientIdArg = str;
 /// The shutdown of the server is controlled through a
 /// [ServerController] that sends a message to the server thread
 /// to stop it
-pub struct Server {
+pub struct Server<C: Config> {
     /// Clients connected to the server.
     ///
     /// It handles the connection and disconnection of clients,
@@ -94,7 +94,7 @@ pub struct Server {
     /// their data is deleted
     clients_manager: RwLock<ClientsManager<TcpStream, SocketAddr>>,
     /// Initial Server setup
-    config: Config,
+    config: C,
     /// Manages the Publish / Subscribe tree.
     ///
     /// When a customer subscribes to a topic or publish a message,
@@ -124,9 +124,9 @@ pub struct Server {
     pool: Mutex<ThreadPool>,
 }
 
-impl Server {
+impl<C: Config> Server<C> {
     /// Creates and returns a server in a valid state
-    pub fn new(config: Config, threadpool_size: usize) -> Option<Arc<Self>> {
+    pub fn new(config: C, threadpool_size: usize) -> Option<Arc<Self>> {
         info!("Creando servidor");
         match Server::try_restore(&config, threadpool_size) {
             Ok(server) => {
@@ -136,7 +136,9 @@ impl Server {
                 } else {
                     info!("No se encontro un archivo de DUMP - Creando servidor en blanco");
                     let server = Arc::new(Self {
-                        clients_manager: RwLock::new(ClientsManager::new(Some(config.accounts_path()))),
+                        clients_manager: RwLock::new(ClientsManager::new(Some(
+                            config.accounts_path(),
+                        ))),
                         config,
                         topic_handler: TopicHandler::new(),
                         client_thread_joiner: Mutex::new(ThreadJoiner::new()),

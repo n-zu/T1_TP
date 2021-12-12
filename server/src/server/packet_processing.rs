@@ -2,7 +2,7 @@ use packets::pingresp::PingResp;
 
 use super::*;
 
-impl Server {
+impl<C: Config> Server<C> {
     /// Submit a job to the ThreadPool
     fn to_threadpool<F>(self: &Arc<Self>, action: F, id: &ClientIdArg) -> ServerResult<()>
     where
