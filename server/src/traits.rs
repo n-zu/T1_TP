@@ -21,7 +21,7 @@ pub enum LoginResult {
     Accepted,
 }
 
-pub trait Login: fmt::Display + std::error::Error + Send + Sync + 'static {
+pub trait Login: fmt::Debug + Send + Sync + 'static {
     fn login(&mut self, user_name: &str, password: &str) -> io::Result<LoginResult>;
 }
 
@@ -57,10 +57,8 @@ pub trait Config: Send + Sync + Clone + 'static {
     /// Returns the path to the logs directory
     fn log_path(&self) -> &str;
 
-    /// Returns the path to CSV file with the accounts
-    /// Format: username,password
-    fn accounts_path(&self) -> &str;
-
     /// Returns the IP address of the server
     fn ip(&self) -> &str;
+
+    fn authenticator(&self) -> Option<Box<dyn Login>>;
 }

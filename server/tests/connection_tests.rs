@@ -13,10 +13,10 @@ use std::time::Duration;
 
 #[test]
 fn test_connect_clean_session_true() {
-    let (_s, port) = start_server(None);
+    let (_s, port) = start_server(None, None);
     // Me conecto con clean session en true
     let connection = ConnectBuilder::new("id", 0, true).unwrap();
-    let mut stream = connect_client(connection, true, port, false);
+    let mut stream = connect_client(connection, port, false);
 
     let mut control = [0u8];
     stream.read_exact(&mut control).unwrap();
@@ -28,13 +28,13 @@ fn test_connect_clean_session_true() {
 
 #[test]
 fn test_connect_incorrect_password() {
-    let (_s, port) = start_server(None);
+    let (_s, port) = start_server(None, usr![("user", "password")]);
     let mut connect_builder = ConnectBuilder::new("id", 0, true).unwrap();
     connect_builder = connect_builder.user_name("user").unwrap();
     connect_builder = connect_builder
         .password("contraseña totalmente incorrecta")
         .unwrap();
-    let mut stream = connect_client(connect_builder, false, port, false);
+    let mut stream = connect_client(connect_builder, port, false);
 
     let mut control = [0u8];
     stream.read_exact(&mut control).unwrap();
@@ -48,12 +48,27 @@ fn test_connect_incorrect_password() {
 }
 
 #[test]
+fn test_connect_correct_password() {
+    let (_s, port) = start_server(None, usr![("user", "password")]);
+    let mut connect_builder = ConnectBuilder::new("id", 0, true).unwrap();
+    connect_builder = connect_builder.user_name("user").unwrap();
+    connect_builder = connect_builder.password("password").unwrap();
+    let mut stream = connect_client(connect_builder, port, false);
+
+    let mut control = [0u8];
+    stream.read_exact(&mut control).unwrap();
+    assert_eq!(control[0] >> 4, 2);
+    let connack = Connack::read_from(&mut stream, control[0]);
+    assert!(connack.is_ok());
+}
+
+#[test]
 fn test_connect_present_after_reconnection() {
-    let (_s, port) = start_server(None);
+    let (_s, port) = start_server(None, None);
     // Me conecto con clean_session = false
     let mut connect_builder = ConnectBuilder::new("id", 0, false).unwrap();
 
-    let mut stream = connect_client(connect_builder, true, port, false);
+    let mut stream = connect_client(connect_builder, port, false);
 
     let mut control = [0u8];
     stream.read_exact(&mut control).unwrap();
@@ -70,7 +85,7 @@ fn test_connect_present_after_reconnection() {
         .unwrap();
 
     connect_builder = ConnectBuilder::new("id", 0, false).unwrap();
-    stream = connect_client(connect_builder, true, port, false);
+    stream = connect_client(connect_builder, port, false);
 
     stream.read_exact(&mut control).unwrap();
     assert_eq!(control[0] >> 4, 2);
@@ -83,9 +98,9 @@ fn test_connect_present_after_reconnection() {
 
 #[test]
 fn test_pings() {
-    let (_s, port) = start_server(None);
+    let (_s, port) = start_server(None, None);
     let connect_builder = ConnectBuilder::new("id", 1, true).unwrap();
-    let mut stream = connect_client(connect_builder, true, port, true);
+    let mut stream = connect_client(connect_builder, port, true);
 
     let mut control = [0u8];
 
@@ -102,9 +117,9 @@ fn test_pings() {
 
 #[test]
 fn test_pings_should_disconnect() {
-    let (_s, port) = start_server(None);
+    let (_s, port) = start_server(None, None);
     let connect_builder = ConnectBuilder::new("id", 1, true).unwrap();
-    let mut stream = connect_client(connect_builder, true, port, true);
+    let mut stream = connect_client(connect_builder, port, true);
 
     let mut control = [0u8];
 
@@ -121,26 +136,26 @@ fn test_pings_should_disconnect() {
 
 #[test]
 fn test_takeover_should_close_previous_connection() {
-    let (_s, port) = start_server(None);
+    let (_s, port) = start_server(None, None);
     let builder_1 = ConnectBuilder::new("id", 1, true).unwrap();
     let builder_2 = ConnectBuilder::new("id", 1, true).unwrap();
 
     let mut control = [0u8];
-    let mut stream_1 = connect_client(builder_1, true, port, true);
-    connect_client(builder_2, true, port, true);
+    let mut stream_1 = connect_client(builder_1, port, true);
+    connect_client(builder_2, port, true);
 
     assert_eq!(stream_1.read(&mut control).unwrap(), 0);
 }
 
 #[test]
 fn test_takeover_should_change_keep_alive() {
-    let (_s, port) = start_server(None);
+    let (_s, port) = start_server(None, None);
     let builder_1 = ConnectBuilder::new("id", 60, true).unwrap();
     let builder_2 = ConnectBuilder::new("id", 1, true).unwrap();
 
     let mut control = [0u8];
-    let mut _stream_2 = connect_client(builder_1, true, port, true);
-    let mut stream_2 = connect_client(builder_2, true, port, true);
+    let mut _stream_2 = connect_client(builder_1, port, true);
+    let mut stream_2 = connect_client(builder_2, port, true);
 
     thread::sleep(Duration::from_millis(1600));
     assert_eq!(stream_2.read(&mut control).unwrap(), 0);
@@ -148,8 +163,13 @@ fn test_takeover_should_change_keep_alive() {
 
 #[test]
 fn test_takeover_only_works_with_same_username() {
-    let (_s, port) = start_server(None);
-    let builder_1 = ConnectBuilder::new("id", 60, true).unwrap();
+    let (_s, port) = start_server(None, usr![("foo", "bar"), ("user", "pass")]);
+    let builder_1 = ConnectBuilder::new("id", 60, true)
+        .unwrap()
+        .user_name("user")
+        .unwrap()
+        .password("pass")
+        .unwrap();
     let builder_2 = ConnectBuilder::new("id", 1, true)
         .unwrap()
         .user_name("foo")
@@ -158,8 +178,8 @@ fn test_takeover_only_works_with_same_username() {
         .unwrap();
 
     let mut control = [0u8];
-    let mut _stream_1 = connect_client(builder_1, true, port, true);
-    let mut stream_2 = connect_client(builder_2, false, port, false);
+    let mut _stream_1 = connect_client(builder_1, port, true);
+    let mut stream_2 = connect_client(builder_2, port, false);
 
     stream_2.read_exact(&mut control).unwrap();
     let err = Connack::read_from(&mut stream_2, control[0]).unwrap_err();

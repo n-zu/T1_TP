@@ -14,7 +14,7 @@ mod server;
 mod test_helpers;
 mod thread_joiner;
 mod topic_handler;
-mod traits;
+pub mod traits;
 
 pub fn init() {
     let config = FileConfig::new("config.txt").expect("Error cargando la configuracion");
