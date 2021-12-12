@@ -5,8 +5,9 @@ use std::{
     io::{self, Read, Write},
     net::{Shutdown, SocketAddr, TcpListener, TcpStream},
     sync::{
+        atomic::{AtomicBool, Ordering},
         mpsc::{self, Receiver, Sender},
-        Arc, Mutex, RwLock, atomic::{AtomicBool, Ordering},
+        Arc, Mutex, RwLock,
     },
     thread::{self, JoinHandle},
     time::{Duration, SystemTime},
@@ -136,7 +137,9 @@ impl Server {
                 } else {
                     info!("No se encontro un archivo de DUMP - Creando servidor en blanco");
                     let server = Arc::new(Self {
-                        clients_manager: RwLock::new(ClientsManager::new(Some(config.accounts_path()))),
+                        clients_manager: RwLock::new(ClientsManager::new(Some(
+                            config.accounts_path(),
+                        ))),
                         config,
                         topic_handler: TopicHandler::new(),
                         client_thread_joiner: Mutex::new(ThreadJoiner::new()),
