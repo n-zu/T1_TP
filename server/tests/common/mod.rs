@@ -44,16 +44,16 @@ impl Config for ConfigMock {
     }
 }
 
-pub fn start_server() -> (ServerController, u16) {
+pub fn start_server(dump_info: Option<(&str, Duration)>) -> (ServerController, u16) {
     let mut port = random_port();
-    let mut server = Server::new(build_config(port), 20).unwrap();
+    let mut server = Server::new(build_config(port, dump_info), 20).unwrap();
     for _ in 0..50 {
         // Intento crear el servidor bindeando a 50 puertos al azar
         if let Ok(controller) = server.run() {
             return (controller, port);
         } else {
             port = random_port();
-            server = Server::new(build_config(port), 20).unwrap();
+            server = Server::new(build_config(port, dump_info), 20).unwrap();
         }
     }
     panic!("No se pudo crear servidor para ejecutar el test");
@@ -66,10 +66,10 @@ fn random_port() -> u16 {
 }
 
 // FIXME: por alguna razón, no escribe los logs a la ruta dada
-fn build_config(port: u16) -> impl Config {
+fn build_config(port: u16, dump_info: Option<(&str, Duration)>) -> impl Config {
     ConfigMock {
         port: port,
-        dump_info: None,
+        dump_info: dump_info.map(|(str, dur)| (str.to_string(), dur)),
         log_path: "tests/files/logs".to_string(),
         accounts_path: "tests/files/test_accounts.csv".to_string(),
         ip: "localhost".to_string(),

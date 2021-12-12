@@ -13,7 +13,7 @@ use std::time::Duration;
 
 #[test]
 fn test_connect_clean_session_true() {
-    let (_s, port) = start_server();
+    let (_s, port) = start_server(None);
     // Me conecto con clean session en true
     let connection = ConnectBuilder::new("id", 0, true).unwrap();
     let mut stream = connect_client(connection, true, port, false);
@@ -28,7 +28,7 @@ fn test_connect_clean_session_true() {
 
 #[test]
 fn test_connect_incorrect_password() {
-    let (_s, port) = start_server();
+    let (_s, port) = start_server(None);
     let mut connect_builder = ConnectBuilder::new("id", 0, true).unwrap();
     connect_builder = connect_builder.user_name("user").unwrap();
     connect_builder = connect_builder
@@ -49,7 +49,7 @@ fn test_connect_incorrect_password() {
 
 #[test]
 fn test_connect_present_after_reconnection() {
-    let (_s, port) = start_server();
+    let (_s, port) = start_server(None);
     // Me conecto con clean_session = false
     let mut connect_builder = ConnectBuilder::new("id", 0, false).unwrap();
 
@@ -83,7 +83,7 @@ fn test_connect_present_after_reconnection() {
 
 #[test]
 fn test_pings() {
-    let (_s, port) = start_server();
+    let (_s, port) = start_server(None);
     let connect_builder = ConnectBuilder::new("id", 1, true).unwrap();
     let mut stream = connect_client(connect_builder, true, port, true);
 
@@ -102,7 +102,7 @@ fn test_pings() {
 
 #[test]
 fn test_pings_should_disconnect() {
-    let (_s, port) = start_server();
+    let (_s, port) = start_server(None);
     let connect_builder = ConnectBuilder::new("id", 1, true).unwrap();
     let mut stream = connect_client(connect_builder, true, port, true);
 
@@ -121,7 +121,7 @@ fn test_pings_should_disconnect() {
 
 #[test]
 fn test_takeover_should_close_previous_connection() {
-    let (_s, port) = start_server();
+    let (_s, port) = start_server(None);
     let builder_1 = ConnectBuilder::new("id", 1, true).unwrap();
     let builder_2 = ConnectBuilder::new("id", 1, true).unwrap();
 
@@ -134,7 +134,7 @@ fn test_takeover_should_close_previous_connection() {
 
 #[test]
 fn test_takeover_should_change_keep_alive() {
-    let (_s, port) = start_server();
+    let (_s, port) = start_server(None);
     let builder_1 = ConnectBuilder::new("id", 60, true).unwrap();
     let builder_2 = ConnectBuilder::new("id", 1, true).unwrap();
 
@@ -148,7 +148,7 @@ fn test_takeover_should_change_keep_alive() {
 
 #[test]
 fn test_takeover_only_works_with_same_username() {
-    let (_s, port) = start_server();
+    let (_s, port) = start_server(None);
     let builder_1 = ConnectBuilder::new("id", 60, true).unwrap();
     let builder_2 = ConnectBuilder::new("id", 1, true)
         .unwrap()
