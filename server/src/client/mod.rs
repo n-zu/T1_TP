@@ -116,7 +116,7 @@ where
     /// (both the one that has this structure and the copy
     /// that the server owns).
     ///
-    /// If *gracefully* is false and the client specified a
+    /// If `gracefully` is false and the client specified a
     /// LastWill on its last connection, the package to be
     /// published is returned. Otherwise, it returns None.
     ///
