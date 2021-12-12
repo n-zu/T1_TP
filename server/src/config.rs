@@ -7,7 +7,10 @@ use std::{
     time::Duration,
 };
 
-use crate::traits::Config;
+use crate::{
+    clients_manager::simple_login::SimpleLogin,
+    traits::{Config, Login},
+};
 
 /// Config struct contains information which is needed from a Server
 #[derive(Debug, Clone)]
@@ -15,7 +18,7 @@ pub struct FileConfig {
     port: u16,
     dump_info: Option<(String, Duration)>,
     log_path: String,
-    accounts_path: String,
+    accounts_path: Option<String>,
     ip: String,
 }
 
@@ -72,7 +75,7 @@ impl FileConfig {
             port: config.remove(PORT_KEY)?.parse().ok()?,
             dump_info,
             log_path: config.remove(LOG_PATH_KEY)?,
-            accounts_path: config.remove(ACCOUNTS_PATH_KEY)?,
+            accounts_path: config.remove(ACCOUNTS_PATH_KEY),
             ip: config.remove(IP_KEY)?,
         })
     }
@@ -93,12 +96,13 @@ impl Config for FileConfig {
         &self.log_path
     }
 
-    fn accounts_path(&self) -> &str {
-        &self.accounts_path
-    }
-
     fn ip(&self) -> &str {
         &self.ip
+    }
+
+    fn authenticator(&self) -> Option<Box<dyn Login>> {
+        let login = SimpleLogin::new(self.accounts_path.as_ref()?).ok()?;
+        Some(Box::new(login))
     }
 }
 
@@ -116,7 +120,7 @@ mod tests {
 dump_path=foo.txt
 dump_time=10
 log_path=bar.txt
-accounts_path=baz.csv
+accounts_path=
 ip=localhost",
         );
 
@@ -125,7 +129,7 @@ ip=localhost",
         assert_eq!(config.dump_info().unwrap().0, "foo.txt");
         assert_eq!(config.dump_info().unwrap().1, Duration::from_secs(10));
         assert_eq!(config.log_path(), "bar.txt");
-        assert_eq!(config.accounts_path(), "baz.csv");
+        assert!(config.authenticator().is_none());
         assert_eq!(config.ip(), "localhost");
     }
 
@@ -136,7 +140,7 @@ ip=localhost",
     dump_path=foo.txt
   dump_time=10
 log_path=bar.txt    
-accounts_path=baz.csv
+accounts_path=
     ip=localhost",
         );
 
@@ -145,7 +149,7 @@ accounts_path=baz.csv
         assert_eq!(config.dump_info().unwrap().0, "foo.txt");
         assert_eq!(config.dump_info().unwrap().1, Duration::from_secs(10));
         assert_eq!(config.log_path(), "bar.txt");
-        assert_eq!(config.accounts_path(), "baz.csv");
+        assert!(config.authenticator().is_none());
         assert_eq!(config.ip(), "localhost");
     }
 
@@ -156,7 +160,7 @@ accounts_path=baz.csv
 dump_path=foo.txt
 dump_time=10
 log_path=bar.txt
-accounts_path=baz.csv
+accounts_path=
 ip=localhost",
         );
 
@@ -170,7 +174,7 @@ ip=localhost",
 dump_path=foo.txt
 dump_time=10
 log_path=bar.txt
-accounts_path=baz.csv
+accounts_path=
 ip=localhost",
         );
 
@@ -184,7 +188,7 @@ ip=localhost",
 dump_path=
 dump_time=
 log_path=bar.txt
-accounts_path=baz.csv
+accounts_path=
 ip=localhost",
         );
 
@@ -193,7 +197,7 @@ ip=localhost",
         assert_eq!(config.port(), 8080);
         assert!(config.dump_info().is_none());
         assert_eq!(config.log_path(), "bar.txt");
-        assert_eq!(config.accounts_path(), "baz.csv");
+        assert!(config.authenticator().is_none());
         assert_eq!(config.ip(), "localhost");
     }
 }

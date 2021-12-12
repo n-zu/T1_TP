@@ -51,7 +51,7 @@ use packets::publish::Publish;
 use packets::qos::QoSLevel;
 
 use crate::{
-    clients_manager::{simple_login::SimpleLogin, ClientsManager, ConnectInfo, DisconnectInfo},
+    clients_manager::{ClientsManager, ConnectInfo, DisconnectInfo},
     network_connection::NetworkConnection,
     server::server_error::ServerErrorKind,
     thread_joiner::ThreadJoiner,
@@ -135,9 +135,7 @@ impl<C: Config> Server<C> {
                 } else {
                     info!("No se encontro un archivo de DUMP - Creando servidor en blanco");
                     let server = Arc::new(Self {
-                        clients_manager: RwLock::new(ClientsManager::new(Some(Box::new(
-                            SimpleLogin::new(config.accounts_path()).unwrap(),
-                        )))),
+                        clients_manager: RwLock::new(ClientsManager::new(config.authenticator())),
                         config,
                         topic_handler: TopicHandler::new(),
                         client_thread_joiner: Mutex::new(ThreadJoiner::new()),

@@ -1,7 +1,4 @@
-use crate::{
-    packet_error::{ErrorKind, PacketResult},
-    traits::MQTTDecoding,
-};
+use crate::{packet_error::ErrorKind, traits::MQTTDecoding};
 
 use super::*;
 use std::io::Cursor;
@@ -95,29 +92,19 @@ fn test_return_code_5_should_raise_not_authorized_error() {
 }
 
 #[test]
-fn test_should_return_valid_connack_packet_with_session_present_0_and_return_code_0(
-) -> PacketResult<()> {
+fn test_should_return_valid_connack_packet_with_session_present_0_and_return_code_0() {
     let v: Vec<u8> = vec![0b10, 0b0, 0b0];
     let mut stream = Cursor::new(v);
-    let result = Connack::read_from(&mut stream, 0b100000)?;
-    let connack_expected = Connack {
-        session_present: false,
-        return_code: ConnackReturnCode::Accepted,
-    };
-    assert_eq!(result, connack_expected);
-    Ok(())
+    let result = Connack::read_from(&mut stream, 0b100000).unwrap();
+    assert!(!result.session_present());
+    assert_eq!(result.return_code(), ConnackReturnCode::Accepted);
 }
 
 #[test]
-fn test_should_return_valid_connack_packet_with_session_present_1_and_return_code_0(
-) -> PacketResult<()> {
+fn test_should_return_valid_connack_packet_with_session_present_1_and_return_code_0() {
     let v: Vec<u8> = vec![2, 1, 0];
     let mut stream = Cursor::new(v);
-    let result = Connack::read_from(&mut stream, 32)?;
-    let connack_expected = Connack {
-        session_present: true,
-        return_code: ConnackReturnCode::Accepted,
-    };
-    assert_eq!(result, connack_expected);
-    Ok(())
+    let result = Connack::read_from(&mut stream, 32).unwrap();
+    assert!(result.session_present());
+    assert_eq!(result.return_code(), ConnackReturnCode::Accepted);
 }

@@ -46,8 +46,8 @@ impl MQTTDecoding for Connack {
     /// let v: Vec<u8> = vec![0b10, 0b01, 0b0];
     /// let mut stream = Cursor::new(v);
     /// let result = Connack::read_from(&mut stream, control_byte).unwrap();
-    /// let connack_expected = Connack { session_present: true, return_code: ConnackReturnCode::Accepted };
-    /// assert_eq!(result, connack_expected);
+    /// assert!(result.session_present());
+    /// assert_eq!(result.return_code(), ConnackReturnCode::Accepted);
     /// ```
     /// # Errors
     ///

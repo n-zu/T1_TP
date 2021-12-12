@@ -44,8 +44,8 @@ const MSG_ACCEPTED: &str = "Connection accepted";
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Connack {
-    pub session_present: bool,
-    pub return_code: ConnackReturnCode,
+    session_present: bool,
+    return_code: ConnackReturnCode,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -66,6 +66,16 @@ pub enum ConnackReturnCode {
     BadUserNameOrPassword,
     /// The Client is not authorized to connect
     NotAuthorized,
+}
+
+impl Connack {
+    pub fn session_present(&self) -> bool {
+        self.session_present
+    }
+
+    pub fn return_code(&self) -> ConnackReturnCode {
+        self.return_code
+    }
 }
 
 impl From<ConnackReturnCode> for u8 {
