@@ -343,12 +343,14 @@ where
     where
         S: Close,
     {
-        for (_id, client) in &self.clients {
-            client.lock()?.disconnect(gracefully)?;
+        for client in self.clients.values_mut() {
+            if let Ok(client) = client.get_mut() {
+                client.disconnect(gracefully)?;
+            }
         }
         let mut clean_session_clients_id = vec![];
 
-        self.clients.retain(|_id, client| match client.lock() {
+        self.clients.retain(|_id, client| match client.get_mut() {
             Ok(client) => {
                 if client.clean_session() {
                     clean_session_clients_id.push(client.id().to_string());

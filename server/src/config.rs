@@ -84,12 +84,10 @@ impl Config {
 
     /// Returns dump info, if specified. Otherwise,
     /// it returns None
-    pub fn dump_info(&self) -> Option<(&str, Duration)> {
-        if let Some(dump_info) = &self.dump_info {
-            Some((&dump_info.0, dump_info.1))
-        } else {
-            None
-        }
+    pub fn dump_info(&self) -> Option<(&String, Duration)> {
+        self.dump_info
+            .as_ref()
+            .map(|dump_info| (&dump_info.0, dump_info.1))
     }
 
     /// Returns the path to the logs directory

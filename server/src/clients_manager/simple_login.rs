@@ -66,10 +66,9 @@ impl SimpleLogin {
                 path.take();
                 break;
             }
-            let (user_name, password) = buf.trim().split_once(SEP).ok_or(io::Error::new(
-                io::ErrorKind::InvalidData,
-                "Formato de archivo invalido",
-            ))?;
+            let (user_name, password) = buf.trim().split_once(SEP).ok_or_else(|| {
+                io::Error::new(io::ErrorKind::InvalidData, "Formato de archivo invalido")
+            })?;
             if cache
                 .insert(user_name.to_string(), password.to_string())
                 .is_some()
@@ -93,9 +92,9 @@ impl SimpleLogin {
         let mut reader = BufReader::new(File::open(path)?);
         let mut buf = String::new();
         while reader.read_line(&mut buf)? != 0 {
-            let (found_user_name, found_password) = buf.trim().split_once(SEP).ok_or(
-                io::Error::new(io::ErrorKind::InvalidData, "Formato de archivo invalido"),
-            )?;
+            let (found_user_name, found_password) = buf.trim().split_once(SEP).ok_or_else(|| {
+                io::Error::new(io::ErrorKind::InvalidData, "Formato de archivo invalido")
+            })?;
             if found_user_name == user_name {
                 if found_password == password {
                     return Ok(LoginResult::Accepted);
