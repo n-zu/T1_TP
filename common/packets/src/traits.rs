@@ -9,7 +9,7 @@ pub trait MQTTEncoding {
 }
 
 pub trait MQTTDecoding {
-    fn read_from(bytes: &mut impl Read, control_byte: u8) -> PacketResult<Self>
+    fn read_from<T: Read>(bytes: &mut T, control_byte: u8) -> PacketResult<Self>
     where
         Self: Sized;
 }

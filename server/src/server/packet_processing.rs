@@ -150,24 +150,20 @@ impl<C: Config> Server<C> {
         Ok(())
     }
 
-    /// Send [Publish] to all clients that are subscribed to the topic
+    /// Send [`Publish`] to all clients that are subscribed to the topic
     fn broadcast_publish(self: &Arc<Self>, publish: Publish) -> ServerResult<()> {
         let (sender, receiver) = mpsc::channel();
         let sv_copy = self.clone();
-        let handler = thread::spawn::<_, ServerResult<()>>(move || {
-            sv_copy.publish_dispatcher_loop(receiver)?;
-            Ok(())
-        });
-        self.topic_handler.publish(&publish, sender)?;
+        let lock = self.pool.lock()?;
+        lock.spawn(move || {
+            sv_copy.publish_dispatcher_loop(receiver).unwrap_or_else(|e| {
+                error!("Error despachando el PUBLISH: {}", e)
+            });
+        })?;
+        drop(lock);
 
-        if let Err(err) = handler.join() {
-            Err(ServerError::new_msg(&format!(
-                "Error en el thread de publish_dispatcher_loop: {:?}",
-                err
-            )))
-        } else {
-            Ok(())
-        }
+        self.topic_handler.publish(&publish, sender)?;
+        Ok(())
     }
 
     /// Publish the packet so that all clients subscribed

@@ -20,7 +20,7 @@ const CLEAN_SESSION: u8 = 0x2;
 const WILL_QOS: u8 = 0x18;
 
 impl MQTTDecoding for Connect {
-    fn read_from(stream: &mut impl Read, control_byte: u8) -> PacketResult<Connect> {
+    fn read_from<T: Read>(stream: &mut T, control_byte: u8) -> PacketResult<Connect> {
         let mut bytes = packet_reader::read_remaining_bytes(stream)?;
         check_packet_type(control_byte, PacketType::Connect)?;
         check_reserved_bits(control_byte, RESERVED_BITS)?;

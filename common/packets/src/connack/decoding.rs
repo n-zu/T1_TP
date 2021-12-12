@@ -56,7 +56,7 @@ impl MQTTDecoding for Connack {
     /// - return_code is not 0
     ///
     /// If return_code is not 0, this function returns a specific PacketError
-    fn read_from(stream: &mut impl Read, control_byte: u8) -> PacketResult<Connack> {
+    fn read_from<T: Read>(stream: &mut T, control_byte: u8) -> PacketResult<Connack> {
         let buffer = [0u8; 1];
         check_packet_type(control_byte, PacketType::Connack)?;
         check_reserved_bits(control_byte, CONNACK_RESERVED_BITS)?;

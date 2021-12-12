@@ -5,7 +5,7 @@ const MAX_MULTIPLIER: usize = 128 * 128 * 128;
 const MAX_VARIABLE_LENGTH: usize = 268_435_455;
 
 /// Reads the number of bytes remaining within a stream, including data in the variable header and the payload.
-pub fn read_remaining_bytes(stream: &mut impl Read) -> PacketResult<Cursor<Vec<u8>>> {
+pub fn read_remaining_bytes<T: Read>(stream: &mut T) -> PacketResult<Cursor<Vec<u8>>> {
     let remaining_len = RemainingLength::from_encoded(stream)?.decode();
     let mut vec = vec![0u8; remaining_len as usize];
     stream.read_exact(&mut vec)?;
@@ -35,7 +35,7 @@ impl RemainingLength {
     }
 
     /// Returns the encoded remaining length from a given stream    
-    pub fn from_encoded(stream: &mut impl Read) -> PacketResult<Self> {
+    pub fn from_encoded<T: Read>(stream: &mut T) -> PacketResult<Self> {
         let mut multiplier: u32 = 1;
         let mut length: u32 = 0;
         loop {

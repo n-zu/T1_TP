@@ -15,7 +15,7 @@ impl MQTTDecoding for Subscribe {
     /// Creates a new Subscribe packet from the given stream.
     /// Returns a PacketError in case the packet is malformed.
     /// It is assumed that the first identifier byte has already been read.
-    fn read_from(stream: &mut impl Read, control_byte: u8) -> PacketResult<Subscribe> {
+    fn read_from<T: Read>(stream: &mut T, control_byte: u8) -> PacketResult<Subscribe> {
         check_reserved_bits(control_byte, RESERVED_BITS)?;
         let mut bytes = packet_reader::read_remaining_bytes(stream)?;
 

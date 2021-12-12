@@ -36,10 +36,10 @@ impl MQTTDecoding for Suback {
     /// let expected = vec![control_byte, 6, 0, 1, 1, 0, 1, 0];
     /// assert_eq!(result, expected);
     /// ```
-    fn read_from(bytes: &mut impl Read, control_byte: u8) -> PacketResult<Suback> {
+    fn read_from<T: Read>(stream: &mut T, control_byte: u8) -> PacketResult<Suback> {
         check_packet_type(control_byte, PacketType::Suback)?;
         check_reserved_bits(control_byte, RESERVED_BITS)?;
-        let mut remaining_bytes = packet_reader::read_remaining_bytes(bytes)?;
+        let mut remaining_bytes = packet_reader::read_remaining_bytes(stream)?;
         let subscribe_packet_id = Self::read_packet_id(&mut remaining_bytes);
         let return_codes = Self::read_return_codes(&mut remaining_bytes)?;
         Self::verify_return_codes_from_vec(&return_codes)?;

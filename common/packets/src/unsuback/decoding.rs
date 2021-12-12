@@ -19,10 +19,10 @@ const UNSUBACK_CONTROL_PACKET_TYPE: u8 = 11;
 const FIXED_REMAINING_LENGTH: usize = 2;
 
 impl MQTTDecoding for Unsuback {
-    fn read_from(bytes: &mut impl Read, control_byte: u8) -> PacketResult<Self> {
+    fn read_from<T: Read>(stream: &mut T, control_byte: u8) -> PacketResult<Self> {
         check_packet_type(control_byte, PacketType::Unsuback)?;
         check_reserved_bits(control_byte, RESERVED_BITS)?;
-        let mut remaining_bytes = packet_reader::read_remaining_bytes(bytes)?;
+        let mut remaining_bytes = packet_reader::read_remaining_bytes(stream)?;
         let packet_id = Self::read_packet_id(&mut remaining_bytes);
         Self::verify_packet_id(&packet_id)?;
         Ok(Self {
