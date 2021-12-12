@@ -16,6 +16,7 @@ use crate::{
 
 use super::{server_error::ServerErrorKind, ServerError, ServerResult};
 
+#[doc(hidden)]
 impl Server {
     pub fn try_restore(
         config: &Config,

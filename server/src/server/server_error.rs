@@ -12,37 +12,6 @@ use threadpool::ThreadPoolError;
 use crate::topic_handler::topic_handler_error::TopicHandlerError;
 
 #[derive(Debug)]
-#[non_exhaustive]
-pub enum Poisonable {
-    Client,
-    ClientsManager,
-    TopicHandler,
-    ThreadJoiner,
-}
-
-#[non_exhaustive]
-#[derive(Debug)]
-pub enum ServerFatalErrorKind {
-    PoisonedLock(Poisonable),
-    IOError(io::Error),
-    Other(Box<dyn std::error::Error>),
-}
-
-// Errores graves del servidor
-// Requieren un tratamiento especial por parte
-// de un ErrorHandler dedicado
-#[derive(Debug)]
-pub struct ServerFatalError {
-    kind: ServerFatalErrorKind,
-}
-
-impl ServerFatalError {
-    pub fn new(kind: ServerFatalErrorKind) -> Self {
-        Self { kind }
-    }
-}
-
-#[derive(Debug)]
 pub struct ServerError {
     msg: String,
     kind: ServerErrorKind,

@@ -3,7 +3,7 @@
 use std::{
     convert::TryFrom,
     io::{self, Read, Write},
-    net::{Shutdown, SocketAddr, TcpListener, TcpStream},
+    net::{SocketAddr, TcpListener, TcpStream},
     sync::{
         atomic::{AtomicBool, Ordering},
         mpsc::{self, Receiver, Sender},
@@ -17,7 +17,7 @@ use threadpool::ThreadPool;
 use tracing::{error, info, instrument, warn};
 
 use packets::{
-    connack::Connack,
+    connack::{Connack, ConnackReturnCode},
     connect::Connect,
     disconnect::Disconnect,
     traits::{MQTTDecoding, MQTTEncoding},
@@ -43,7 +43,7 @@ const UNACK_RESENDING_FREQ: Duration = Duration::from_millis(500);
 /// atempt
 const ACCEPT_SLEEP_DUR: Duration = Duration::from_millis(100);
 
-const MIN_ELAPSED_TIME: Option<Duration> = Some(Duration::from_millis(2000));
+const MIN_ELAPSED_TIME: Option<Duration> = Some(Duration::from_millis(100));
 
 const INFLIGHT_MESSAGES: Option<usize> = None;
 
@@ -57,7 +57,6 @@ use crate::{
     server::server_error::ServerErrorKind,
     thread_joiner::ThreadJoiner,
     topic_handler::{Message, TopicHandler},
-    traits::{Close, TryClone},
 };
 
 pub use self::server_controller::ServerController;
@@ -88,9 +87,9 @@ pub struct Server {
     /// It handles the connection and disconnection of clients,
     /// as well as credential verification.
     ///
-    /// If a client has *clean_session* set to False, it is
+    /// If a client has `clean_session` set to false, it is
     /// responsible for saving their information even after
-    /// disconnection. If it has *clean_session* set to True,
+    /// disconnection. If it has `clean_session` set to true,
     /// their data is deleted
     clients_manager: RwLock<ClientsManager<TcpStream, SocketAddr>>,
     /// Initial Server setup
@@ -100,7 +99,7 @@ pub struct Server {
     /// When a customer subscribes to a topic or publish a message,
     /// all the information is stored in this handler. This includes
     /// Quality of Service and handling of retained messages.
-    /// When it processes a Publish, the [TopicHandler] indicates to
+    /// When it processes a Publish, the [`TopicHandler`] indicates to
     /// the Server the clients to whom it should send it through a
     /// MPSC channel. An independent thread receives the information
     /// and sends the packets.
@@ -120,7 +119,7 @@ pub struct Server {
     client_thread_joiner: Mutex<ThreadJoiner>,
     /// Threadpool used to process packets received from clients
     /// The only ones that are not processed in the Threadpool
-    /// are the [Connect] and [Disconnect] packets.
+    /// are the [`Connect`] and [`Disconnect`] packets.
     pool: Mutex<ThreadPool>,
 }
 
@@ -179,21 +178,21 @@ impl Server {
         Ok(server_controller)
     }
 
-    /// Receives the [Connect] packet from a client, connects it to the
+    /// Receives the [`Connect`] packet from a client, connects it to the
     /// server and sets its network_connection read Timeout with the Keep Alive Timeout
-    /// provided by the client in the [Connect] packet.
-    /// *network_connection* is the network_connection of the client from which the packet is received
+    /// provided by the client in the [`Connect`] packet.
+    /// `network_connection` is the network_connection of the client from which the packet is received
     ///
-    /// It does not send the [Connack] packet.
+    /// It does not send the [`Connack`] packet.
     ///
-    /// If the connection was successful, it returns [Ok(ConnectionInfo)] with
+    /// If the connection was successful, it returns [`Ok(ConnectionInfo)`] with
     /// the necessary information to send the Connack, as well as the LastWill
-    /// [Publish] packet from the previous network_connection, in case a Client Take-Over
+    /// [`Publish`] packet from the previous network_connection, in case a Client Take-Over
     /// type reconnection has ocurred.
     ///
     /// In case an error has ocurred, but a Connack must be sent (for example,
     /// if the credentials are invalid), it returns an Error with kind
-    /// [ServerErrorKind::ConnectionRefused], with the return code that the Connack
+    /// [`ServerErrorKind::ConnectionRefused`], with the return code that the Connack
     /// must contain. If the error it returns is not of that kind, a Connack should
     /// not be send.
     #[instrument(skip(self, network_connection))]
@@ -231,7 +230,7 @@ impl Server {
         let keep_alive_opt = self
             .clients_manager
             .read()?
-            .get_client_property(id, |client| Ok(client.keep_alive()))?;
+            .client_do(id, |client| Ok(client.keep_alive()))?;
 
         let mut gracefully = true;
 
@@ -270,8 +269,8 @@ impl Server {
             .disconnect(id, network_connection, gracefully)
     }
 
-    /// Process a client after it sends the [Connect] packet. That is,
-    /// it sends the corresponding [Connack], and processes all the packets
+    /// Process a client after it sends the [`Connect`] packet. That is,
+    /// it sends the corresponding [`Connack`], and processes all the packets
     /// sent by the client until it disconnects. When this happens, it also
     /// publishes the LastWill, if it was specified by the client.
     ///
@@ -288,7 +287,7 @@ impl Server {
     ) -> ServerResult<()> {
         info!("Cliente aceptado");
         network_connection.write_all(
-            &Connack::new(connect_info.session_present, connect_info.return_code).encode()?,
+            &Connack::new(connect_info.session_present, ConnackReturnCode::Accepted).encode()?,
         )?;
         if let Some(last_will) = connect_info.takeover_last_will {
             self.send_last_will(last_will, &connect_info.id)?;
@@ -306,9 +305,9 @@ impl Server {
         Ok(())
     }
 
-    /// Send a [Connack] to the client if the connection failed due to one
-    /// of the errors listed in section *3.2.2.3* of the MQTT v3.1.1 protocol
-    /// Otherwise, it returns a [ServerError]
+    /// Send a [`Connack`] to the client if the connection failed due to one
+    /// of the errors listed in section 3.2.2.3* of the MQTT v3.1.1 protocol
+    /// Otherwise, it returns a [`ServerError`]
     #[instrument(skip(self, network_connection, error))]
     fn manage_failed_connection(
         &self,
@@ -411,7 +410,7 @@ impl Server {
     /// connection.
     ///
     /// If no connection has been received, it returns an error of kind
-    /// [ServerErrorKind::Idle]
+    /// [`ServerErrorKind::Idle`]
     #[instrument(skip(self, listener) fields(socket_addr))]
     fn accept_client(
         self: &Arc<Self>,
@@ -430,24 +429,5 @@ impl Server {
                 Ok(NetworkConnection::new(socket_addr, stream))
             }
         }
-    }
-}
-
-impl TryClone for TcpStream {
-    fn try_clone(&self) -> Option<Self>
-    where
-        Self: Sized,
-    {
-        if let Ok(clone) = TcpStream::try_clone(self) {
-            Some(clone)
-        } else {
-            None
-        }
-    }
-}
-
-impl Close for TcpStream {
-    fn close(&mut self) -> io::Result<()> {
-        self.shutdown(Shutdown::Both)
     }
 }

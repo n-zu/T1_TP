@@ -2,9 +2,8 @@
 
 use std::io::{self, Read};
 
+use packets::traits::{Close, TryClone};
 use serde::{Deserialize, Serialize};
-
-use crate::traits::{Close, TryClone};
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct IOMock {

@@ -1,8 +1,9 @@
 use std::io::{self};
 
+use packets::traits::{Close, TryClone};
+
 use crate::{
     server::{server_error::ServerErrorKind, ServerError, ServerResult},
-    traits::{Close, TryClone},
 };
 
 /// Information related to the current session of
@@ -38,16 +39,6 @@ impl<S: io::Write, I> io::Write for NetworkConnection<S, I> {
 
     fn flush(&mut self) -> io::Result<()> {
         self.stream.flush()
-    }
-}
-
-impl<S, I> PartialEq for NetworkConnection<S, I>
-where
-    S: PartialEq,
-    I: PartialEq,
-{
-    fn eq(&self, other: &Self) -> bool {
-        self.id == other.id && self.stream == other.stream
     }
 }
 

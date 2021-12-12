@@ -9,7 +9,7 @@ use std::{
 
 use serde::{Deserialize, Serialize};
 
-/// Config struct contains information which is needed from a Server
+/// Contains information which is needed from a Server
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Config {
     port: u16,
@@ -33,7 +33,7 @@ impl Config {
     /// # Arguments
     ///
     /// * `path` - Path file
-    /// Each line of the file must consist of 'field=value':
+    /// Each line of the file must consist of `field=value`:
     /// port, dump_path, dump_time, log_path, ip
     ///
     /// # Errors

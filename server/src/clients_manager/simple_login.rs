@@ -5,9 +5,10 @@ use std::{
     io::{self, BufRead, BufReader},
 };
 
-use crate::traits::{Login, LoginResult};
+use packets::traits::{Login, LoginResult};
 
 const CACHE_SIZE: usize = 128;
+#[doc(hidden)]
 const SEP: &str = ",";
 
 type Username = String;
@@ -18,7 +19,7 @@ type Password = String;
 /// a plain text file whose path is *path*, and
 /// the format is 'username,password'.
 ///
-/// The first [CACHE_SIZE] entries in the file are
+/// The first [`CACHE_SIZE`] entries in the file are
 /// stored in memory to speed up the connection on servers
 /// with few users.
 #[derive(Debug)]
@@ -120,9 +121,10 @@ impl SimpleLogin {}
 mod tests {
     use std::io::{self, BufRead, Cursor};
 
+    use packets::traits::{LoginResult, Login};
+
     use crate::{
         clients_manager::simple_login::SimpleLogin,
-        traits::{Login, LoginResult},
     };
 
     fn valid_accounts_file() -> impl BufRead {

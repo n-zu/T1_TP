@@ -2,6 +2,7 @@ use packets::pingresp::PingResp;
 
 use super::*;
 
+#[doc(hidden)]
 impl Server {
     /// Submit a job to the ThreadPool
     fn to_threadpool<F>(self: &Arc<Self>, action: F, id: &ClientIdArg) -> ServerResult<()>
@@ -73,7 +74,7 @@ impl Server {
     /// Reads a packet from the stream and processes it.
     ///
     /// In case the client associated with the stream has disconnected,
-    /// it returns an error of kin [ServerErrorKind::ClientDisconnected]
+    /// it returns an error of kin [`ServerErrorKind::ClientDisconnected`]
     pub fn process_packet<T: Read>(
         self: &Arc<Self>,
         stream: &mut T,
@@ -97,7 +98,14 @@ impl Server {
         }
     }
 
+    #[inline]
+    #[doc(hidden)]
+    fn _send_publish(self: Arc<Self>, client_id_receiver: ClientId, publish: Publish) -> ServerResult<()> {
+        self.clients_manager.read()?.client_do(&client_id_receiver, |mut client| client.send_publish(publish))
+    }
+
     #[instrument(skip(self, threadpool_copy, message), fields(client_id_receiver = %message.client_id))]
+    #[inline]
     fn publish_dispatch(self: &Arc<Self>, threadpool_copy: &ThreadPool, message: Message) -> ServerResult<()> {
         let client_id_receiver = message.client_id;
         let publish = message.packet;
@@ -105,14 +113,14 @@ impl Server {
         let sv_copy = self.clone();
         threadpool_copy
             .spawn(move || {
-                sv_copy
-                    .clients_manager
-                    .read()
-                    .unwrap()
-                    .client_do(&client_id_receiver, |mut client| client.send_publish(publish))
-                    .unwrap();
+                sv_copy._send_publish(client_id_receiver, publish).unwrap_or_else(|e| {
+                    error!("Error enviando PUBLISH: {}", e);
+                });
             })
-            .unwrap();
+            .unwrap_or_else(|e| {
+                error!("Eror de ThreadPool: {}", e);
+            });
+
         Ok(())
     }
 
@@ -187,8 +195,8 @@ impl Server {
     }
 
     /// Unsubscribe the client from the topics specified in the
-    /// [Unsubscribe] packet
-    /// Send the corresponding [Unsuback]
+    /// [`Unsubscribe`] packet
+    /// Send the corresponding [`Unsuback`]
     fn handle_unsubscribe(&self, unsubscribe: Unsubscribe, id: &ClientIdArg) -> ServerResult<()> {
         let packet_id = unsubscribe.packet_id();
         self.topic_handler.unsubscribe(unsubscribe, id)?;
@@ -200,7 +208,7 @@ impl Server {
     }
 
     /// Sends the LastWill packet, previously converted to the
-    /// [Publish] format
+    /// [`Publish`] format
     #[instrument(skip(self, last_will) fields(client_id = %id))]
     pub fn send_last_will(
         self: &Arc<Self>,
@@ -213,9 +221,9 @@ impl Server {
         self.broadcast_publish(last_will)
     }
 
-    /// Waits until it receives the [Connect] packet. In case the
+    /// Waits until it receives the [`Connect`] packet. In case the
     /// read fails due to timeout, it returns an error of kind
-    /// [ServerErrorKind::Timeout]
+    /// [`ServerErrorKind::Timeout`]
     #[instrument(skip(self, network_connection))]
     pub fn wait_for_connect(
         &self,

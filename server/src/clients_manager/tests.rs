@@ -9,9 +9,8 @@ use packets::{
 
 use crate::{
     clients_manager::{simple_login::SimpleLogin, ConnectInfo},
-    iomock::IOMock,
     network_connection::NetworkConnection,
-    server::{server_error::ServerErrorKind, ClientIdArg, ServerResult},
+    server::{server_error::ServerErrorKind, ClientIdArg, ServerResult}, test_helpers::iomock::IOMock,
 };
 
 use super::{ClientsManager, GENERIC_ID_SUFFIX};
@@ -61,7 +60,6 @@ fn test_new_session_with_id() {
     let expected = ConnectInfo {
         id: String::from("client_id"),
         session_present: false,
-        return_code: ConnackReturnCode::Accepted,
         takeover_last_will: None,
     };
 
@@ -246,7 +244,6 @@ fn test_takeover() {
     let expected = ConnectInfo {
         id: String::from("client_id"),
         session_present: true,
-        return_code: ConnackReturnCode::Accepted,
         takeover_last_will: None,
     };
     assert_eq!(connect_info, expected);
@@ -288,10 +285,10 @@ fn test_takeover_should_update_client_properties() {
         .unwrap();
 
     let keep_alive = manager
-        .get_client_property("client_id", |client| Ok(client.keep_alive()))
+        .client_do("client_id", |client| Ok(client.keep_alive()))
         .unwrap();
     let clean_session = manager
-        .get_client_property("client_id", |client| Ok(client.clean_session()))
+        .client_do("client_id", |client| Ok(client.clean_session()))
         .unwrap();
 
     assert_eq!(keep_alive, Some(Duration::from_millis(22500)));

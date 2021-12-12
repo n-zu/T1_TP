@@ -50,11 +50,21 @@ pub struct Connack {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ConnackReturnCode {
+    /// Connection accepted
     Accepted,
+    /// The Server does not support the level of
+    /// the MQTT protocol requested by the Client
     UnacceptableProtocolVersion,
+    /// The Client identifier is correct UTF-8 but
+    /// not allowed by the Server
     IdentifierRejected,
+    /// The Network Connection has been made but
+    /// the MQTT service is unavailable
     ServerUnavailable,
+    /// The data in the user name or password is
+    /// malformed
     BadUserNameOrPassword,
+    /// The Client is not authorized to connect
     NotAuthorized,
 }
 

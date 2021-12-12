@@ -2,12 +2,12 @@ use core::fmt;
 use std::time::{Duration, SystemTime};
 use std::{io::Write, vec};
 
+use packets::traits::Close;
 use packets::{connect::Connect, qos::QoSLevel, traits::MQTTEncoding};
 use packets::{puback::Puback, publish::Publish};
 use serde::{Deserialize, Serialize};
 use tracing::{instrument, info};
 
-use crate::traits::Close;
 use crate::{
     network_connection::NetworkConnection,
     server::{server_error::ServerErrorKind, ClientId, ServerError, ServerResult},
@@ -21,7 +21,7 @@ mod tests;
 /// This structure only handles the state of the client
 /// session. It does not handle things like retained messages,
 /// since they do not correspond to the client session
-/// (see [MQTT-4.1.0-1])
+/// (see [MQTT-4.1.0-1](http://docs.oasis-open.org/mqtt/mqtt/v3.1.1/os/mqtt-v3.1.1-os.html#_Toc398718095))
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Client<S, I>
 where
@@ -46,12 +46,13 @@ where
     /// [Connect] packet received in the last client
     /// session.
     ///
-    /// Note that a client can have a [Connect] packet
+    /// Note that a client can have a [`Connect`] packet
     /// and be disconnected. However, when a reconnection
     /// occurs, said packet is replaced by the packet
     /// received on the new connection
     connect: Connect,
-    /// Unacknowledged packets
+    /// Unacknowledged packets, along with the time they
+    /// were last sent
     unacknowledged: Vec<(SystemTime, Publish)>,
 }
 
@@ -84,7 +85,7 @@ where
     /// Send a packet to the client, through the current
     /// connection.
     ///
-    /// This method should not be used to send a [Publish]
+    /// This method should not be used to send a [`Publish`]
     /// packet, since it would not be saved in the unacknowledged
     /// list if the Quality of Service is greater than 0. Instead,
     /// the *send_publish()* method should be used.
@@ -116,7 +117,7 @@ where
     /// (both the one that has this structure and the copy
     /// that the server owns).
     ///
-    /// If *gracefully* is false and the client specified a
+    /// If `gracefully` is false and the client specified a
     /// LastWill on its last connection, the package to be
     /// published is returned. Otherwise, it returns None.
     ///
@@ -161,7 +162,7 @@ where
     /// matches the id of the client.
     ///
     /// If they do not match, it returns an error of kind
-    /// [ServerErrorKind::Irrecoverable]. Therefore, the server
+    /// [`ServerErrorKind::Irrecoverable`]. Therefore, the server
     /// should ensure that said ids are the same
     fn check_reconnect_id(&self, new_connect: &Connect) -> ServerResult<()> {
         if self.id != new_connect.client_id() {
@@ -178,10 +179,10 @@ where
         }
     }
 
-    /// Reconnects a client. Does not send the [Connack] packet.
+    /// Reconnects a client. Does not send the Connack packet.
     ///
     /// If the reconnection produces a Client TakeOver and LastWill
-    /// was specified in the previous session, a [Publish] packet is
+    /// was specified in the previous session, a [`Publish`] packet is
     /// returned. Otherwise, it returns None
     pub fn reconnect(
         &mut self,
@@ -228,9 +229,9 @@ where
     }
 
     /// Removes from the unacknowledged list, the packet whose
-    /// *packet_id* matches the *packet_id* of the received [Puback]
+    /// *packet_id* matches the *packet_id* of the received [`Puback`]
     /// packet. If no packet meets this condition, it returns an
-    /// error of kind [ServerErrorKind::Other]
+    /// error of kind [`ServerErrorKind::Other`]
     #[instrument(skip(self, puback) fields(client_id = %self.id, packet_id = %puback.packet_id()))]
     pub fn acknowledge(&mut self, puback: Puback) -> ServerResult<()> {
         info!("Acknowledge");
@@ -255,19 +256,21 @@ where
     /// Sends the packets that have not been acknowledged by
     /// the client.
     ///
-    /// *inflight_messages* is the number of packets to be sent.
+    /// `inflight_messages` is the number of packets to be sent.
     /// If it is None or greater thatn the number of unacknowledged
     /// packets, all packets will be sent.
     ///
-    /// *min_elapsed_time* is the minimum time that must have elapsed
+    /// `min_elapsed_time` is the minimum time that must have elapsed
     /// between the last time the packet was sent and the moment the
     /// method is executed, for the packet to be sent. If it is None,
-    /// *inflight_messages* packets will be sent
+    /// `inflight_messages` packets will be sent
     pub fn send_unacknowledged(
         &mut self,
         inflight_messages: Option<usize>,
         min_elapsed_time: Option<Duration>,
     ) -> ServerResult<()> {
+        info!("Reenviando paquetes UNACKNOWLEDGED");
+        
         let inflight_messages = inflight_messages.unwrap_or(self.unacknowledged.len());
         let inflight_messages = std::cmp::min(inflight_messages, self.unacknowledged.len());
         let mut messages_sent = 0;
@@ -281,8 +284,10 @@ where
                     self.send_packet(&publish)?;
                     self.unacknowledged.push((now, publish));
                 } else {
-                    // No se envio, no actualizo la hora
-                    self.unacknowledged.push((last_time_published, publish));
+                    // No se envio, no actualizo la hora y lo inserto
+                    // al inicio de la cola, porque debe ser el primero
+                    // en reenviarse al llamar nuevamente al metodo
+                    self.unacknowledged.insert(0, (last_time_published, publish));
                     break;
                 }
             } else {
@@ -294,7 +299,7 @@ where
         Ok(())
     }
 
-    /// Sends a [Publish] packet to the client and, if applicable,
+    /// Sends a [`Publish`] packet to the client and, if applicable,
     /// adds it to the unacknowledged packet list
     pub fn send_publish(&mut self, mut publish: Publish) -> ServerResult<()> {
         if self.connected() {

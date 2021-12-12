@@ -8,12 +8,11 @@ use tracing_subscriber::{fmt, prelude::__tracing_subscriber_SubscriberExt, Regis
 mod client;
 mod clients_manager;
 mod config;
-mod iomock;
 mod network_connection;
 mod server;
 mod thread_joiner;
 mod topic_handler;
-mod traits;
+mod test_helpers;
 
 pub fn init() {
     let config = Config::new("config.txt").expect("Error cargando la configuracion");
