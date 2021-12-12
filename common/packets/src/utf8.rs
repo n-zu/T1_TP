@@ -32,9 +32,7 @@ impl Field {
         if value.len() > MAX_FIELD_LEN {
             return Err(PacketError::new_msg("Largo del paquete excedido"));
         }
-        Ok(Self {
-            value: value,
-        })
+        Ok(Self { value: value })
     }
 
     ///

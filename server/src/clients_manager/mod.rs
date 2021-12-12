@@ -4,11 +4,16 @@ use core::fmt;
 use std::{
     collections::HashMap,
     io::{Read, Write},
-    sync::{Mutex},
+    sync::Mutex,
     vec,
 };
 
-use packets::{connack::ConnackReturnCode, connect::Connect, publish::Publish, traits::{Login, Close, LoginResult}};
+use packets::{
+    connack::ConnackReturnCode,
+    connect::Connect,
+    publish::Publish,
+    traits::{Close, Login, LoginResult},
+};
 use serde::{Deserialize, Serialize};
 use tracing::{info, instrument};
 
@@ -63,7 +68,7 @@ pub struct DisconnectInfo {
 }
 
 /// Informtation related to the connection of a client.
-/// 
+///
 /// It is only associated with a valid and accepted
 /// connection (that is, if a method returns this
 /// structure, it means that the client was connected
@@ -112,9 +117,7 @@ where
         F: FnOnce(std::sync::MutexGuard<'_, Client<S, I>>) -> ServerResult<T>,
     {
         match self.clients.get(id) {
-            Some(session) => {
-                action(session.lock()?)
-            }
+            Some(session) => action(session.lock()?),
             None => Err(ServerError::new_kind(
                 &format!("No existe el cliente con id <{}>", id),
                 ServerErrorKind::ClientNotFound,
@@ -125,9 +128,9 @@ where
     /// Tries to disconnect a client. If the client specified
     /// clean_session to false, its information is kept
     /// in (self.clients). Otherwise, it is deleted.
-    /// 
+    ///
     /// Returns the disconnection information of the client.
-    /// 
+    ///
     /// It is improtant to note that this method does not fail
     /// if the client has clean_session false and was already
     /// disconnected, but returns a [`DisconnectInfo`] with
@@ -153,8 +156,7 @@ where
             }
         }
 
-        let publish_last_will =
-            self.client_do(id, |mut session| session.disconnect(gracefully))?;
+        let publish_last_will = self.client_do(id, |mut session| session.disconnect(gracefully))?;
         let clean_session;
         // Si la funcion anterior no devolvio error, entonces existe el cliente
         if self
@@ -208,7 +210,7 @@ where
     /// contains valid credentials. Performs the authentication
     /// (login) if a method was specified, and verifies that the
     /// rest of the fields are valid.
-    /// 
+    ///
     /// If it could not be connected, but it corresponds to
     /// send a Connack to the client, it returns an error of kind
     /// [`ServerErrorKind::ConnectionRefused`]
@@ -285,15 +287,15 @@ where
     }
 
     /// Established a new connection with a client.
-    /// 
+    ///
     /// Returns a [`ConnectInfo`], with the information
     /// related to the connection (or reconnection) of
     /// the client.
-    /// 
+    ///
     /// If a client with the same id was already connected,
     /// it disconnects it (takeover) and returns the Last
     /// Will, if it was specified in the previous session.
-    /// 
+    ///
     /// Performs all the necessary checks to ensure that
     /// the session is valid
     #[instrument(skip(self, network_connection, connect) fields(socket_addr = %network_connection.id(), client_id = %connect.client_id()))]
@@ -318,9 +320,7 @@ where
         // Hay una sesion_presente en el servidor con la misma ID
         if let Some(old_client) = self.clients.get(&id) {
             info!("Reconectando");
-            takeover_last_will = old_client
-                .lock()?
-                .reconnect(connect, network_connection)?;
+            takeover_last_will = old_client.lock()?.reconnect(connect, network_connection)?;
             session_present = true;
         } else {
             let client = Client::new(connect, network_connection);
@@ -336,7 +336,7 @@ where
 
     /// Disconnects all clients, keeping the information of
     /// those clients with clean_session in false.
-    /// 
+    ///
     /// Returns a vector with the ids of the disconnected clients
     /// with clean_session set to false
     pub fn finish_all_sessions(&mut self, gracefully: bool) -> ServerResult<Vec<ClientId>>

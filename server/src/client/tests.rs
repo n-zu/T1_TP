@@ -13,16 +13,33 @@ use packets::{
 };
 
 use crate::{
-    network_connection::NetworkConnection, server::server_error::ServerErrorKind, test_helpers::iomock::IOMock,
+    network_connection::NetworkConnection, server::server_error::ServerErrorKind,
+    test_helpers::iomock::IOMock,
 };
 
 use super::Client;
 
 fn make_publish(topic_name: &str, qos: QoSLevel) -> Publish {
     if qos == QoSLevel::QoSLevel0 {
-        Publish::new(false, QoSLevel::QoSLevel0, false, topic_name, "message", None).unwrap()
+        Publish::new(
+            false,
+            QoSLevel::QoSLevel0,
+            false,
+            topic_name,
+            "message",
+            None,
+        )
+        .unwrap()
     } else {
-        Publish::new(false, QoSLevel::QoSLevel1, false, topic_name, "message", Some(1)).unwrap()
+        Publish::new(
+            false,
+            QoSLevel::QoSLevel1,
+            false,
+            topic_name,
+            "message",
+            Some(1),
+        )
+        .unwrap()
     }
 }
 
@@ -374,7 +391,9 @@ fn test_send_unacknowledged_should_keep_order() {
     client.send_publish(publish2).unwrap();
     // No se deberia enviar ninguno y la cola de unacknowledged
     // queda igual
-    client.send_unacknowledged(None, Some(Duration::from_secs(1))).unwrap();
+    client
+        .send_unacknowledged(None, Some(Duration::from_secs(1)))
+        .unwrap();
     // Se envia el primer paquete
     client.send_unacknowledged(Some(1), None).unwrap();
 

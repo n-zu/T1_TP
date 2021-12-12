@@ -100,22 +100,36 @@ impl Server {
 
     #[inline]
     #[doc(hidden)]
-    fn _send_publish(self: Arc<Self>, client_id_receiver: ClientId, publish: Publish) -> ServerResult<()> {
-        self.clients_manager.read()?.client_do(&client_id_receiver, |mut client| client.send_publish(publish))
+    fn _send_publish(
+        self: Arc<Self>,
+        client_id_receiver: ClientId,
+        publish: Publish,
+    ) -> ServerResult<()> {
+        self.clients_manager
+            .read()?
+            .client_do(&client_id_receiver, |mut client| {
+                client.send_publish(publish)
+            })
     }
 
     #[instrument(skip(self, threadpool_copy, message), fields(client_id_receiver = %message.client_id))]
     #[inline]
-    fn publish_dispatch(self: &Arc<Self>, threadpool_copy: &ThreadPool, message: Message) -> ServerResult<()> {
+    fn publish_dispatch(
+        self: &Arc<Self>,
+        threadpool_copy: &ThreadPool,
+        message: Message,
+    ) -> ServerResult<()> {
         let client_id_receiver = message.client_id;
         let publish = message.packet;
         info!("Enviando PUBLISH");
         let sv_copy = self.clone();
         threadpool_copy
             .spawn(move || {
-                sv_copy._send_publish(client_id_receiver, publish).unwrap_or_else(|e| {
-                    error!("Error enviando PUBLISH: {}", e);
-                });
+                sv_copy
+                    ._send_publish(client_id_receiver, publish)
+                    .unwrap_or_else(|e| {
+                        error!("Error enviando PUBLISH: {}", e);
+                    });
             })
             .unwrap_or_else(|e| {
                 error!("Eror de ThreadPool: {}", e);

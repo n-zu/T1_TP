@@ -121,11 +121,9 @@ impl SimpleLogin {}
 mod tests {
     use std::io::{self, BufRead, Cursor};
 
-    use packets::traits::{LoginResult, Login};
+    use packets::traits::{Login, LoginResult};
 
-    use crate::{
-        clients_manager::simple_login::SimpleLogin,
-    };
+    use crate::clients_manager::simple_login::SimpleLogin;
 
     fn valid_accounts_file() -> impl BufRead {
         Cursor::new(

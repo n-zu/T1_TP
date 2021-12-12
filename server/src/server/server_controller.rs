@@ -3,7 +3,7 @@ use std::{
         atomic::{AtomicBool, Ordering},
         Arc,
     },
-    thread::JoinHandle
+    thread::JoinHandle,
 };
 
 use tracing::error;
@@ -42,7 +42,7 @@ impl ServerController {
                 error!("{:?}: Thread joineado con panic: {:?}", sv_thread_id, e);
             });
         }
-        Ok(())        
+        Ok(())
     }
 }
 

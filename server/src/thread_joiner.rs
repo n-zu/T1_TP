@@ -1,14 +1,12 @@
 use std::{
     collections::HashMap,
     sync::mpsc::{self, Receiver, Sender},
-    thread::{JoinHandle, ThreadId, self},
+    thread::{self, JoinHandle, ThreadId},
 };
 
 use tracing::{error, instrument};
 
-use crate::{
-    server::{ServerError, ServerResult},
-};
+use crate::server::{ServerError, ServerResult};
 
 pub struct ThreadJoiner {
     handles: Option<HashMap<ThreadId, JoinHandle<()>>>,

@@ -10,9 +10,9 @@ mod clients_manager;
 mod config;
 mod network_connection;
 mod server;
+mod test_helpers;
 mod thread_joiner;
 mod topic_handler;
-mod test_helpers;
 
 pub fn init() {
     let config = Config::new("config.txt").expect("Error cargando la configuracion");
@@ -20,8 +20,18 @@ pub fn init() {
     let file_appender = tracing_appender::rolling::hourly(config.log_path(), "logs.log");
     let (file_writer, _guard) = tracing_appender::non_blocking(file_appender);
     let subscriber = Registry::default()
-        .with(fmt::Layer::default().json().with_thread_names(true).with_writer(file_writer))
-        .with(fmt::Layer::default().with_thread_names(true).pretty().with_writer(std::io::stdout));
+        .with(
+            fmt::Layer::default()
+                .json()
+                .with_thread_names(true)
+                .with_writer(file_writer),
+        )
+        .with(
+            fmt::Layer::default()
+                .with_thread_names(true)
+                .pretty()
+                .with_writer(std::io::stdout),
+        );
 
     tracing::subscriber::set_global_default(subscriber).unwrap();
 

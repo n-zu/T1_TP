@@ -6,7 +6,7 @@ use packets::traits::Close;
 use packets::{connect::Connect, qos::QoSLevel, traits::MQTTEncoding};
 use packets::{puback::Puback, publish::Publish};
 use serde::{Deserialize, Serialize};
-use tracing::{instrument, info};
+use tracing::{info, instrument};
 
 use crate::{
     network_connection::NetworkConnection,
@@ -270,7 +270,7 @@ where
         min_elapsed_time: Option<Duration>,
     ) -> ServerResult<()> {
         info!("Reenviando paquetes UNACKNOWLEDGED");
-        
+
         let inflight_messages = inflight_messages.unwrap_or(self.unacknowledged.len());
         let inflight_messages = std::cmp::min(inflight_messages, self.unacknowledged.len());
         let mut messages_sent = 0;
@@ -287,7 +287,8 @@ where
                     // No se envio, no actualizo la hora y lo inserto
                     // al inicio de la cola, porque debe ser el primero
                     // en reenviarse al llamar nuevamente al metodo
-                    self.unacknowledged.insert(0, (last_time_published, publish));
+                    self.unacknowledged
+                        .insert(0, (last_time_published, publish));
                     break;
                 }
             } else {

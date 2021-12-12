@@ -1,4 +1,8 @@
-use std::{io::{Read, self}, fmt, net::{TcpStream, Shutdown}};
+use std::{
+    fmt,
+    io::{self, Read},
+    net::{Shutdown, TcpStream},
+};
 
 use crate::packet_error::PacketResult;
 

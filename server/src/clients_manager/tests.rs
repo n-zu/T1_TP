@@ -10,7 +10,8 @@ use packets::{
 use crate::{
     clients_manager::{simple_login::SimpleLogin, ConnectInfo},
     network_connection::NetworkConnection,
-    server::{server_error::ServerErrorKind, ClientIdArg, ServerResult}, test_helpers::iomock::IOMock,
+    server::{server_error::ServerErrorKind, ClientIdArg, ServerResult},
+    test_helpers::iomock::IOMock,
 };
 
 use super::{ClientsManager, GENERIC_ID_SUFFIX};

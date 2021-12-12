@@ -4,7 +4,7 @@ use packets::{
     traits::{MQTTDecoding, MQTTEncoding},
 };
 use rand::Rng;
-use server::{ServerController, Server, Config};
+use server::{Config, Server, ServerController};
 use std::{
     io::{Cursor, Read, Write},
     net::TcpStream,

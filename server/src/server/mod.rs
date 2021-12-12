@@ -163,14 +163,16 @@ impl Server {
         let shutdown_bool_copy = shutdown_bool.clone();
         let (started_sender, started_receiver) = mpsc::channel();
 
-        let server_handle = thread::Builder::new().name("server_loop".to_owned()).spawn(move || {
-            if let Err(err) = self.server_loop(shutdown_bool, started_sender) {
-                error!(
-                    "Error inesperado del servidor: {} - Se recomienda apagarlo",
-                    err.to_string()
-                )
-            }
-        })?;
+        let server_handle = thread::Builder::new()
+            .name("server_loop".to_owned())
+            .spawn(move || {
+                if let Err(err) = self.server_loop(shutdown_bool, started_sender) {
+                    error!(
+                        "Error inesperado del servidor: {} - Se recomienda apagarlo",
+                        err.to_string()
+                    )
+                }
+            })?;
         started_receiver.recv().unwrap_or_else(|e| {
             error!("Error iniciando el servidor: {}", e);
         });

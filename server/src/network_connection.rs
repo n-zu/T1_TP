@@ -2,9 +2,7 @@ use std::io::{self};
 
 use packets::traits::{Close, TryClone};
 
-use crate::{
-    server::{server_error::ServerErrorKind, ServerError, ServerResult},
-};
+use crate::server::{server_error::ServerErrorKind, ServerError, ServerResult};
 
 /// Information related to the current session of
 /// the client

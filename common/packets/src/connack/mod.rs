@@ -102,8 +102,7 @@ impl TryFrom<u8> for ConnackReturnCode {
 
 impl fmt::Display for ConnackReturnCode {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let msg =
-        match self {
+        let msg = match self {
             ConnackReturnCode::Accepted => MSG_ACCEPTED,
             ConnackReturnCode::UnacceptableProtocolVersion => MSG_UNACCEPTABLE_PROTOCOL_VERSION,
             ConnackReturnCode::IdentifierRejected => MSG_IDENTIFIER_REJECTED,
