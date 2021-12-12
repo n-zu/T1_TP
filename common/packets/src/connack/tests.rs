@@ -100,10 +100,7 @@ fn test_should_return_valid_connack_packet_with_session_present_0_and_return_cod
     let v: Vec<u8> = vec![0b10, 0b0, 0b0];
     let mut stream = Cursor::new(v);
     let result = Connack::read_from(&mut stream, 0b100000)?;
-    let connack_expected = Connack {
-        session_present: false,
-        return_code: ConnackReturnCode::Accepted,
-    };
+    let connack_expected = Connack::new(false, ConnackReturnCode::Accepted);
     assert_eq!(result, connack_expected);
     Ok(())
 }
@@ -114,10 +111,7 @@ fn test_should_return_valid_connack_packet_with_session_present_1_and_return_cod
     let v: Vec<u8> = vec![2, 1, 0];
     let mut stream = Cursor::new(v);
     let result = Connack::read_from(&mut stream, 32)?;
-    let connack_expected = Connack {
-        session_present: true,
-        return_code: ConnackReturnCode::Accepted,
-    };
+    let connack_expected = Connack::new(true, ConnackReturnCode::Accepted);
     assert_eq!(result, connack_expected);
     Ok(())
 }

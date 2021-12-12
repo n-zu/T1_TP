@@ -243,7 +243,7 @@ impl Server {
                 }
                 Err(err) if err.kind() == ServerErrorKind::Timeout => {
                     timeout_counter_ms += UNACK_RESENDING_FREQ.as_millis();
-                    self.clients_manager.read()?.client_do(id, |mut client| {
+                    self.clients_manager.read()?.client_do(id, |client| {
                         client.send_unacknowledged(INFLIGHT_MESSAGES, MIN_ELAPSED_TIME)
                     })?;
                 }

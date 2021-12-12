@@ -2,6 +2,7 @@ use crate::packet_error::{ErrorKind, PacketError};
 use std::convert::TryFrom;
 
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
+/// Represents the available QoS levels
 pub enum QoSLevel {
     QoSLevel0,
     QoSLevel1,

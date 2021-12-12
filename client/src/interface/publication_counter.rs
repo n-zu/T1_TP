@@ -4,6 +4,8 @@ use std::cell::RefCell;
 
 #[doc(hidden)]
 const PUBLICATIONS_TAB: u32 = 2;
+#[doc(hidden)]
+const PUBLICATIONS_LABEL: &str = "PUBLICACIONES";
 
 /// Keeps count of unread new messages
 pub struct PublicationCounter {
@@ -15,11 +17,13 @@ pub struct PublicationCounter {
 impl PublicationCounter {
     /// Returns a new PublicationCounter struct
     pub fn new(notebook: Notebook, feed_label: Label) -> PublicationCounter {
-        PublicationCounter {
+        let publication_counter = PublicationCounter {
             new_messages_amount: RefCell::new(0),
             notebook,
             feed_label,
-        }
+        };
+        publication_counter.reset_new_messages_amount();
+        publication_counter
     }
 
     /// Updates new messages amount by one and sets the corresponding label for the publications tab.
@@ -36,16 +40,19 @@ impl PublicationCounter {
     /// Resets the amount of new messages to 0
     pub fn reset_new_messages_amount(&self) {
         self.new_messages_amount.replace(0);
-        self.feed_label.set_text("PUBLICACIONES");
+        self.feed_label.set_text(PUBLICATIONS_LABEL);
     }
 
     #[doc(hidden)]
     /// Increments the new messages amount by 1 and sets the corresponding label for the
     /// publications tab
     fn increment_new_messages_amount(&self) {
-        self.new_messages_amount
-            .replace_with(|&mut old_messages_amount| old_messages_amount + 1);
-        let new_label = format!("PUBLICACIONES ({})", self.new_messages_amount.borrow());
+        *self.new_messages_amount.borrow_mut() += 1;
+        let new_label = format!(
+            "{} ({})",
+            PUBLICATIONS_LABEL,
+            self.new_messages_amount.borrow()
+        );
         self.feed_label.set_text(&new_label);
     }
 }

@@ -1,7 +1,7 @@
 use super::*;
 
 use crate::{
-    packet_error::{ErrorKind, PacketError},
+    packet_error::ErrorKind,
     traits::{MQTTDecoding, MQTTEncoding},
 };
 use std::io::Cursor;
@@ -29,9 +29,8 @@ fn test_valid_suback_with_return_codes_0_0_0_0() {
 #[test]
 fn test_suback_with_return_code_65_should_raise_invalid_return_code_error() {
     let return_codes: Vec<u8> = vec![0, 65, 0, 0];
-    let result = Suback::new_from_vec(return_codes, 3).unwrap_err();
-    let expected_error =
-        PacketError::new_kind(MSG_INVALID_RETURN_CODE, ErrorKind::InvalidReturnCode);
+    let result = Suback::new_from_vec(return_codes, 3).unwrap_err().kind();
+    let expected_error = ErrorKind::InvalidReturnCode;
     assert_eq!(result, expected_error)
 }
 
@@ -40,8 +39,11 @@ fn test_control_byte_from_stream_other_than_9_should_raise_invalid_control_packe
     let return_codes: Vec<u8> = vec![0, 0, 0, 0];
     let control_byte = 1;
     let mut stream = Cursor::new(return_codes);
-    let result = Suback::read_from(&mut stream, control_byte).unwrap_err();
-    assert_eq!(result.kind(), ErrorKind::InvalidControlPacketType)
+    let result = Suback::read_from(&mut stream, control_byte)
+        .unwrap_err()
+        .kind();
+    let expected_error = ErrorKind::InvalidControlPacketType;
+    assert_eq!(result, expected_error);
 }
 
 #[test]
@@ -62,8 +64,9 @@ fn test_stream_with_return_code_3_should_raise_invalid_return_code() {
     let stream_aux = vec![6, 0, 1, 3, 0, 1, 0];
     let control_byte = CONTROL_BYTE_SUBACK;
     let mut stream = Cursor::new(stream_aux);
-    let result = Suback::read_from(&mut stream, control_byte).unwrap_err();
-    let expected_error =
-        PacketError::new_kind(MSG_INVALID_RETURN_CODE, ErrorKind::InvalidReturnCode);
+    let result = Suback::read_from(&mut stream, control_byte)
+        .unwrap_err()
+        .kind();
+    let expected_error = ErrorKind::InvalidReturnCode;
     assert_eq!(result, expected_error);
 }
