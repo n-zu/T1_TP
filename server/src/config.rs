@@ -7,11 +7,11 @@ use std::{
     time::Duration,
 };
 
-use serde::{Deserialize, Serialize};
+use crate::traits::Config;
 
-/// Contains information which is needed from a Server
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct Config {
+/// Config struct contains information which is needed from a Server
+#[derive(Debug, Clone)]
+pub struct FileConfig {
     port: u16,
     dump_info: Option<(String, Duration)>,
     log_path: String,
@@ -28,7 +28,7 @@ const IP_KEY: &str = "ip";
 
 const SEP: &str = "=";
 
-impl Config {
+impl FileConfig {
     /// Returns a Config struct based on the path file
     /// # Arguments
     ///
@@ -38,15 +38,15 @@ impl Config {
     ///
     /// # Errors
     /// If the file following the path does not have the correct format, this function returns None
-    pub fn new(path: &str) -> Option<Config> {
+    pub fn new(path: &str) -> Option<FileConfig> {
         let config_file = File::open(path).ok()?;
-        Config::new_from_file(config_file)
+        FileConfig::new_from_file(config_file)
     }
 
     /// Returns a Config struct from a valid configuration file
     ///
     /// If config_file path does not have the correct format, this function returns None
-    pub fn new_from_file(config_file: impl Read) -> Option<Config> {
+    pub fn new_from_file(config_file: impl Read) -> Option<FileConfig> {
         let lines: Vec<String> = BufReader::new(config_file)
             .lines()
             .collect::<Result<Vec<_>, _>>()
@@ -68,7 +68,7 @@ impl Config {
             dump_info = None;
         }
 
-        Some(Config {
+        Some(FileConfig {
             port: config.remove(PORT_KEY)?.parse().ok()?,
             dump_info,
             log_path: config.remove(LOG_PATH_KEY)?,
@@ -76,33 +76,28 @@ impl Config {
             ip: config.remove(IP_KEY)?,
         })
     }
+}
 
-    /// Returns the port to be connected
-    pub fn port(&self) -> u16 {
+impl Config for FileConfig {
+    fn port(&self) -> u16 {
         self.port
     }
 
-    /// Returns dump info, if specified. Otherwise,
-    /// it returns None
-    pub fn dump_info(&self) -> Option<(&String, Duration)> {
+    fn dump_info(&self) -> Option<(&str, Duration)> {
         self.dump_info
             .as_ref()
-            .map(|dump_info| (&dump_info.0, dump_info.1))
+            .map(|dump_info| (dump_info.0.as_str(), dump_info.1))
     }
 
-    /// Returns the path to the logs directory
-    pub fn log_path(&self) -> &str {
+    fn log_path(&self) -> &str {
         &self.log_path
     }
 
-    /// Returns the path to CSV file with the accounts
-    /// Format: username,password
-    pub fn accounts_path(&self) -> &str {
+    fn accounts_path(&self) -> &str {
         &self.accounts_path
     }
 
-    /// Returns the IP address of the server
-    pub fn ip(&self) -> &str {
+    fn ip(&self) -> &str {
         &self.ip
     }
 }
@@ -111,7 +106,8 @@ impl Config {
 mod tests {
     use std::{io::Cursor, time::Duration};
 
-    use crate::config::Config;
+    use crate::config::FileConfig;
+    use crate::traits::Config;
 
     #[test]
     fn test_valid_file() {
@@ -124,7 +120,7 @@ accounts_path=baz.csv
 ip=localhost",
         );
 
-        let config = Config::new_from_file(cursor).unwrap();
+        let config = FileConfig::new_from_file(cursor).unwrap();
         assert_eq!(config.port(), 8080);
         assert_eq!(config.dump_info().unwrap().0, "foo.txt");
         assert_eq!(config.dump_info().unwrap().1, Duration::from_secs(10));
@@ -144,7 +140,7 @@ accounts_path=baz.csv
     ip=localhost",
         );
 
-        let config = Config::new_from_file(cursor).unwrap();
+        let config = FileConfig::new_from_file(cursor).unwrap();
         assert_eq!(config.port(), 8080);
         assert_eq!(config.dump_info().unwrap().0, "foo.txt");
         assert_eq!(config.dump_info().unwrap().1, Duration::from_secs(10));
@@ -164,7 +160,7 @@ accounts_path=baz.csv
 ip=localhost",
         );
 
-        assert!(Config::new_from_file(cursor).is_none());
+        assert!(FileConfig::new_from_file(cursor).is_none());
     }
 
     #[test]
@@ -178,7 +174,7 @@ accounts_path=baz.csv
 ip=localhost",
         );
 
-        assert!(Config::new_from_file(cursor).is_none());
+        assert!(FileConfig::new_from_file(cursor).is_none());
     }
 
     #[test]
@@ -192,7 +188,7 @@ accounts_path=baz.csv
 ip=localhost",
         );
 
-        let config = Config::new_from_file(cursor).unwrap();
+        let config = FileConfig::new_from_file(cursor).unwrap();
 
         assert_eq!(config.port(), 8080);
         assert!(config.dump_info().is_none());

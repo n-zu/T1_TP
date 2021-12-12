@@ -16,12 +16,8 @@ use crate::{
 
 use super::{server_error::ServerErrorKind, ServerError, ServerResult};
 
-#[doc(hidden)]
-impl Server {
-    pub fn try_restore(
-        config: &Config,
-        threadpool_size: usize,
-    ) -> ServerResult<Option<Arc<Server>>> {
+impl<C: Config> Server<C> {
+    pub fn try_restore(config: &C, threadpool_size: usize) -> ServerResult<Option<Arc<Server<C>>>> {
         let dump_path = match config.dump_info() {
             Some(dump_info) => dump_info.0,
             None => return Ok(None),
@@ -33,10 +29,10 @@ impl Server {
             Err(err) => return Err(ServerError::from(err)),
         };
 
-        let (topic_handler, clients_manager) = Server::restore_from_json(&json_str)?;
-        let clean_sessions_clients_id = clients_manager.write()?.finish_all_sessions(true)?;
+        let (topic_handler, clients_manager) = Server::<C>::restore_from_json(&json_str)?;
+        let shutdown_info = clients_manager.write()?.shutdown(false)?;
 
-        for client_id in clean_sessions_clients_id {
+        for client_id in shutdown_info.clean_session_ids {
             topic_handler.remove_client(&client_id)?;
         }
 
@@ -47,7 +43,11 @@ impl Server {
             client_thread_joiner: Mutex::new(ThreadJoiner::new()),
             pool: Mutex::new(ThreadPool::new(threadpool_size)),
         };
-        Ok(Some(Arc::new(server)))
+        let server = Arc::new(server);
+        for (id, last_will) in shutdown_info.last_will_packets {
+            server.send_last_will(last_will, &id)?;
+        }
+        Ok(Some(server))
     }
 
     fn restore_from_json(

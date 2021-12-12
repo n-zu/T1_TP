@@ -5,7 +5,7 @@ use std::{
     io::{self, BufRead, BufReader},
 };
 
-use packets::traits::{Login, LoginResult};
+use crate::traits::{Login, LoginResult};
 
 const CACHE_SIZE: usize = 128;
 #[doc(hidden)]
@@ -92,9 +92,10 @@ impl SimpleLogin {
         let mut reader = BufReader::new(File::open(path)?);
         let mut buf = String::new();
         while reader.read_line(&mut buf)? != 0 {
-            let (found_user_name, found_password) = buf.trim().split_once(SEP).ok_or_else(|| {
-                io::Error::new(io::ErrorKind::InvalidData, "Formato de archivo invalido")
-            })?;
+            let (found_user_name, found_password) =
+                buf.trim().split_once(SEP).ok_or_else(|| {
+                    io::Error::new(io::ErrorKind::InvalidData, "Formato de archivo invalido")
+                })?;
             if found_user_name == user_name {
                 if found_password == password {
                     return Ok(LoginResult::Accepted);
@@ -118,9 +119,8 @@ impl SimpleLogin {}
 
 #[cfg(test)]
 mod tests {
+    use crate::traits::{Login, LoginResult};
     use std::io::{self, BufRead, Cursor};
-
-    use packets::traits::{Login, LoginResult};
 
     use crate::clients_manager::simple_login::SimpleLogin;
 

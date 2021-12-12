@@ -8,12 +8,7 @@ use std::{
     vec,
 };
 
-use packets::{
-    connack::ConnackReturnCode,
-    connect::Connect,
-    publish::Publish,
-    traits::{Close, Login, LoginResult},
-};
+use packets::{connack::ConnackReturnCode, connect::Connect, publish::Publish};
 use serde::{Deserialize, Serialize};
 use tracing::{info, instrument};
 
@@ -21,6 +16,7 @@ use crate::{
     client::Client,
     network_connection::NetworkConnection,
     server::{server_error::ServerErrorKind, ClientId, ClientIdArg, ServerError, ServerResult},
+    traits::{Close, Login, LoginResult},
 };
 
 const GENERIC_ID_SUFFIX: &str = "__CLIENT__";
@@ -92,6 +88,12 @@ pub struct ConnectInfo {
     /// client did not specify a LastWill packet, it
     /// is None
     pub takeover_last_will: Option<Publish>,
+}
+
+#[derive(Debug)]
+pub struct ShutdownInfo {
+    pub clean_session_ids: Vec<ClientId>,
+    pub last_will_packets: Vec<(ClientId, Publish)>,
 }
 
 impl<S, I> ClientsManager<S, I>
@@ -334,34 +336,34 @@ where
         })
     }
 
-    /// Disconnects all clients, keeping the information of
-    /// those clients with clean_session in false.
-    ///
-    /// Returns a vector with the ids of the disconnected clients
-    /// with clean_session set to false
-    pub fn finish_all_sessions(&mut self, gracefully: bool) -> ServerResult<Vec<ClientId>>
+    pub fn shutdown(&mut self, gracefully: bool) -> ServerResult<ShutdownInfo>
     where
         S: Close,
     {
-        for client in self.clients.values_mut() {
-            if let Ok(client) = client.get_mut() {
-                client.disconnect(gracefully)?;
+        let mut clean_session_ids = vec![];
+        let mut last_will_packets = vec![];
+
+        for (id, client) in &self.clients {
+            if let Some(last_will) = client.lock()?.disconnect(gracefully)? {
+                last_will_packets.push((id.to_owned(), last_will));
             }
         }
-        let mut clean_session_clients_id = vec![];
 
         self.clients.retain(|_id, client| match client.get_mut() {
             Ok(client) => {
                 if client.clean_session() {
-                    clean_session_clients_id.push(client.id().to_string());
-                    true
-                } else {
+                    clean_session_ids.push(client.id().to_owned());
                     false
+                } else {
+                    true
                 }
             }
             Err(_) => false,
         });
-        Ok(clean_session_clients_id)
+        Ok(ShutdownInfo {
+            clean_session_ids,
+            last_will_packets,
+        })
     }
 }
 

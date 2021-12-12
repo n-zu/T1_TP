@@ -2,8 +2,7 @@ use packets::pingresp::PingResp;
 
 use super::*;
 
-#[doc(hidden)]
-impl Server {
+impl<C: Config> Server<C> {
     /// Submit a job to the ThreadPool
     fn to_threadpool<F>(self: &Arc<Self>, action: F, id: &ClientIdArg) -> ServerResult<()>
     where
@@ -173,7 +172,7 @@ impl Server {
 
     /// Publish the packet so that all clients subscribed
     /// to the topics can receive them
-    fn handle_publish(
+    pub fn handle_publish(
         self: &Arc<Self>,
         mut publish: Publish,
         id: &ClientIdArg,

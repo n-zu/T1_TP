@@ -21,7 +21,7 @@ use crate::common::*;
 
 #[test]
 fn test_subscription_qos0() {
-    let (_s, port) = start_server();
+    let (_s, port) = start_server(None);
     let builder = ConnectBuilder::new("id", 0, true).unwrap();
     let mut stream = connect_client(builder, true, port, true);
     let mut control = [0u8];
@@ -51,7 +51,7 @@ fn test_subscription_qos0() {
 
 #[test]
 fn test_subscription_qos1() {
-    let (_s, port) = start_server();
+    let (_s, port) = start_server(None);
     let builder = ConnectBuilder::new("id", 0, true).unwrap();
     let mut stream = connect_client(builder, true, port, true);
     let mut control = [0u8];
@@ -85,7 +85,7 @@ fn test_subscription_qos1() {
 
 #[test]
 fn test_subscription_lowers_qos() {
-    let (_s, port) = start_server();
+    let (_s, port) = start_server(None);
     let builder = ConnectBuilder::new("id", 0, true).unwrap();
     let mut stream = connect_client(builder, true, port, true);
     let mut control = [0u8];
@@ -130,7 +130,7 @@ fn test_subscription_lowers_qos() {
 
 #[test]
 fn test_subscription_different_clients() {
-    let (_s, port) = start_server();
+    let (_s, port) = start_server(None);
     let builder_1 = ConnectBuilder::new("id1", 0, true).unwrap();
     let mut stream_1 = connect_client(builder_1, true, port, true);
     let builder_2 = ConnectBuilder::new("id2", 0, true).unwrap();
@@ -162,7 +162,7 @@ fn test_subscription_different_clients() {
 
 #[test]
 fn test_subscription_different_clients_persistent_session() {
-    let (_s, port) = start_server();
+    let (_s, port) = start_server(None);
     // Me conecto con clean session en false
     let builder_1 = ConnectBuilder::new("id1", 0, false).unwrap();
     let mut stream_1 = connect_client(builder_1, true, port, true);
@@ -209,7 +209,7 @@ fn test_subscription_different_clients_persistent_session() {
 
 #[test]
 fn test_last_will() {
-    let (_s, port) = start_server();
+    let (_s, port) = start_server(None);
     // Me conecto con last will
     let mut builder_1 = ConnectBuilder::new("id1", 0, false).unwrap();
     builder_1 = builder_1.last_will(LastWill::new(
@@ -249,7 +249,7 @@ fn test_last_will() {
 
 #[test]
 fn test_gracefully_disconnection_should_not_send_last_will() {
-    let (_s, port) = start_server();
+    let (_s, port) = start_server(None);
     // Me conecto con last will
     let mut builder_1 = ConnectBuilder::new("id1", 0, false).unwrap();
     builder_1 = builder_1.last_will(LastWill::new(
@@ -292,7 +292,7 @@ fn test_gracefully_disconnection_should_not_send_last_will() {
 
 #[test]
 fn test_takeover_should_change_clean_session() {
-    let (_s, port) = start_server();
+    let (_s, port) = start_server(None);
     // Me conecto con clean_session false y me suscribo a topic
     // Me reconecto con clean_session true y LastWill en topic con QoS 1
     // Me desconecto ungracefully para que se mande el LastWill
@@ -333,7 +333,7 @@ fn test_takeover_should_change_clean_session() {
 
 #[test]
 fn test_retained_message() {
-    let (_s, port) = start_server();
+    let (_s, port) = start_server(None);
     let builder_1 = ConnectBuilder::new("id1", 0, true).unwrap();
     let mut stream_1 = connect_client(builder_1, true, port, true);
     let builder_2 = ConnectBuilder::new("id2", 0, true).unwrap();
@@ -365,7 +365,7 @@ fn test_retained_message() {
 
 #[test]
 fn test_retained_message_in_last_will() {
-    let (_s, port) = start_server();
+    let (_s, port) = start_server(None);
     let builder_1 = ConnectBuilder::new("id1", 0, true).unwrap();
     let mut stream_1 = connect_client(builder_1, true, port, true);
 
