@@ -1,7 +1,8 @@
 use std::io::Read;
 
-pub use crate::config::Config;
+use crate::config::FileConfig;
 pub use crate::server::{Server, ServerController};
+pub use crate::traits::Config;
 use tracing::info;
 use tracing_subscriber::{fmt, prelude::__tracing_subscriber_SubscriberExt, Registry};
 
@@ -17,7 +18,7 @@ mod topic_handler;
 mod traits;
 
 pub fn init() {
-    let config = Config::new("config.txt").expect("Error cargando la configuracion");
+    let config = FileConfig::new("config.txt").expect("Error cargando la configuracion");
 
     let file_appender = tracing_appender::rolling::hourly(config.log_path(), "logs.log");
     let (file_writer, _guard) = tracing_appender::non_blocking(file_appender);
