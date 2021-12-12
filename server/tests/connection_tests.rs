@@ -22,8 +22,7 @@ fn test_connect_clean_session_true() {
     stream.read_exact(&mut control).unwrap();
     assert_eq!(control[0] >> 4, 2);
     let connack = Connack::read_from(&mut stream, control[0]).unwrap();
-    let connack_expected = Connack::new(false, ConnackReturnCode::Accepted);
-    assert_eq!(connack, connack_expected);
+    assert!(!connack.session_present());
 }
 
 #[test]
@@ -76,8 +75,7 @@ fn test_connect_present_after_reconnection() {
     let mut connack = Connack::read_from(&mut stream, control[0]).unwrap();
 
     // Primera conexion: session present debería ser false
-    let mut connack_expected = Connack::new(false, ConnackReturnCode::Accepted);
-    assert_eq!(connack, connack_expected);
+    assert!(!connack.session_present());
 
     // Me desconecto
     stream
@@ -92,8 +90,7 @@ fn test_connect_present_after_reconnection() {
     connack = Connack::read_from(&mut stream, control[0]).unwrap();
 
     // Segunda conexion: session present debería ser true
-    connack_expected = Connack::new(true, ConnackReturnCode::Accepted);
-    assert_eq!(connack, connack_expected);
+    assert!(connack.session_present());
 }
 
 #[test]
@@ -185,4 +182,35 @@ fn test_takeover_only_works_with_same_username() {
     let err = Connack::read_from(&mut stream_2, control[0]).unwrap_err();
 
     assert_eq!(err.kind(), ErrorKind::IdentifierRejected);
+}
+
+#[test]
+fn test_session_present_dump() {
+    let (mut s, port) = start_server(
+        Some(("tests/files/dumps/dump1.json", Duration::from_secs(10))),
+        None,
+    );
+    let builder = ConnectBuilder::new("id", 1, false).unwrap();
+
+    let mut stream = connect_client(builder, port, true);
+
+    // Me desconecto gracefully
+    stream
+        .write_all(&Disconnect::new().encode().unwrap())
+        .unwrap();
+
+    // Apago server: debería dumpear
+    s.shutdown().unwrap();
+
+    let (_s, port) = start_server(
+        Some(("tests/files/dumps/dump1.json", Duration::from_secs(10))),
+        None,
+    );
+    let builder = ConnectBuilder::new("id", 1, false).unwrap();
+    let mut stream = connect_client(builder, port, false);
+
+    let mut control = [0u8];
+    stream.read_exact(&mut control).unwrap();
+    let connack = Connack::read_from(&mut stream, control[0]).unwrap();
+    assert!(connack.session_present());
 }

@@ -79,19 +79,35 @@ impl Config for ConfigMock {
     }
 }
 
+impl ConfigMock {
+    pub fn new(
+        port: u16,
+        dump_info: Option<(&str, Duration)>,
+        users: Option<HashMap<String, String>>,
+    ) -> ConfigMock {
+        ConfigMock {
+            port: port,
+            dump_info: dump_info.map(|(str, dur)| (str.to_string(), dur)),
+            log_path: "tests/files/logs".to_string(),
+            auth: users.map(|u| Box::new(AuthMock { users: u })),
+            ip: "localhost".to_string(),
+        }
+    }
+}
+
 pub fn start_server(
     dump_info: Option<(&str, Duration)>,
     users: Option<HashMap<String, String>>,
 ) -> (ServerController, u16) {
     let mut port = random_port();
-    let mut server = Server::new(build_config(port, dump_info, users.clone()), 20).unwrap();
+    let mut server = Server::new(ConfigMock::new(port, dump_info, users.clone()), 20).unwrap();
     for _ in 0..50 {
         // Intento crear el servidor bindeando a 50 puertos al azar
         if let Ok(controller) = server.run() {
             return (controller, port);
         } else {
             port = random_port();
-            server = Server::new(build_config(port, dump_info, users.clone()), 20).unwrap();
+            server = Server::new(ConfigMock::new(port, dump_info, users.clone()), 20).unwrap();
         }
     }
     panic!("No se pudo crear servidor para ejecutar el test");
@@ -101,21 +117,6 @@ fn random_port() -> u16 {
     // Esos números salen de esta información
     // https://en.wikipedia.org/wiki/List_of_TCP_and_UDP_port_numbers#Dynamic,_private_or_ephemeral_ports
     rand::thread_rng().gen_range(49152..=65535)
-}
-
-// FIXME: por alguna razón, no escribe los logs a la ruta dada
-fn build_config(
-    port: u16,
-    dump_info: Option<(&str, Duration)>,
-    users: Option<HashMap<String, String>>,
-) -> impl Config {
-    ConfigMock {
-        port: port,
-        dump_info: dump_info.map(|(str, dur)| (str.to_string(), dur)),
-        log_path: "tests/files/logs".to_string(),
-        auth: users.map(|u| Box::new(AuthMock { users: u })),
-        ip: "localhost".to_string(),
-    }
 }
 
 pub fn connect_client(builder: ConnectBuilder, port: u16, read_connack: bool) -> TcpStream {

@@ -14,6 +14,7 @@ desktop.ini
 .idea
 
 server/logs/*
+server/tests/files/dumps/*
 *.glade~
 *#*.glade#
 *.xml~

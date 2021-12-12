@@ -34,7 +34,7 @@ impl ServerController {
     }
 
     /// Turn of the server
-    fn shutdown(&mut self) -> ServerResult<()> {
+    pub fn shutdown(&mut self) -> ServerResult<()> {
         self.shutdown_bool.store(true, Ordering::Relaxed);
         if let Some(handle) = self.handle.take() {
             let sv_thread_id = handle.thread().id();
