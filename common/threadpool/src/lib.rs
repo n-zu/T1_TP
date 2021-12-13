@@ -157,8 +157,8 @@ impl ThreadPool {
         }
     }
 
-    /// Submits a job to the threadpool.
-    pub fn spawn<F>(&self, job: F) -> Result<(), ThreadPoolError>
+    /// Submits a job to the thread pool.
+    pub fn execute<F>(&self, job: F) -> Result<(), ThreadPoolError>
     where
         F: FnOnce() + Send + 'static,
     {
@@ -219,7 +219,7 @@ mod tests {
         for i in 0..1000 {
             y += i;
             let x_copy = x.clone();
-            let _res = threadpool.spawn(move || {
+            let _res = threadpool.execute(move || {
                 *x_copy.lock().unwrap() += i;
             });
         }
@@ -236,7 +236,7 @@ mod tests {
         let threadpool = ThreadPool::new(10);
 
         for _ in 0..50 {
-            let _res = threadpool.spawn(move || {
+            let _res = threadpool.execute(move || {
                 panic!("Test panic");
             });
         }
@@ -244,7 +244,7 @@ mod tests {
         for i in 0..1000 {
             y += i;
             let x_copy = x.clone();
-            let _res = threadpool.spawn(move || {
+            let _res = threadpool.execute(move || {
                 *x_copy.lock().unwrap() += i;
             });
         }
@@ -267,7 +267,7 @@ mod tests {
             if i % 2 == 0 {
                 curr_threadpool = &threadpool_2;
             }
-            let _res = curr_threadpool.spawn(move || {
+            let _res = curr_threadpool.execute(move || {
                 *x_copy.lock().unwrap() += i;
             });
         }
@@ -298,7 +298,7 @@ mod tests {
         for i in 0..1000 {
             y += i;
             let x_copy = x.clone();
-            let _res = threadpool.spawn(move || {
+            let _res = threadpool.execute(move || {
                 *x_copy.lock().unwrap() += i;
             });
         }

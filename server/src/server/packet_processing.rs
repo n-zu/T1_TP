@@ -10,7 +10,7 @@ impl<C: Config> Server<C> {
     {
         let sv_copy = self.clone();
         let id_copy = id.to_owned();
-        self.pool.lock()?.spawn(move || {
+        self.pool.lock()?.execute(move || {
             action(sv_copy, &id_copy).unwrap_or_else(|e| {
                 if e.kind() != ServerErrorKind::ClientNotFound {
                     error!("Error de ThreadPool: {}", e);
@@ -111,7 +111,7 @@ impl<C: Config> Server<C> {
         info!("Enviando PUBLISH");
         let sv_copy = self.clone();
         threadpool_copy
-            .spawn(move || {
+            .execute(move || {
                 sv_copy
                     ._send_publish(client_id_receiver, publish)
                     .unwrap_or_else(|e| {
@@ -146,7 +146,7 @@ impl<C: Config> Server<C> {
     fn broadcast_publish(self: &Arc<Self>, publish: Publish) -> ServerResult<()> {
         let (sender, receiver) = mpsc::channel();
         let sv_copy = self.clone();
-        self.pool.lock()?.spawn(move || {
+        self.pool.lock()?.execute(move || {
             sv_copy
                 .publish_dispatcher_loop(receiver)
                 .unwrap_or_else(|e| error!("Error despachando el PUBLISH: {}", e));
