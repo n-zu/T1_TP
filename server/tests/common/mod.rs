@@ -16,9 +16,24 @@ use std::{
 };
 
 #[macro_export]
+// Crea un HashMap<String, String> (dentro de un Some()),
+// a partir de una serie de tuplas (key: &str, value: &str)
+// (en realidad, usa .collect(), no crea explicitamente el HashMap)
 macro_rules! usr {
     ($(($x:expr, $y:expr)),*) => {
         Some(vec![$(($x.to_string(), $y.to_string())),*].into_iter().collect())
+    }
+}
+
+#[macro_export]
+// Crea un vector de TopicFilters a partir de una serie
+// de tuplas (topic: &str, qos: QoSLevel)
+macro_rules! tpc {
+    ($(($x:expr, $y:expr)),*) => {
+        {
+            use packets::topic_filter::TopicFilter;
+            vec![$(TopicFilter::new($x, $y).unwrap()),*]
+        }
     }
 }
 

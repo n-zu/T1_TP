@@ -7,6 +7,7 @@ use packets::packet_error::ErrorKind;
 use packets::pingreq::PingReq;
 use packets::pingresp::PingResp;
 use packets::traits::{MQTTDecoding, MQTTEncoding};
+use std::fs;
 use std::io::{Read, Write};
 use std::thread;
 use std::time::Duration;
@@ -186,6 +187,7 @@ fn test_takeover_only_works_with_same_username() {
 
 #[test]
 fn test_session_present_dump() {
+    let _ = fs::remove_file("tests/files/dumps/dump1.json");
     let (s, port) = start_server(
         Some(("tests/files/dumps/dump1.json", Duration::from_secs(10))),
         None,
