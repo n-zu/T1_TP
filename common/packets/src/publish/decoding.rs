@@ -54,7 +54,7 @@ impl MQTTDecoding for Publish {
     ///  let result = Publish::read_from(&mut stream, control_byte).unwrap();
     ///  assert_eq!(expected, result);
     /// ```
-    fn read_from(stream: &mut impl Read, control_byte: u8) -> PacketResult<Publish> {
+    fn read_from<T: Read>(stream: &mut T, control_byte: u8) -> PacketResult<Publish> {
         let retain_flag = Self::verify_retain_flag(&control_byte);
         let qos_level = Self::verify_qos_level_flag(&control_byte)?;
         let dup_flag = Self::verify_dup_flag(&control_byte, qos_level)?;

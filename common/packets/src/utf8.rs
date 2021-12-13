@@ -27,13 +27,12 @@ impl Field {
     ///
     /// If value's length is greater than 65535 bytes this function returns a PacketError
     ///
-    pub fn new_from_string(value: &str) -> Result<Self, PacketError> {
+    pub fn new_from_string<S: Into<String>>(value: S) -> Result<Self, PacketError> {
+        let value = value.into();
         if value.len() > MAX_FIELD_LEN {
             return Err(PacketError::new_msg("Largo del paquete excedido"));
         }
-        Ok(Self {
-            value: value.to_owned(),
-        })
+        Ok(Self { value })
     }
 
     ///
@@ -61,9 +60,9 @@ impl Field {
             return None;
         }
 
-        let value = std::str::from_utf8(&buf_string).ok()?;
+        let value = std::str::from_utf8_mut(&mut buf_string).ok()?;
         Some(Self {
-            value: value.to_owned(),
+            value: value.into(),
         })
     }
 
@@ -81,8 +80,10 @@ impl Field {
     /// ```
     ///
     pub fn encode(&self) -> Vec<u8> {
-        let mut bytes = Vec::from(self.value.len().to_be_bytes());
-        bytes.drain(0..bytes.len() - 2);
+        let mut bytes: Vec<u8> = Vec::with_capacity(self.value.len() + 2);
+        let len_bytes = self.value.len().to_be_bytes();
+        bytes.push(len_bytes[6]);
+        bytes.push(len_bytes[7]);
 
         for byte in self.value.as_bytes() {
             bytes.push(*byte);

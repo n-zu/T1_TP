@@ -55,17 +55,16 @@ impl PacketError {
     }
 
     /// Returns a new PacketError with the given message
-    pub fn new_msg(msg: &str) -> PacketError {
+    pub fn new_msg<T: Into<String>>(msg: T) -> PacketError {
         PacketError {
-            msg: msg.to_string(),
+            msg: msg.into(),
             kind: ErrorKind::Other,
         }
     }
-
     /// Returns a new PacketError with the given message and the given kind
-    pub fn new_kind(msg: &str, kind: ErrorKind) -> PacketError {
+    pub fn new_kind<T: Into<String>>(msg: T, kind: ErrorKind) -> PacketError {
         PacketError {
-            msg: msg.to_string(),
+            msg: msg.into(),
             kind,
         }
     }
@@ -91,13 +90,15 @@ impl Error for PacketError {
 impl From<io::Error> for PacketError {
     fn from(error: io::Error) -> Self {
         match error.kind() {
-            io::ErrorKind::UnexpectedEof => {
+            io::ErrorKind::UnexpectedEof
+            | io::ErrorKind::BrokenPipe
+            | io::ErrorKind::NotConnected => {
                 PacketError::new_kind(&error.to_string(), ErrorKind::UnexpectedEof)
             }
             io::ErrorKind::WouldBlock => {
                 PacketError::new_kind(&error.to_string(), ErrorKind::WouldBlock)
             }
-            _ => PacketError::new_msg(&error.to_string()),
+            _ => PacketError::new_msg(format!("{:?}", error)),
         }
     }
 }

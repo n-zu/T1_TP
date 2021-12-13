@@ -41,16 +41,6 @@ impl<S: io::Write, I> io::Write for NetworkConnection<S, I> {
     }
 }
 
-impl<S, I> PartialEq for NetworkConnection<S, I>
-where
-    S: PartialEq,
-    I: PartialEq,
-{
-    fn eq(&self, other: &Self) -> bool {
-        self.id == other.id && self.stream == other.stream
-    }
-}
-
 impl<S, I> NetworkConnection<S, I> {
     pub fn new(id: I, stream: S) -> Self {
         Self { id, stream }
@@ -68,16 +58,15 @@ impl<S, I> NetworkConnection<S, I> {
         I: Clone + Copy,
         S: TryClone,
     {
-        if let Some(stream_copy) = self.stream.try_clone() {
-            Ok(Self {
-                stream: stream_copy,
-                id: self.id,
-            })
-        } else {
-            Err(ServerError::new_kind(
-                "Error clonando stream de network_connection",
+        let stream = self.stream.try_clone().map_err(|e| {
+            ServerError::new_kind(
+                &format!("Error clonando stream de network_connection: {}", e),
                 ServerErrorKind::Irrecoverable,
-            ))
-        }
+            )
+        })?;
+        Ok(NetworkConnection {
+            id: self.id,
+            stream,
+        })
     }
 }

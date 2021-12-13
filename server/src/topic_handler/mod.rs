@@ -1,3 +1,5 @@
+use serde::{Deserialize, Serialize};
+
 use std::{
     collections::HashMap,
     fmt::Debug,
@@ -28,16 +30,18 @@ pub struct Message {
 }
 
 #[doc(hidden)]
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 struct SubscriptionData {
     qos: QoSLevel,
 }
 
+#[derive(Serialize, Deserialize)]
 pub struct TopicHandler {
     root: Topic,
 }
 
 #[doc(hidden)]
+#[derive(Serialize, Deserialize)]
 /// Represents a Topic within a Topic Handler. A Topic node contains its subtopics, subscribers
 /// multi level subscriber and single level subscriber
 struct Topic {
@@ -557,10 +561,10 @@ impl TopicHandler {
 
 #[cfg(test)]
 mod tests {
-    use std::vec;
-    use std::{collections::HashSet, sync::mpsc::channel};
+    use super::{Topic, TopicHandler};
 
-    use crate::topic_handler::Topic;
+    use std::{collections::HashSet, sync::mpsc::channel, vec};
+
     use packets::publish::Publish;
     use packets::qos::QoSLevel;
     use packets::subscribe::Subscribe;
@@ -589,7 +593,7 @@ mod tests {
     fn test_one_subscribe_one_publish_single_level_topic() {
         let subscribe = build_subscribe("topic");
         let publish = build_publish("topic", "unMensaje");
-        let handler = super::TopicHandler::new();
+        let handler = TopicHandler::new();
         let (sender, receiver) = channel();
 
         handler.subscribe(&subscribe, "user").unwrap();
@@ -604,7 +608,7 @@ mod tests {
     fn test_one_subscribe_one_publish_multi_level_topic() {
         let subscribe = build_subscribe("topic/auto/casa");
         let publish = build_publish("topic/auto/casa", "unMensaje");
-        let handler = super::TopicHandler::new();
+        let handler = TopicHandler::new();
 
         let (sender, receiver) = channel();
 
@@ -620,7 +624,7 @@ mod tests {
     fn test_two_subscribe_one_publish_multi_level_topic() {
         let subscribe = build_subscribe("topic/auto/casa");
         let publish = build_publish("topic/auto/casa", "unMensaje");
-        let handler = super::TopicHandler::new();
+        let handler = TopicHandler::new();
 
         let (sender, receiver) = channel();
 
@@ -643,7 +647,7 @@ mod tests {
     fn test_5000_subscribers() {
         let subscribe = build_subscribe("topic/auto/casa");
         let publish = build_publish("topic/auto/casa", "unMensaje");
-        let handler = super::TopicHandler::new();
+        let handler = TopicHandler::new();
 
         let (sender, receiver) = channel();
 
@@ -666,7 +670,7 @@ mod tests {
     fn test_should_reduce_qos() {
         let subscribe = build_subscribe("topic"); // Suscripción QoS 0
         let publish = build_publish("topic", "unMensaje"); // Publicación QoS 1
-        let handler = super::TopicHandler::new();
+        let handler = TopicHandler::new();
         let (sender, receiver) = channel();
 
         handler.subscribe(&subscribe, "user").unwrap();
@@ -682,7 +686,7 @@ mod tests {
         let unsubscribe = build_unsubscribe("topic/auto/casa");
         let first_publish = build_publish("topic/auto/casa", "unMensaje");
         let second_publish = build_publish("topic/auto/casa", "otroMensaje");
-        let handler = super::TopicHandler::new();
+        let handler = TopicHandler::new();
 
         let (sender, receiver) = channel();
 
@@ -702,7 +706,7 @@ mod tests {
         let subscribe = build_subscribe("topic/auto/casa");
         let first_publish = build_publish("topic/auto/casa", "unMensaje");
         let second_publish = build_publish("topic/auto/casa", "otroMensaje");
-        let handler = super::TopicHandler::new();
+        let handler = TopicHandler::new();
 
         let (sender, receiver) = channel();
 
@@ -723,7 +727,7 @@ mod tests {
         let unsubscribe = build_unsubscribe("topic/no_es_auto/casa");
         let first_publish = build_publish("topic/auto/casa", "unMensaje");
         let second_publish = build_publish("topic/auto/casa", "otroMensaje");
-        let handler = super::TopicHandler::new();
+        let handler = TopicHandler::new();
 
         let (sender, receiver) = channel();
 
@@ -743,7 +747,7 @@ mod tests {
     fn test_doesnt_publish_to_siblings() {
         let subscribe = build_subscribe("topic/notsubtopic");
         let publish = build_publish("topic/subtopic", "unMensaje");
-        let handler = super::TopicHandler::new();
+        let handler = TopicHandler::new();
         let (sender, receiver) = channel();
 
         handler.subscribe(&subscribe, "user").unwrap();
@@ -756,7 +760,7 @@ mod tests {
     fn test_multilevel_wildcard_one_subscribe_one_publish() {
         let subscribe = build_subscribe("topic/#");
         let publish = build_publish("topic/subtopic", "unMensaje");
-        let handler = super::TopicHandler::new();
+        let handler = TopicHandler::new();
         let (sender, receiver) = channel();
 
         handler.subscribe(&subscribe, "user").unwrap();
@@ -773,7 +777,7 @@ mod tests {
     fn test_multilevel_wildcard_one_subscribe_one_specific_publish() {
         let subscribe = build_subscribe("topic/#");
         let publish = build_publish("topic/subtopic/messages/test/001", "unMensaje");
-        let handler = super::TopicHandler::new();
+        let handler = TopicHandler::new();
         let (sender, receiver) = channel();
 
         handler.subscribe(&subscribe, "user").unwrap();
@@ -810,7 +814,7 @@ mod tests {
            )
            .unwrap();
 
-           let handler = super::TopicHandler::new();
+           let handler = TopicHandler::new();
            let (sender, receiver) = channel();
 
            handler.subscribe(&subscribe, "user").unwrap();
@@ -838,7 +842,7 @@ mod tests {
                Some(123),
            )
            .unwrap();
-           let handler = super::TopicHandler::new();
+           let handler = TopicHandler::new();
            let (sender, receiver) = channel();
 
            handler.subscribe(&subscribe, "user").unwrap();
@@ -866,7 +870,7 @@ mod tests {
                Some(123),
            )
            .unwrap();
-           let handler = super::TopicHandler::new();
+           let handler = TopicHandler::new();
            let (sender, receiver) = channel();
 
            handler.subscribe(&subscribe, "user").unwrap();
@@ -894,7 +898,7 @@ mod tests {
                None,
            )
            .unwrap();
-           let handler = super::TopicHandler::new();
+           let handler = TopicHandler::new();
            let (sender, receiver) = channel();
 
            handler.subscribe(&subscribe, "user").unwrap();
@@ -923,7 +927,7 @@ mod tests {
             Some(123),
         )
         .unwrap();
-        let handler = super::TopicHandler::new();
+        let handler = TopicHandler::new();
         let (sender, receiver) = channel();
 
         handler.subscribe(&subscribe, "user").unwrap();
@@ -950,7 +954,7 @@ mod tests {
         let unsubscribe = build_unsubscribe("topic/auto/#");
         let first_publish = build_publish("topic/auto/casa", "unMensaje");
         let second_publish = build_publish("topic/auto/casa", "otroMensaje");
-        let handler = super::TopicHandler::new();
+        let handler = TopicHandler::new();
 
         let (sender, receiver) = channel();
 
@@ -1001,7 +1005,7 @@ mod tests {
     fn test_singlelevel_wildcard_one_subscribe_one_publish() {
         let subscribe = build_subscribe("topic/+/leaf");
         let publish = build_publish("topic/subtopic/leaf", "unMensaje");
-        let handler = super::TopicHandler::new();
+        let handler = TopicHandler::new();
         let (sender, receiver) = channel();
 
         handler.subscribe(&subscribe, "user").unwrap();
@@ -1018,7 +1022,7 @@ mod tests {
     fn test_singlelevel_wildcard_complex_subscribe_one_publish() {
         let subscribe = build_subscribe("topic/+/+//leaf");
         let publish = build_publish("topic/subtopic///leaf", "unMensaje");
-        let handler = super::TopicHandler::new();
+        let handler = TopicHandler::new();
         let (sender, receiver) = channel();
 
         handler.subscribe(&subscribe, "user").unwrap();
@@ -1035,7 +1039,7 @@ mod tests {
     fn test_singlelevel_wildcard_complex_subscribe_3_publish() {
         let subscribe = build_subscribe("topic/+/+//leaf");
         let publish = build_publish("topic/subtopic///leaf", "unMensaje");
-        let handler = super::TopicHandler::new();
+        let handler = TopicHandler::new();
         let (sender, receiver) = channel();
 
         handler.subscribe(&subscribe, "user").unwrap();
@@ -1060,7 +1064,7 @@ mod tests {
     fn test_wildcards_one_subscribe_one_publish() {
         let subscribe = build_subscribe("topic/+/+//#");
         let publish = build_publish("topic/subtopic///leaf//Orangutan", "unMensaje");
-        let handler = super::TopicHandler::new();
+        let handler = TopicHandler::new();
         let (sender, receiver) = channel();
 
         handler.subscribe(&subscribe, "user").unwrap();
@@ -1080,7 +1084,7 @@ mod tests {
     fn test_wildcards_one_subscribe_3_publish() {
         let subscribe = build_subscribe("topic/+/+//#");
         let publish = build_publish("topic/subtopic///leaf//Orangutan", "unMensaje");
-        let handler = super::TopicHandler::new();
+        let handler = TopicHandler::new();
         let (sender, receiver) = channel();
 
         handler.subscribe(&subscribe, "user").unwrap();
@@ -1116,7 +1120,7 @@ mod tests {
         let unsubscribe = build_unsubscribe("topic/+/+//leaf");
         let first_publish = build_publish("topic/subtopic///leaf", "unMensaje");
         let second_publish = build_publish("topic/subtopic///leaf", "otroMensaje");
-        let handler = super::TopicHandler::new();
+        let handler = TopicHandler::new();
 
         let (sender, receiver) = channel();
 
@@ -1137,7 +1141,7 @@ mod tests {
         let unsubscribe = build_unsubscribe("topic/+/+//#");
         let first_publish = build_publish("topic/subtopic///leaf//Orangutan", "unMensaje");
         let second_publish = build_publish("topic/subtopic///leaf//Orangutan", "otroMensaje");
-        let handler = super::TopicHandler::new();
+        let handler = TopicHandler::new();
 
         let (sender, receiver) = channel();
 
@@ -1159,7 +1163,7 @@ mod tests {
     fn test_removed_wildcards_stop_sending_messages_to_client() {
         let subscribe = build_subscribe("topic/+/+//#");
         let publish = build_publish("topic/subtopic///leaf//Orangutan", "unMensaje");
-        let handler = super::TopicHandler::new();
+        let handler = TopicHandler::new();
         let (sender, receiver) = channel();
 
         handler.subscribe(&subscribe, "user").unwrap();
@@ -1181,7 +1185,7 @@ mod tests {
     fn test_2_clients_wildcard_subscribed_one_removed() {
         let subscribe = build_subscribe("topic/+/+//#");
         let publish = build_publish("topic/subtopic///leaf//Orangutan", "unMensaje");
-        let handler = super::TopicHandler::new();
+        let handler = TopicHandler::new();
         let (sender, receiver) = channel();
 
         handler.subscribe(&subscribe, "user1").unwrap();
@@ -1219,7 +1223,7 @@ mod tests {
         let subscribe = build_subscribe("$SYS/info");
         let publish = build_publish("$SYS/info", "ERROR");
 
-        let handler = super::TopicHandler::new();
+        let handler = TopicHandler::new();
         let (sender, receiver) = channel();
 
         handler.subscribe(&subscribe, "admin").unwrap();
@@ -1238,7 +1242,7 @@ mod tests {
         let subscribe = build_subscribe("+/info");
         let publish = build_publish("$SYS/info", "ERROR");
 
-        let handler = super::TopicHandler::new();
+        let handler = TopicHandler::new();
         let (sender, receiver) = channel();
 
         handler.subscribe(&subscribe, "admin").unwrap();
@@ -1253,7 +1257,7 @@ mod tests {
         let subscribe = build_subscribe("#");
         let publish = build_publish("$SYS/info", "ERROR");
 
-        let handler = super::TopicHandler::new();
+        let handler = TopicHandler::new();
         let (sender, receiver) = channel();
 
         handler.subscribe(&subscribe, "admin").unwrap();
@@ -1268,7 +1272,7 @@ mod tests {
         let subscribe = build_subscribe("+");
         let publish = build_publish("hola", ":D");
 
-        let handler = super::TopicHandler::new();
+        let handler = TopicHandler::new();
         let (sender, receiver) = channel();
 
         handler.subscribe(&subscribe, "admin").unwrap();
@@ -1283,7 +1287,7 @@ mod tests {
         let subscribe = build_subscribe("f/+");
         let publish = build_publish("f/hola", ":D");
 
-        let handler = super::TopicHandler::new();
+        let handler = TopicHandler::new();
         let (sender, receiver) = channel();
 
         handler.subscribe(&subscribe, "admin").unwrap();
@@ -1305,7 +1309,7 @@ mod tests {
             Some(123),
         )
         .unwrap();
-        let handler = super::TopicHandler::new();
+        let handler = TopicHandler::new();
         let (sender, _r) = channel();
 
         handler.publish(&publish, sender).unwrap();
@@ -1329,7 +1333,7 @@ mod tests {
             Some(123),
         )
         .unwrap();
-        let handler = super::TopicHandler::new();
+        let handler = TopicHandler::new();
         let (sender, _r) = channel();
 
         handler.publish(&publish, sender).unwrap();
@@ -1350,7 +1354,7 @@ mod tests {
             Some(123),
         )
         .unwrap();
-        let handler = super::TopicHandler::new();
+        let handler = TopicHandler::new();
         let (sender, _r) = channel();
 
         handler.publish(&publish, sender).unwrap();
@@ -1385,7 +1389,7 @@ mod tests {
         )
         .unwrap();
 
-        let handler = super::TopicHandler::new();
+        let handler = TopicHandler::new();
         let (sender, _r) = channel();
 
         handler.publish(&publish_1, sender.clone()).unwrap();
@@ -1407,7 +1411,7 @@ mod tests {
             Some(123),
         )
         .unwrap();
-        let handler = super::TopicHandler::new();
+        let handler = TopicHandler::new();
         let (sender, _r) = channel();
 
         handler.publish(&publish, sender).unwrap();
@@ -1431,7 +1435,7 @@ mod tests {
             Some(123),
         )
         .unwrap();
-        let handler = super::TopicHandler::new();
+        let handler = TopicHandler::new();
         let (sender, _r) = channel();
 
         handler.publish(&publish, sender).unwrap();
@@ -1454,7 +1458,7 @@ mod tests {
             Some(123),
         )
         .unwrap();
-        let handler = super::TopicHandler::new();
+        let handler = TopicHandler::new();
         let (sender, _r) = channel();
 
         handler.publish(&publish, sender).unwrap();
@@ -1478,7 +1482,7 @@ mod tests {
             Some(123),
         )
         .unwrap();
-        let handler = super::TopicHandler::new();
+        let handler = TopicHandler::new();
         let (sender, _r) = channel();
 
         handler.publish(&publish, sender).unwrap();
@@ -1505,7 +1509,7 @@ mod tests {
             Some(123),
         )
         .unwrap();
-        let handler = super::TopicHandler::new();
+        let handler = TopicHandler::new();
         let (sender, _r) = channel();
 
         handler.publish(&publish, sender).unwrap();
@@ -1526,7 +1530,7 @@ mod tests {
             Some(123),
         )
         .unwrap();
-        let handler = super::TopicHandler::new();
+        let handler = TopicHandler::new();
         let (sender, _r) = channel();
 
         handler.publish(&publish, sender).unwrap();
@@ -1558,7 +1562,7 @@ mod tests {
             Some(123),
         )
         .unwrap();
-        let handler = super::TopicHandler::new();
+        let handler = TopicHandler::new();
         let (sender, _r) = channel();
 
         handler.publish(&publish1, sender.clone()).unwrap();
@@ -1576,7 +1580,7 @@ mod tests {
         let subscribe = build_subscribe("topic");
         let publish =
             Publish::new(false, QoSLevel::QoSLevel1, true, "topic", "", Some(123)).unwrap();
-        let handler = super::TopicHandler::new();
+        let handler = TopicHandler::new();
         let (sender, _r) = channel();
 
         handler.publish(&publish, sender).unwrap();
@@ -1599,7 +1603,7 @@ mod tests {
         .unwrap();
         let publish_2 =
             Publish::new(false, QoSLevel::QoSLevel1, true, "topic", "", Some(123)).unwrap();
-        let handler = super::TopicHandler::new();
+        let handler = TopicHandler::new();
         let (sender, _r) = channel();
 
         handler.publish(&publish_1, sender.clone()).unwrap();
@@ -1621,7 +1625,7 @@ mod tests {
             Some(123),
         )
         .unwrap();
-        let handler = super::TopicHandler::new();
+        let handler = TopicHandler::new();
         let (sender, receiver) = channel();
 
         handler.subscribe(&subscribe, "user").unwrap();
@@ -1630,5 +1634,73 @@ mod tests {
         let msg = receiver.recv().unwrap();
         assert_eq!(msg.client_id, "user");
         assert!(!msg.packet.retain_flag());
+    }
+
+    #[test]
+    fn test_simple_dump_string() {
+        let subscribe = build_subscribe("topic");
+        let publish = build_publish("topic", "unMensaje");
+        let handler = TopicHandler::new();
+        handler.subscribe(&subscribe, "user").unwrap();
+
+        let json = serde_json::to_string(&handler).unwrap();
+        let deserialized_handler: TopicHandler = serde_json::from_str(&json).unwrap();
+
+        let (sender, receiver) = channel();
+        deserialized_handler.publish(&publish, sender).unwrap();
+
+        let message = receiver.recv().unwrap();
+        assert_eq!(message.client_id, "user");
+        assert_eq!(message.packet.topic_name(), "topic");
+    }
+
+    #[test]
+    fn test_simple_dump_value() {
+        let subscribe = build_subscribe("topic");
+        let publish = build_publish("topic", "unMensaje");
+        let handler = TopicHandler::new();
+        handler.subscribe(&subscribe, "user").unwrap();
+
+        let json = serde_json::to_value(&handler).unwrap();
+        let deserialized_handler: TopicHandler = serde_json::from_value(json).unwrap();
+
+        let (sender, receiver) = channel();
+        deserialized_handler.publish(&publish, sender).unwrap();
+
+        let message = receiver.recv().unwrap();
+        assert_eq!(message.client_id, "user");
+        assert_eq!(message.packet.topic_name(), "topic");
+    }
+
+    #[test]
+    fn test_dump_5000_subscribers() {
+        let subscribes = [
+            build_subscribe("topic/auto/casa"),
+            build_subscribe("#"),
+            build_subscribe("topic/+/casa"),
+        ];
+
+        let publish = build_publish("topic/auto/casa", "unMensaje");
+        let handler = TopicHandler::new();
+
+        let (sender, receiver) = channel();
+
+        let mut pending_users = HashSet::new();
+        for i in 0..5000 {
+            let id = format!("user{}", i);
+            handler.subscribe(&subscribes[i % 3], &id).unwrap();
+            pending_users.insert(id);
+        }
+
+        let json = serde_json::to_value(&handler).unwrap();
+        let deserialized_handler: TopicHandler = serde_json::from_value(json).unwrap();
+
+        deserialized_handler.publish(&publish, sender).unwrap();
+
+        for msg in receiver {
+            assert!(pending_users.contains(&msg.client_id));
+            pending_users.remove(&msg.client_id);
+            assert_eq!(msg.packet.topic_name(), "topic/auto/casa");
+        }
     }
 }

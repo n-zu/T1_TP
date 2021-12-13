@@ -4,10 +4,9 @@ use std::{
     thread::{self, JoinHandle, ThreadId},
 };
 
-use crate::{
-    logging::{self, LogKind},
-    server::{ServerError, ServerResult},
-};
+use tracing::{error, instrument};
+
+use crate::server::{ServerError, ServerResult};
 
 pub struct ThreadJoiner {
     handles: Option<HashMap<ThreadId, JoinHandle<()>>>,
@@ -25,7 +24,6 @@ impl ThreadJoiner {
     pub fn new() -> ThreadJoiner {
         let (sender, receiver) = mpsc::channel();
         let joiner_thread_handle = thread::spawn(move || {
-            logging::log::<&str>(LogKind::ThreadStart(thread::current().id()));
             ThreadJoiner::join_loop(receiver);
         });
 
@@ -52,15 +50,13 @@ impl ThreadJoiner {
         }
     }
 
+    #[instrument(skip(receiver) fields(thread_id) target = "thread_joining")]
     fn join_loop(receiver: Receiver<JoinHandle<()>>) {
         for handle in receiver {
             let thread_id = handle.thread().id();
-            match handle.join() {
-                Ok(()) => logging::log::<&str>(LogKind::ThreadEndOk(thread_id)),
-                Err(err) => {
-                    logging::log::<&str>(LogKind::ThreadEndErr(thread_id, &format!("{:?}", err)))
-                }
-            }
+            handle.join().unwrap_or_else(|e| {
+                error!("{:?} - Thread joineado con panic: {:?}", thread_id, e);
+            });
         }
     }
 
@@ -95,18 +91,15 @@ impl Drop for ThreadJoiner {
                 .expect("finished_sender es None"),
         );
         let joiner_thread_id = self.joiner_thread_handle.as_ref().unwrap().thread().id();
-        if let Err(err) = self
-            .joiner_thread_handle
+        self.joiner_thread_handle
             .take()
             .expect("joiner_thread_handle es None")
             .join()
-        {
-            logging::log::<&str>(LogKind::ThreadEndErr(
-                joiner_thread_id,
-                &format!("{:?}", err),
-            ));
-        } else {
-            logging::log::<&str>(LogKind::ThreadEndOk(joiner_thread_id));
-        }
+            .unwrap_or_else(|e| {
+                error!(
+                    "{:?} - Thread joineado con panic: {:?}",
+                    joiner_thread_id, e
+                );
+            });
     }
 }

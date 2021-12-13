@@ -1,4 +1,4 @@
-use std::convert::TryFrom;
+use std::{convert::TryFrom, fmt};
 
 use crate::packet_error::PacketError;
 
@@ -39,21 +39,43 @@ const MSG_SERVER_UNAVAILABLE: &str =
 const MSG_BAD_USER_NAME_OR_PASSWORD: &str = "The data in the user name or password is malformed";
 #[doc(hidden)]
 const MSG_NOT_AUTHORIZED: &str = "The Client is not authorized to connect";
+#[doc(hidden)]
+const MSG_ACCEPTED: &str = "Connection accepted";
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Connack {
-    pub session_present: bool,
-    pub return_code: ConnackReturnCode,
+    session_present: bool,
+    return_code: ConnackReturnCode,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ConnackReturnCode {
+    /// Connection accepted
     Accepted,
+    /// The Server does not support the level of
+    /// the MQTT protocol requested by the Client
     UnacceptableProtocolVersion,
+    /// The Client identifier is correct UTF-8 but
+    /// not allowed by the Server
     IdentifierRejected,
+    /// The Network Connection has been made but
+    /// the MQTT service is unavailable
     ServerUnavailable,
+    /// The data in the user name or password is
+    /// malformed
     BadUserNameOrPassword,
+    /// The Client is not authorized to connect
     NotAuthorized,
+}
+
+impl Connack {
+    pub fn session_present(&self) -> bool {
+        self.session_present
+    }
+
+    pub fn return_code(&self) -> ConnackReturnCode {
+        self.return_code
+    }
 }
 
 impl From<ConnackReturnCode> for u8 {
@@ -85,5 +107,19 @@ impl TryFrom<u8> for ConnackReturnCode {
                 invalid
             ))),
         }
+    }
+}
+
+impl fmt::Display for ConnackReturnCode {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let msg = match self {
+            ConnackReturnCode::Accepted => MSG_ACCEPTED,
+            ConnackReturnCode::UnacceptableProtocolVersion => MSG_UNACCEPTABLE_PROTOCOL_VERSION,
+            ConnackReturnCode::IdentifierRejected => MSG_IDENTIFIER_REJECTED,
+            ConnackReturnCode::ServerUnavailable => MSG_SERVER_UNAVAILABLE,
+            ConnackReturnCode::BadUserNameOrPassword => MSG_BAD_USER_NAME_OR_PASSWORD,
+            ConnackReturnCode::NotAuthorized => MSG_NOT_AUTHORIZED,
+        };
+        write!(f, "{}", msg)
     }
 }

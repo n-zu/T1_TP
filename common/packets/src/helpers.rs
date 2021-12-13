@@ -1,4 +1,4 @@
-use std::convert::TryFrom;
+use std::{convert::TryFrom, fmt};
 
 use crate::packet_error::{ErrorKind, PacketError, PacketResult};
 
@@ -123,6 +123,28 @@ pub fn check_reserved_bits(control_byte: u8, expected_reserved_bits: u8) -> Pack
 #[inline(always)]
 pub fn build_control_byte(packet_type: PacketType, reserved_bits: u8) -> u8 {
     ((u8::from(packet_type)) << PACKET_TYPE_SHIFT) | reserved_bits
+}
+
+impl fmt::Display for PacketType {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let packet_str = match self {
+            PacketType::Connect => "CONNECT",
+            PacketType::Connack => "CONNACK",
+            PacketType::Publish => "PUBLISH",
+            PacketType::Puback => "SUBSCRIBE",
+            PacketType::PubRec => "PUBREC",
+            PacketType::PubRel => "PUBREL",
+            PacketType::PubComp => "PUBCOMP",
+            PacketType::Subscribe => "SUBSCRIBE",
+            PacketType::Suback => "SUBACK",
+            PacketType::Unsubscribe => "UNSUBSCRIBE",
+            PacketType::Unsuback => "UNSUBACK",
+            PacketType::PingReq => "PINGREQ",
+            PacketType::PingResp => "PINGRESP",
+            PacketType::Disconnect => "DISCONNECT",
+        };
+        write!(f, "{}", &packet_str)
+    }
 }
 
 #[cfg(test)]

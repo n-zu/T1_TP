@@ -1,5 +1,5 @@
 TARGETS = client server common/packets common/threadpool
-SFLAGS ?= -num-clients 100 -num-messages 1000 -timeout 20s -global-timeout 180s -rampup-delay 1s -rampup-size 10
+SFLAGS ?= -num-clients 100 -num-messages 1000 -timeout 20s -global-timeout 180s -rampup-delay 1s -rampup-size 10 -publisher-qos 1
 
 all: fmt test clippy;
 

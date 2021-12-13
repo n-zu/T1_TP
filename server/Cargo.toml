@@ -7,8 +7,10 @@ edition = "2018"
 
 [dependencies]
 packets = { path = "../common/packets" }
-tracing-subscriber = "0.3.1"
-tracing = "0.1.29"
-tracing-appender = "0.2"
 threadpool = { path = "../common/threadpool" }
 rand = "0.8.4"
+tracing = "0.1.29"
+tracing-appender = "0.2"
+tracing-subscriber = {version = "0.3.1", features = ["json"]}
+serde = { version = "1.0.130", features = ["derive"] }
+serde_json = "1.0.72"

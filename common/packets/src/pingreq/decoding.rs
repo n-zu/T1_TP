@@ -18,13 +18,13 @@ impl MQTTDecoding for PingReq {
     /// # Errors
     ///
     /// Returns error if the packet does not follow the MQTT V3.1.1 protocol
-    fn read_from(bytes: &mut impl Read, control_byte: u8) -> PacketResult<Self>
+    fn read_from<T: Read>(stream: &mut T, control_byte: u8) -> PacketResult<Self>
     where
         Self: Sized,
     {
         check_packet_type(control_byte, PacketType::PingReq)?;
         check_reserved_bits(control_byte, RESERVED_BITS)?;
-        let mut bytes = packet_reader::read_remaining_bytes(bytes)?;
+        let mut bytes = packet_reader::read_remaining_bytes(stream)?;
         let mut buff = [0];
         match bytes.read_exact(&mut buff) {
             Ok(_) => Err(PacketError::new_msg(

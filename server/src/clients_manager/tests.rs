@@ -1,3 +1,5 @@
+use std::time::Duration;
+
 use packets::{
     connack::ConnackReturnCode,
     connect::{ConnectBuilder, LastWill},
@@ -6,10 +8,10 @@ use packets::{
 };
 
 use crate::{
-    clients_manager::ConnectInfo,
-    iomock::IOMock,
+    clients_manager::{simple_login::SimpleLogin, ConnectInfo},
     network_connection::NetworkConnection,
     server::{server_error::ServerErrorKind, ClientIdArg, ServerResult},
+    test_helpers::iomock::IOMock,
 };
 
 use super::{ClientsManager, GENERIC_ID_SUFFIX};
@@ -19,7 +21,10 @@ fn make_manager_with_clients(
     clean_session: bool,
     accounts_path: Option<&str>,
 ) -> ServerResult<ClientsManager<IOMock, u16>> {
-    let mut manager = ClientsManager::<IOMock, u16>::new(accounts_path);
+    let mut manager = match accounts_path {
+        Some(path) => ClientsManager::new(Some(Box::new(SimpleLogin::new(path).unwrap()))),
+        None => ClientsManager::new(None),
+    };
     let mut i = 0;
     for id in ids {
         let iomock = IOMock::new();
@@ -56,7 +61,6 @@ fn test_new_session_with_id() {
     let expected = ConnectInfo {
         id: String::from("client_id"),
         session_present: false,
-        return_code: ConnackReturnCode::Accepted,
         takeover_last_will: None,
     };
 
@@ -109,7 +113,9 @@ fn test_authorized_session() {
         .build()
         .unwrap();
     let network_connection = NetworkConnection::new(0, iomock);
-    let mut manager = ClientsManager::<IOMock, u16>::new(Some("tests/files/test_accounts.csv"));
+    let mut manager = ClientsManager::<IOMock, u16>::new(Some(Box::new(
+        SimpleLogin::new("tests/files/test_accounts.csv").unwrap(),
+    )));
 
     manager.new_session(network_connection, connect).unwrap();
     assert!(manager.clients.contains_key("client_id"));
@@ -127,7 +133,9 @@ fn test_invalid_username_should_fail() {
         .build()
         .unwrap();
     let network_connection = NetworkConnection::new(0, iomock);
-    let mut manager = ClientsManager::<IOMock, u16>::new(Some("tests/files/test_accounts.csv"));
+    let mut manager = ClientsManager::<IOMock, u16>::new(Some(Box::new(
+        SimpleLogin::new("tests/files/test_accounts.csv").unwrap(),
+    )));
 
     let result = manager.new_session(network_connection, connect);
     assert_eq!(
@@ -148,7 +156,9 @@ fn test_invalid_password_should_fail() {
         .build()
         .unwrap();
     let network_connection = NetworkConnection::new(0, iomock);
-    let mut manager = ClientsManager::<IOMock, u16>::new(Some("tests/files/test_accounts.csv"));
+    let mut manager = ClientsManager::<IOMock, u16>::new(Some(Box::new(
+        SimpleLogin::new("tests/files/test_accounts.csv").unwrap(),
+    )));
 
     let result = manager.new_session(network_connection, connect);
     assert_eq!(
@@ -182,7 +192,9 @@ fn test_ids_collision_should_fail() {
     let network_connection_1 = NetworkConnection::new(0, iomock_1);
     let network_connection_2 = NetworkConnection::new(1, iomock_2);
 
-    let mut manager = ClientsManager::<IOMock, u16>::new(Some("tests/files/test_accounts.csv"));
+    let mut manager = ClientsManager::<IOMock, u16>::new(Some(Box::new(
+        SimpleLogin::new("tests/files/test_accounts.csv").unwrap(),
+    )));
     manager
         .new_session(network_connection_1, connect_1)
         .unwrap();
@@ -220,7 +232,9 @@ fn test_takeover() {
     let network_connection_1 = NetworkConnection::new(0, iomock_1);
     let network_connection_2 = NetworkConnection::new(1, iomock_2);
 
-    let mut manager = ClientsManager::<IOMock, u16>::new(Some("tests/files/test_accounts.csv"));
+    let mut manager = ClientsManager::<IOMock, u16>::new(Some(Box::new(
+        SimpleLogin::new("tests/files/test_accounts.csv").unwrap(),
+    )));
     manager
         .new_session(network_connection_1, connect_1)
         .unwrap();
@@ -231,7 +245,6 @@ fn test_takeover() {
     let expected = ConnectInfo {
         id: String::from("client_id"),
         session_present: true,
-        return_code: ConnackReturnCode::Accepted,
         takeover_last_will: None,
     };
     assert_eq!(connect_info, expected);
@@ -262,7 +275,9 @@ fn test_takeover_should_update_client_properties() {
     let network_connection_1 = NetworkConnection::new(0, iomock_1);
     let network_connection_2 = NetworkConnection::new(1, iomock_2);
 
-    let mut manager = ClientsManager::<IOMock, u16>::new(Some("tests/files/test_accounts.csv"));
+    let mut manager = ClientsManager::<IOMock, u16>::new(Some(Box::new(
+        SimpleLogin::new("tests/files/test_accounts.csv").unwrap(),
+    )));
     manager
         .new_session(network_connection_1, connect_1)
         .unwrap();
@@ -271,13 +286,13 @@ fn test_takeover_should_update_client_properties() {
         .unwrap();
 
     let keep_alive = manager
-        .get_client_property("client_id", |client| Ok(client.keep_alive()))
+        .client_do("client_id", |client| Ok(client.keep_alive()))
         .unwrap();
     let clean_session = manager
-        .get_client_property("client_id", |client| Ok(client.clean_session()))
+        .client_do("client_id", |client| Ok(client.clean_session()))
         .unwrap();
 
-    assert_eq!(keep_alive, 1.5 * 15f32);
+    assert_eq!(keep_alive, Some(Duration::from_millis(22500)));
     assert_eq!(clean_session, true);
 }
 
@@ -305,7 +320,9 @@ fn test_takeover_should_return_lastwill() {
     let network_connection_1 = NetworkConnection::new(0, iomock_1);
     let network_connection_2 = NetworkConnection::new(1, iomock_2);
 
-    let mut manager = ClientsManager::<IOMock, u16>::new(Some("tests/files/test_accounts.csv"));
+    let mut manager = ClientsManager::<IOMock, u16>::new(Some(Box::new(
+        SimpleLogin::new("tests/files/test_accounts.csv").unwrap(),
+    )));
     manager
         .new_session(network_connection_1, connect_1)
         .unwrap();

@@ -19,7 +19,7 @@ impl MQTTDecoding for Disconnect {
     /// requirements of the MQTT V3.1.1 standard
     /// (packet type should be Disconnect, reserved bytes should be 0,
     /// remaining length should be 0)
-    fn read_from(stream: &mut impl Read, control_byte: u8) -> PacketResult<Disconnect> {
+    fn read_from<T: Read>(stream: &mut T, control_byte: u8) -> PacketResult<Disconnect> {
         check_packet_type(control_byte, PacketType::Disconnect)?;
         check_reserved_bits(control_byte, RESERVED_BITS)?;
         let mut packet_bytes = packet_reader::read_remaining_bytes(stream)?;

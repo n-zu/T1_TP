@@ -13,26 +13,33 @@ use packets::{
 };
 
 use crate::{
-    iomock::IOMock, network_connection::NetworkConnection, server::server_error::ServerErrorKind,
+    network_connection::NetworkConnection, server::server_error::ServerErrorKind,
+    test_helpers::iomock::IOMock,
 };
 
 use super::Client;
 
-macro_rules! assert_approx {
-    ($x:expr, $y:expr, $e:expr) => {
-        let max = if $x > $y { $x } else { $y };
-
-        if !(($x - $y).abs() / (max) < $e) {
-            panic!();
-        }
-    };
-}
-
-fn make_publish(qos: QoSLevel) -> Publish {
+fn make_publish(topic_name: &str, qos: QoSLevel) -> Publish {
     if qos == QoSLevel::QoSLevel0 {
-        Publish::new(false, QoSLevel::QoSLevel0, false, "top", "message", None).unwrap()
+        Publish::new(
+            false,
+            QoSLevel::QoSLevel0,
+            false,
+            topic_name,
+            "message",
+            None,
+        )
+        .unwrap()
     } else {
-        Publish::new(false, QoSLevel::QoSLevel1, false, "top", "message", Some(1)).unwrap()
+        Publish::new(
+            false,
+            QoSLevel::QoSLevel1,
+            false,
+            topic_name,
+            "message",
+            Some(1),
+        )
+        .unwrap()
     }
 }
 
@@ -94,15 +101,14 @@ fn test_keep_alive_returns_correct_value() {
     let network_connection = NetworkConnection::new(0, IOMock::new());
 
     let client = Client::new(connect, network_connection);
-
-    assert_approx!(client.keep_alive(), 1.5, f32::EPSILON);
+    assert_eq!(client.keep_alive(), Some(Duration::from_millis(1500)));
 }
 
 #[test]
 fn test_publish_send_packet_through_network_connection() {
     let connect = make_connect(0, true, None);
 
-    let publish = make_publish(QoSLevel::QoSLevel0);
+    let publish = make_publish("top", QoSLevel::QoSLevel0);
 
     let publish_copy = publish.clone();
 
@@ -124,7 +130,7 @@ fn test_publish_send_packet_through_network_connection() {
 fn test_publish_does_not_save_packet_in_unacknowledged_if_qos_is_0() {
     let connect = make_connect(0, true, None);
 
-    let publish = make_publish(QoSLevel::QoSLevel0);
+    let publish = make_publish("top", QoSLevel::QoSLevel0);
 
     let network_connection = NetworkConnection::new(0, IOMock::new());
 
@@ -137,7 +143,7 @@ fn test_publish_does_not_save_packet_in_unacknowledged_if_qos_is_0() {
 fn test_publish_saves_packet_in_unacknowledged_if_qos_is_1() {
     let connect = make_connect(0, true, None);
 
-    let publish = make_publish(QoSLevel::QoSLevel1);
+    let publish = make_publish("top", QoSLevel::QoSLevel1);
 
     let mut publish_copy = publish.clone();
     publish_copy.set_dup(true);
@@ -153,7 +159,7 @@ fn test_publish_saves_packet_in_unacknowledged_if_qos_is_1() {
 fn test_send_unacknowledged() {
     let connect = make_connect(0, true, None);
 
-    let publish = make_publish(QoSLevel::QoSLevel1);
+    let publish = make_publish("top", QoSLevel::QoSLevel1);
 
     let mut publish_copy = publish.clone();
     publish_copy.set_dup(true);
@@ -181,7 +187,7 @@ fn test_send_unacknowledged() {
 fn test_send_unacknowledged_multiple_times() {
     let connect = make_connect(0, true, None);
 
-    let publish = make_publish(QoSLevel::QoSLevel1);
+    let publish = make_publish("top", QoSLevel::QoSLevel1);
 
     let mut publish_copy = publish.clone();
     publish_copy.set_dup(true);
@@ -215,7 +221,7 @@ fn test_send_unacknowledged_multiple_times() {
 fn test_acknowledge_remove_packet_from_list() {
     let connect = make_connect(0, true, None);
 
-    let publish = make_publish(QoSLevel::QoSLevel1);
+    let publish = make_publish("top", QoSLevel::QoSLevel1);
 
     let puback = Puback::new(1).unwrap();
 
@@ -232,7 +238,7 @@ fn test_acknowledge_remove_packet_from_list() {
 fn test_send_unacknowledged_inflight_messages() {
     let connect = make_connect(0, true, None);
 
-    let publish_1 = make_publish(QoSLevel::QoSLevel1);
+    let publish_1 = make_publish("top", QoSLevel::QoSLevel1);
 
     let publish_2 = Publish::new(
         false,
@@ -283,7 +289,7 @@ fn test_send_unacknowledged_inflight_messages() {
 fn test_send_unacknowledged_inflight_messages_bigger_than_unacknowledged_should_work() {
     let connect = make_connect(0, true, None);
 
-    let publish = make_publish(QoSLevel::QoSLevel1);
+    let publish = make_publish("top", QoSLevel::QoSLevel1);
 
     let mut publish_copy = publish.clone();
     publish_copy.set_dup(true);
@@ -311,7 +317,7 @@ fn test_send_unacknowledged_inflight_messages_bigger_than_unacknowledged_should_
 fn test_send_unacknowledged_min_elapsed_time_should_not_send_recent_packets() {
     let connect = make_connect(0, true, None);
 
-    let publish = make_publish(QoSLevel::QoSLevel1);
+    let publish = make_publish("top", QoSLevel::QoSLevel1);
 
     let publish_copy = publish.clone();
 
@@ -341,7 +347,7 @@ fn test_send_unacknowledged_min_elapsed_time_should_not_send_recent_packets() {
 fn test_send_unacknowledged_min_elapsed_time_should_send_old_packets() {
     let connect = make_connect(0, true, None);
 
-    let publish = make_publish(QoSLevel::QoSLevel1);
+    let publish = make_publish("top", QoSLevel::QoSLevel1);
 
     let mut publish_copy = publish.clone();
     publish_copy.set_dup(true);
@@ -368,6 +374,48 @@ fn test_send_unacknowledged_min_elapsed_time_should_send_old_packets() {
     network_connection_copy.read_exact(&mut control).unwrap();
     let received = Publish::read_from(&mut network_connection_copy, control[0]).unwrap();
     assert_eq!(received, publish_copy);
+}
+
+#[test]
+fn test_send_unacknowledged_should_keep_order() {
+    let connect = make_connect(0, false, None);
+    let publish1 = make_publish("top1", QoSLevel::QoSLevel1);
+    let publish2 = make_publish("top2", QoSLevel::QoSLevel1);
+
+    let mut publish1_copy = publish1.clone();
+
+    let network_connection = NetworkConnection::new(0, IOMock::new());
+    let mut client = Client::new(connect, network_connection);
+
+    client.send_publish(publish1).unwrap();
+    client.send_publish(publish2).unwrap();
+    // No se deberia enviar ninguno y la cola de unacknowledged
+    // queda igual
+    client
+        .send_unacknowledged(None, Some(Duration::from_secs(1)))
+        .unwrap();
+    // Se envia el primer paquete
+    client.send_unacknowledged(Some(1), None).unwrap();
+
+    let mut network_connection_copy = client.connection.unwrap().try_clone().unwrap();
+
+    // publish1, dup_flag false
+    let mut control = [0u8];
+    network_connection_copy.read_exact(&mut control).unwrap();
+    Publish::read_from(&mut network_connection_copy, control[0]).unwrap();
+
+    // publish2, dup_flag false
+    let mut control = [0u8];
+    network_connection_copy.read_exact(&mut control).unwrap();
+    Publish::read_from(&mut network_connection_copy, control[0]).unwrap();
+
+    // publish1, dup_flag true
+    let mut control = [0u8];
+    network_connection_copy.read_exact(&mut control).unwrap();
+    let received = Publish::read_from(&mut network_connection_copy, control[0]).unwrap();
+    publish1_copy.set_dup(true);
+
+    assert_eq!(received, publish1_copy);
 }
 
 #[test]

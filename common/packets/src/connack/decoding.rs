@@ -46,8 +46,8 @@ impl MQTTDecoding for Connack {
     /// let v: Vec<u8> = vec![0b10, 0b01, 0b0];
     /// let mut stream = Cursor::new(v);
     /// let result = Connack::read_from(&mut stream, control_byte).unwrap();
-    /// let connack_expected = Connack { session_present: true, return_code: ConnackReturnCode::Accepted };
-    /// assert_eq!(result, connack_expected);
+    /// assert!(result.session_present());
+    /// assert_eq!(result.return_code(), ConnackReturnCode::Accepted);
     /// ```
     /// # Errors
     ///
@@ -56,7 +56,7 @@ impl MQTTDecoding for Connack {
     /// - return_code is not 0
     ///
     /// If return_code is not 0, this function returns a specific PacketError
-    fn read_from(stream: &mut impl Read, control_byte: u8) -> PacketResult<Connack> {
+    fn read_from<T: Read>(stream: &mut T, control_byte: u8) -> PacketResult<Connack> {
         let buffer = [0u8; 1];
         check_packet_type(control_byte, PacketType::Connack)?;
         check_reserved_bits(control_byte, CONNACK_RESERVED_BITS)?;

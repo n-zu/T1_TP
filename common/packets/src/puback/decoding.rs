@@ -33,10 +33,10 @@ impl MQTTDecoding for Puback {
     /// let result = Puback::read_from(&mut stream, control_byte).unwrap();
     /// assert_eq!(expected, result);
     /// ```
-    fn read_from(bytes: &mut impl Read, control_byte: u8) -> PacketResult<Self> {
+    fn read_from<T: Read>(stream: &mut T, control_byte: u8) -> PacketResult<Self> {
         check_packet_type(control_byte, PacketType::Puback)?;
         check_reserved_bits(control_byte, RESERVED_BITS)?;
-        let mut remaining_bytes = packet_reader::read_remaining_bytes(bytes)?;
+        let mut remaining_bytes = packet_reader::read_remaining_bytes(stream)?;
         let packet_id = Self::read_packet_id(&mut remaining_bytes);
         Self::verify_packet_end(&mut remaining_bytes)?;
         Ok(Self { packet_id })

@@ -25,10 +25,10 @@ impl MQTTDecoding for Unsubscribe {
     /// - Reserved bits are not 0b0010
     /// - Remaining length is greater than 256 MB
     /// - Topic filter is empty
-    fn read_from(bytes: &mut impl Read, control_byte: u8) -> PacketResult<Unsubscribe> {
+    fn read_from<T: Read>(stream: &mut T, control_byte: u8) -> PacketResult<Unsubscribe> {
         check_packet_type(control_byte, PacketType::Unsubscribe)?;
         check_reserved_bits(control_byte, RESERVED_BITS)?;
-        let mut remaining_bytes = packet_reader::read_remaining_bytes(bytes)?;
+        let mut remaining_bytes = packet_reader::read_remaining_bytes(stream)?;
         let packet_id = Self::read_packet_id(&mut remaining_bytes);
         let mut topic_filters: Vec<TopicFilter> = Vec::new();
         Self::read_topic_filters(&mut remaining_bytes, &mut topic_filters)?;

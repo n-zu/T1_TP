@@ -3,6 +3,7 @@ use crate::qos::QoSLevel;
 mod decoding;
 mod encoding;
 pub use encoding::ConnectBuilder;
+use serde::{Deserialize, Serialize};
 #[cfg(test)]
 mod tests;
 
@@ -23,7 +24,7 @@ const CLEAN_SESSION: u8 = 0x02;
 #[doc(hidden)]
 const RESERVED_BITS: u8 = 0x0;
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct LastWill {
     pub retain_flag: bool,
     pub qos: QoSLevel,
@@ -47,7 +48,7 @@ impl LastWill {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Connect {
     client_id: String,
     clean_session: bool,

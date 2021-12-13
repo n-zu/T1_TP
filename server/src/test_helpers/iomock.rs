@@ -2,9 +2,11 @@
 
 use std::io::{self, Read};
 
+use serde::{Deserialize, Serialize};
+
 use crate::traits::{Close, TryClone};
 
-#[derive(Debug)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct IOMock {
     pub closed: bool,
     pub buf: Vec<u8>,
@@ -45,11 +47,11 @@ impl Close for IOMock {
 }
 
 impl TryClone for IOMock {
-    fn try_clone(&self) -> Option<Self>
+    fn try_clone(&self) -> io::Result<Self>
     where
         Self: Sized,
     {
-        Some(Self {
+        Ok(Self {
             closed: self.closed,
             buf: self.buf.clone(),
         })
