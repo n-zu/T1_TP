@@ -477,7 +477,7 @@ fn test_subscription_dump() {
     assert!(publish.packet_id().is_none());
     assert_eq!(publish.payload(), "msg");
 }
-/*
+
 #[test]
 fn test_subscription_dump_qos1() {
     let _ = fs::remove_file("tests/files/dumps/dump3.json");
@@ -510,15 +510,26 @@ fn test_subscription_dump_qos1() {
         .unwrap();
 
     // Envio publish QoS 1 con cliente 2
-    stream_2.write_all(&Publish::new(false, QoSLevel1, false, "topic", "msg", Some(123)).unwrap().encode().unwrap()).unwrap();
+    stream_2
+        .write_all(
+            &Publish::new(false, QoSLevel1, false, "topic", "msg", Some(123))
+                .unwrap()
+                .encode()
+                .unwrap(),
+        )
+        .unwrap();
 
     stream_2.read_exact(&mut control).unwrap();
     Puback::read_from(&mut stream_2, control[0]).unwrap();
 
-    // Apago server: debería dumpear
-    drop(s); // Por alguna razón, si dejo esta línea se borra el dump.
+    // Revisar: por que falla si cliente 2 no se desconecta gracefully
+    stream_2
+        .write_all(&Disconnect::new().encode().unwrap())
+        .unwrap();
 
-    /*
+    // Apago server: debería dumpear
+    drop(s);
+
     // Vuelvo a cargar el dump y conecto cliente 1
     let (_s, port) = start_server(
         Some(("tests/files/dumps/dump3.json", Duration::from_secs(10))),
@@ -532,6 +543,5 @@ fn test_subscription_dump_qos1() {
     let publish = Publish::read_from(&mut stream_1, control[0]).unwrap();
     assert_eq!(publish.payload(), "msg");
     assert_eq!(publish.topic_name(), "topic");
-    assert_eq!(publish.qos(), QoSLevel1);*/
+    assert_eq!(publish.qos(), QoSLevel1);
 }
- */
