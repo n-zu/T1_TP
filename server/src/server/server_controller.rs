@@ -8,8 +8,6 @@ use std::{
 
 use tracing::error;
 
-use super::ServerResult;
-
 /// It is responsible for shutting down the
 /// server from a different thread than
 /// the one running it
@@ -34,7 +32,7 @@ impl ServerController {
     }
 
     /// Turn of the server
-    pub fn shutdown(&mut self) -> ServerResult<()> {
+    fn shutdown(&mut self) {
         self.shutdown_bool.store(true, Ordering::Relaxed);
         if let Some(handle) = self.handle.take() {
             let sv_thread_id = handle.thread().id();
@@ -42,12 +40,11 @@ impl ServerController {
                 error!("{:?}: Thread joineado con panic: {:?}", sv_thread_id, e);
             });
         }
-        Ok(())
     }
 }
 
 impl Drop for ServerController {
     fn drop(&mut self) {
-        self.shutdown().expect("Error al cerrar el servidor");
+        self.shutdown()
     }
 }

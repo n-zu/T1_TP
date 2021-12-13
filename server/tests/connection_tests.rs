@@ -186,7 +186,7 @@ fn test_takeover_only_works_with_same_username() {
 
 #[test]
 fn test_session_present_dump() {
-    let (mut s, port) = start_server(
+    let (s, port) = start_server(
         Some(("tests/files/dumps/dump1.json", Duration::from_secs(10))),
         None,
     );
@@ -200,7 +200,7 @@ fn test_session_present_dump() {
         .unwrap();
 
     // Apago server: debería dumpear
-    s.shutdown().unwrap();
+    drop(s);
 
     let (_s, port) = start_server(
         Some(("tests/files/dumps/dump1.json", Duration::from_secs(10))),
