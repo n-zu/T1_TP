@@ -28,7 +28,7 @@ impl MQTTDecoding for PingReq {
         let mut buff = [0];
         match bytes.read_exact(&mut buff) {
             Ok(_) => Err(PacketError::new_msg(
-                "Se recibio PingReq con remaining_length != 0",
+                "Se recibió PingReq con remaining_length != 0",
             )),
             Err(err) if err.kind() == io::ErrorKind::UnexpectedEof => Ok(PingReq {}),
             Err(err) => Err(PacketError::new_msg(&format!(

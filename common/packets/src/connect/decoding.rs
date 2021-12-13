@@ -27,8 +27,8 @@ impl MQTTDecoding for Connect {
         Connect::verify_protocol(&mut bytes)?;
         Connect::verify_protocol_level(&mut bytes)?;
         let mut ret = Connect::get_flags(&mut bytes)?;
-        ret.get_keepalive(&mut bytes)?;
-        ret.get_clientid(&mut bytes)?;
+        ret.get_keep_alive(&mut bytes)?;
+        ret.get_client_id(&mut bytes)?;
         ret.get_will_data(&mut bytes)?;
         ret.get_auth(&mut bytes)?;
 
@@ -118,14 +118,14 @@ impl Connect {
         })
     }
 
-    fn get_keepalive(&mut self, bytes: &mut impl Read) -> PacketResult<()> {
+    fn get_keep_alive(&mut self, bytes: &mut impl Read) -> PacketResult<()> {
         let mut buf = [0; 2];
         bytes.read_exact(&mut buf)?;
         self.keep_alive = u16::from_be_bytes(buf);
         Ok(())
     }
 
-    fn get_clientid(&mut self, bytes: &mut impl Read) -> PacketResult<()> {
+    fn get_client_id(&mut self, bytes: &mut impl Read) -> PacketResult<()> {
         let string = Field::new_from_stream(bytes).ok_or_else(PacketError::new)?;
         self.client_id = string.value;
         Ok(())

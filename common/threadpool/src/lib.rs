@@ -58,7 +58,7 @@ impl Drop for ManagerHandle {
 }
 
 impl ThreadManager {
-    // Crea el ThreadManager con amount threads, recive tareas por el job_receiver hasta que se cierre el sender
+    // Crea el ThreadManager con amount threads, recibe tareas por el job_receiver hasta que se cierre el sender
     fn new(amount: usize, job_receiver: Receiver<Job>) -> Self {
         let (ready_sender, ready_receiver) = channel();
 

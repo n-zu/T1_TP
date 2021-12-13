@@ -123,7 +123,7 @@ impl<C: Config> Server<C> {
                     });
             })
             .unwrap_or_else(|e| {
-                error!("Eror de ThreadPool: {}", e);
+                error!("Error de ThreadPool: {}", e);
             });
 
         Ok(())

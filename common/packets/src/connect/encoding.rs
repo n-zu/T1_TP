@@ -119,7 +119,7 @@ impl ConnectBuilder {
     ///
     /// # Errors
     ///
-    /// Returns error if the length of the client_id exceedes
+    /// Returns error if the length of the client_id exceeds
     /// the maximum established for utf8 fields in MQTT V3.1.1
     /// protocol
     pub fn new(client_id: &str, keep_alive: u16, clean_session: bool) -> PacketResult<Self> {

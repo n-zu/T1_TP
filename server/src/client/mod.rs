@@ -77,7 +77,7 @@ where
     }
 
     /// Return true if the client is connected.
-    /// Othrewise, return false.
+    /// Otherwise, return false.
     pub fn connected(&self) -> bool {
         self.connection.is_some()
     }

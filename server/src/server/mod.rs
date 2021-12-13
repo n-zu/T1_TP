@@ -279,7 +279,7 @@ impl<C: Config> Server<C> {
     /// In case a Client TakeOver occurs and the previous session had LastWill,
     /// it is also published.
     #[instrument(skip(self, connect_info, network_connection) fields(client_id = %connect_info.id))]
-    fn manage_succesfull_connection(
+    fn manage_successful_connection(
         self: &Arc<Self>,
         connect_info: ConnectInfo,
         mut network_connection: NetworkConnection<TcpStream, SocketAddr>,
@@ -344,7 +344,7 @@ impl<C: Config> Server<C> {
     ) -> ServerResult<()> {
         match self.connect_client(&mut network_connection) {
             Ok(connect_info) => {
-                self.manage_succesfull_connection(connect_info, network_connection)?
+                self.manage_successful_connection(connect_info, network_connection)?
             }
             Err(err) => self.manage_failed_connection(network_connection, err)?,
         };

@@ -64,7 +64,7 @@ pub struct DisconnectInfo {
     pub clean_session: bool,
 }
 
-/// Informtation related to the connection of a client.
+/// Information related to the connection of a client.
 ///
 /// It is only associated with a valid and accepted
 /// connection (that is, if a method returns this

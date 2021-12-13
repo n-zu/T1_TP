@@ -127,7 +127,7 @@ fn test_pings_should_disconnect() {
     PingResp::read_from(&mut stream, control[0]).unwrap();
 
     // Protocolo dice que si no mando ping luego de 1,5 veces el tiempo de keep_alive,
-    // el servidor debería desconectarme. Le doy 100ms de márgen.
+    // el servidor debería desconectarme. Le doy 100ms de margen.
     thread::sleep(Duration::from_millis(1600));
     assert_eq!(stream.read(&mut control).unwrap(), 0);
 }
