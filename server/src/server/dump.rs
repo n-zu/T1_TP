@@ -2,6 +2,7 @@ use std::{
     fs::{self},
     io::{self},
     net::{SocketAddr, TcpStream},
+    path::MAIN_SEPARATOR,
     sync::{Arc, Mutex, RwLock},
 };
 
@@ -92,6 +93,10 @@ impl<C: Config> Server<C> {
                 "topic_handler": topic_handler,
                 "clients_manager": clients_manager
             });
+
+            if let Some((folder, _)) = dump_info.0.rsplit_once(MAIN_SEPARATOR) {
+                fs::create_dir_all(folder)?;
+            }
             fs::write(dump_info.0, json.to_string())?;
         }
         Ok(())
