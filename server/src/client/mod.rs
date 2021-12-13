@@ -268,8 +268,6 @@ where
         S: fmt::Debug,
         I: fmt::Debug,
     {
-        info!("Reenviando paquetes UNACKNOWLEDGED");
-
         let inflight_messages = inflight_messages.unwrap_or(self.unacknowledged.len());
         let inflight_messages = std::cmp::min(inflight_messages, self.unacknowledged.len());
 
