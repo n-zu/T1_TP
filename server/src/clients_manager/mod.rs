@@ -112,28 +112,12 @@ where
         }
     }
 
-    pub fn client_do<F>(&self, id: &ClientIdArg, action: F) -> ServerResult<()>
+    pub fn client_do<F, T>(&self, id: &ClientIdArg, action: F) -> ServerResult<T>
     where
-        F: FnOnce(&mut Client<S, I>) -> ServerResult<()>,
+        F: FnOnce(&mut Client<S, I>) -> ServerResult<T>,
     {
         match self.clients.get(id) {
-            Some(session) => {
-                action(session.lock()?.deref_mut())?;
-                Ok(())
-            }
-            None => Err(ServerError::new_kind(
-                &format!("No existe el cliente con id <{}>", id),
-                ServerErrorKind::ClientNotFound,
-            )),
-        }
-    }
-
-    pub fn get_client_property<F, T>(&self, id: &ClientIdArg, action: F) -> ServerResult<T>
-    where
-        F: FnOnce(std::sync::MutexGuard<'_, Client<S, I>>) -> ServerResult<T>,
-    {
-        match self.clients.get(id) {
-            Some(session) => action(session.lock()?),
+            Some(session) => action(session.lock()?.deref_mut()),
             None => Err(ServerError::new_kind(
                 &format!("No existe el cliente con id <{}>", id),
                 ServerErrorKind::ClientNotFound,
@@ -147,7 +131,7 @@ where
     ///
     /// Returns the disconnection information of the client.
     ///
-    /// It is improtant to note that this method does not fail
+    /// It is important to note that this method does not fail
     /// if the client has clean_session false and was already
     /// disconnected, but returns a [`DisconnectInfo`] with
     /// publish_las_will in None and clean_session in false
@@ -181,7 +165,7 @@ where
             }
         }
 
-        let publish_last_will = self.client_do(id, |mut session| session.disconnect(gracefully))?;
+        let publish_last_will = self.client_do(id, |session| session.disconnect(gracefully))?;
         let clean_session;
         // Si la funcion anterior no devolvio error, entonces existe el cliente
         if self
@@ -296,8 +280,7 @@ where
 
     /// Makes the necessary modifications in the [`Connect`] packet to
     /// be able to create a client from its information. If it contains
-    /// invalid information, it returns an error of kinf
-    /// [`ServerErrorKind::ConnectionRefused`]
+    /// invalid information, it returns an error of kind [`ServerErrorKind::ConnectionRefused`]
     fn process_client_empty_id(&mut self, connect: &mut Connect) -> ServerResult<()> {
         if !connect.clean_session() {
             Err(ServerError::new_kind(

@@ -96,9 +96,7 @@ impl<C: Config> Server<C> {
     ) -> ServerResult<()> {
         self.clients_manager
             .read()?
-            .client_do(&client_id_receiver, |mut client| {
-                client.send_publish(publish)
-            })
+            .client_do(&client_id_receiver, |client| client.send_publish(publish))
     }
 
     #[instrument(skip(self, threadpool_copy, message), fields(client_id_receiver = %message.client_id))]
@@ -169,9 +167,9 @@ impl<C: Config> Server<C> {
         let packet_id = publish.packet_id();
         self.broadcast_publish(publish)?;
         if let Some(packet_id) = packet_id {
-            self.clients_manager.read()?.client_do(id, |mut client| {
-                client.send_packet(&Puback::new(packet_id)?)
-            })?;
+            self.clients_manager
+                .read()?
+                .client_do(id, |client| client.send_packet(&Puback::new(packet_id)?))?;
         }
         Ok(())
     }

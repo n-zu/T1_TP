@@ -248,7 +248,7 @@ impl<C: Config> Server<C> {
                 }
                 Err(err) if err.kind() == ServerErrorKind::Timeout => {
                     timeout_counter += UNACK_RESENDING_FREQ;
-                    self.clients_manager.read()?.client_do(id, |mut client| {
+                    self.clients_manager.read()?.client_do(id, |client| {
                         client.send_unacknowledged(INFLIGHT_MESSAGES, MIN_ELAPSED_TIME)
                     })?;
                 }
