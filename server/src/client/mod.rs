@@ -7,7 +7,7 @@ use packets::{puback::Puback, publish::Publish};
 use serde::{Deserialize, Serialize};
 use tracing::{info, instrument};
 
-use crate::traits::Close;
+use crate::traits::{Close, Interrupt};
 use crate::{
     network_connection::NetworkConnection,
     server::{server_error::ServerErrorKind, ClientId, ServerError, ServerResult},
@@ -25,7 +25,7 @@ mod tests;
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Client<S, I>
 where
-    S: Write + Send + Sync + 'static,
+    S: Write + Interrupt + Send + Sync + 'static,
     I: fmt::Display,
 {
     /// Id of the client.
@@ -58,11 +58,12 @@ where
 
 impl<S, I> Client<S, I>
 where
-    S: Write + Send + Sync + 'static,
+    S: Write + Interrupt + Send + Sync + 'static,
     I: fmt::Display,
 {
     /// Create a new connected client
-    pub fn new(connect: Connect, network_connection: NetworkConnection<S, I>) -> Self {
+    pub fn new(connect: Connect, mut network_connection: NetworkConnection<S, I>) -> Self {
+        network_connection.alert(Duration::from_millis((1500 * connect.keep_alive()) as u64)).unwrap();
         Self {
             id: connect.client_id().to_owned(),
             connect,
@@ -245,6 +246,11 @@ where
         if let Some(idx) = idx {
             self.unacknowledged.remove(idx);
         }
+        if self.unacknowledged.is_empty() {
+            if let Some(connection) = &mut self.connection {
+                connection.sleep()?;
+            }
+        }
         Ok(())
     }
 
@@ -306,6 +312,15 @@ where
         if publish.qos() == QoSLevel::QoSLevel1 {
             publish.set_dup(true);
             self.unacknowledged.push((SystemTime::now(), publish));
+            let keep_alive = match self.keep_alive() {
+                Some(keep_alive) => keep_alive,
+                None => return Ok(())
+            };
+            let connection = match &mut self.connection {
+                Some(connection) => connection,
+                None => return Ok(())
+            };
+            connection.alert(keep_alive)?;
         }
         Ok(())
     }

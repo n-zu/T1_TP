@@ -16,7 +16,7 @@ use crate::{
     client::Client,
     network_connection::NetworkConnection,
     server::{server_error::ServerErrorKind, ClientId, ClientIdArg, ServerError, ServerResult},
-    traits::{Close, Login, LoginResult},
+    traits::{Close, Login, LoginResult, Interrupt},
 };
 
 const GENERIC_ID_SUFFIX: &str = "__CLIENT__";
@@ -27,7 +27,7 @@ const GENERIC_ID_SUFFIX: &str = "__CLIENT__";
 #[derive(Debug, Serialize, Deserialize)]
 pub struct ClientsManager<S, I>
 where
-    S: Write + Send + Sync + 'static,
+    S: Write + Interrupt + Send + Sync + 'static,
     I: fmt::Display,
 {
     #[serde(bound(serialize = "Client<S, I>: Serialize<>"))]
@@ -98,7 +98,7 @@ pub struct ShutdownInfo {
 
 impl<S, I> ClientsManager<S, I>
 where
-    S: Read + Write + Send + Sync + 'static,
+    S: Read + Interrupt + Write + Send + Sync + 'static,
     I: fmt::Display + Clone + std::hash::Hash + Eq,
 {
     /// Creates a new [`ClientsManager`], without any

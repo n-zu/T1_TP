@@ -38,7 +38,7 @@ pub use server_error::ServerError;
 /// of the [`Connect`] packet
 const CONNECTION_WAIT_TIMEOUT: Duration = Duration::from_secs(180);
 /// How often unacknowledged packets are sent
-const UNACK_RESENDING_FREQ: Duration = Duration::from_millis(500);
+pub const UNACK_RESENDING_FREQ: Duration = Duration::from_millis(500);
 /// How long the server sleeps between each failed TCP connection
 /// atempt
 const ACCEPT_SLEEP_DUR: Duration = Duration::from_millis(100);
@@ -209,9 +209,6 @@ impl<C: Config> Server<C> {
     ) -> ServerResult<ConnectInfo> {
         info!("Conectando cliente");
         let connect = self.wait_for_connect(network_connection)?;
-        network_connection
-            .stream_mut()
-            .set_read_timeout(Some(UNACK_RESENDING_FREQ))?;
         let connect_info = self
             .clients_manager
             .write()?
@@ -232,7 +229,7 @@ impl<C: Config> Server<C> {
         id: &ClientIdArg,
         network_connection: &mut NetworkConnection<TcpStream, SocketAddr>,
     ) -> ServerResult<bool> {
-        let mut timeout_counter = Duration::ZERO;
+        let mut last_activity = SystemTime::now();
         let keep_alive_opt = self
             .clients_manager
             .read()?
@@ -241,13 +238,13 @@ impl<C: Config> Server<C> {
         loop {
             match self.process_packet(network_connection, id) {
                 Ok(packet_type) => {
-                    timeout_counter = Duration::ZERO;
+                    last_activity = SystemTime::now();
                     if packet_type == PacketType::Disconnect {
                         return Ok(true);
                     }
+                    continue;
                 }
                 Err(err) if err.kind() == ServerErrorKind::Timeout => {
-                    timeout_counter += UNACK_RESENDING_FREQ;
                     self.clients_manager.read()?.client_do(id, |mut client| {
                         client.send_unacknowledged(INFLIGHT_MESSAGES, MIN_ELAPSED_TIME)
                     })?;
@@ -260,7 +257,7 @@ impl<C: Config> Server<C> {
                 }
             }
             if let Some(keep_alive) = keep_alive_opt {
-                if timeout_counter > keep_alive {
+                if SystemTime::now().duration_since(last_activity).unwrap() > keep_alive {
                     warn!("KeepAlive Timeout");
                     return Ok(false);
                 }
