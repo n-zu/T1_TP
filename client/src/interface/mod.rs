@@ -1,5 +1,6 @@
+use std::cell::RefCell;
 use std::convert::TryFrom;
-use std::{rc::Rc, sync::Mutex};
+use std::rc::Rc;
 
 mod client_observer;
 mod publication_counter;
@@ -34,7 +35,7 @@ use self::utils::{Icon, InterfaceUtils};
 /// from the interface
 pub struct Controller {
     builder: Builder,
-    client: Mutex<Option<Client<ClientObserver>>>,
+    client: RefCell<Option<Client<ClientObserver>>>,
 }
 
 impl InterfaceUtils for Controller {
@@ -49,7 +50,7 @@ impl Controller {
     pub fn new(builder: Builder) -> Rc<Self> {
         let cont = Rc::new(Self {
             builder,
-            client: Mutex::new(None),
+            client: RefCell::new(None),
         });
         cont.setup_handlers();
         cont.show_connect_menu();
@@ -148,7 +149,7 @@ impl Controller {
             "Conectado a {} ({})",
             full_addr, full_client
         )));
-        self.client.lock()?.replace(client);
+        self.client.borrow_mut().replace(client);
 
         Ok(())
     }
@@ -246,7 +247,7 @@ impl Controller {
 
         let packet = Subscribe::new(vec![topic], rand::random());
 
-        if let Some(client) = self.client.lock()?.as_mut() {
+        if let Some(client) = self.client.borrow_mut().as_mut() {
             client.subscribe(packet)?;
         } else {
             return Err(ClientError::new("No hay una conexión activa"));
@@ -304,7 +305,7 @@ impl Controller {
             id,
         )?;
 
-        if let Some(client) = self.client.lock()?.as_mut() {
+        if let Some(client) = self.client.borrow_mut().as_mut() {
             client.publish(packet)?;
         } else {
             return Err(ClientError::new("No hay una conexión activa"));
@@ -332,7 +333,7 @@ impl Controller {
     #[doc(hidden)]
     /// Drops the internal Client
     fn _disconnect(&self) -> Result<(), ClientError> {
-        self.client.lock()?.take();
+        self.client.borrow_mut().take();
         Ok(())
     }
 
@@ -364,7 +365,7 @@ impl Controller {
             QoSLevel::QoSLevel0,
         )?];
         let unsubscribe = Unsubscribe::new(rand::random(), text)?;
-        if let Some(client) = self.client.lock()?.as_mut() {
+        if let Some(client) = self.client.borrow_mut().as_mut() {
             client.unsubscribe(unsubscribe)?;
         } else {
             return Err(ClientError::new("No hay una conexión activa"));

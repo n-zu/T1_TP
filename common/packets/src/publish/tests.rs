@@ -11,9 +11,10 @@ fn test_dup_flag_0_with_qos_level_different_from_0_should_raise_invalid_dup_flag
     let control_byte = 0b111000u8;
     let dummy: Vec<u8> = vec![0b111000];
     let mut stream = Cursor::new(dummy);
-    let expected_error =
-        PacketError::new_kind(MSG_DUP_FLAG_1_WITH_QOS_LEVEL_0, ErrorKind::InvalidDupFlag);
-    let result = Publish::read_from(&mut stream, control_byte).unwrap_err();
+    let expected_error = ErrorKind::InvalidDupFlag;
+    let result = Publish::read_from(&mut stream, control_byte)
+        .unwrap_err()
+        .kind();
     assert_eq!(result, expected_error);
 }
 
@@ -22,8 +23,10 @@ fn test_qos_level_3_should_raise_invalid_qos_level_error() {
     let control_byte = 0b110110u8;
     let dummy: Vec<u8> = vec![0b110110];
     let mut stream = Cursor::new(dummy);
-    let expected_error = PacketError::new_kind("Invalid QoS level", ErrorKind::InvalidQoSLevel);
-    let result = Publish::read_from(&mut stream, control_byte).unwrap_err();
+    let expected_error = ErrorKind::InvalidQoSLevel;
+    let result = Publish::read_from(&mut stream, control_byte)
+        .unwrap_err()
+        .kind();
     assert_eq!(result, expected_error);
 }
 
@@ -32,8 +35,11 @@ fn test_packet_control_type_5_should_raise_invalid_control_packet_type_error() {
     let control_byte = 0b100000u8;
     let dummy: Vec<u8> = vec![0b100000];
     let mut stream = Cursor::new(dummy);
-    let result = Publish::read_from(&mut stream, control_byte).unwrap_err();
-    assert_eq!(result.kind(), ErrorKind::InvalidControlPacketType);
+    let result = Publish::read_from(&mut stream, control_byte)
+        .unwrap_err()
+        .kind();
+    let expected_error = ErrorKind::InvalidControlPacketType;
+    assert_eq!(result, expected_error);
 }
 
 #[test]
@@ -165,11 +171,10 @@ fn test_topic_name_can_not_have_wildcards() {
     let mut bytes = vec![remaining_data.len() as u8];
     bytes.append(&mut remaining_data);
     let mut stream = Cursor::new(bytes);
-    let expected_error = PacketError::new_kind(
-        MSG_TOPIC_WILDCARDS,
-        ErrorKind::TopicNameMustNotHaveWildcards,
-    );
-    let result = Publish::read_from(&mut stream, control_byte).unwrap_err();
+    let expected_error = ErrorKind::TopicNameMustNotHaveWildcards;
+    let result = Publish::read_from(&mut stream, control_byte)
+        .unwrap_err()
+        .kind();
     assert_eq!(expected_error, result);
 }
 
@@ -187,8 +192,10 @@ fn test_publish_packet_can_not_have_packet_id_0() {
     let mut bytes = vec![remaining_data.len() as u8];
     bytes.append(&mut remaining_data);
     let mut stream = Cursor::new(bytes);
-    let expected_error = PacketError::new_msg(MSG_INVALID_PACKET_ID);
-    let result = Publish::read_from(&mut stream, control_byte).unwrap_err();
+    let expected_error = PacketError::new().kind();
+    let result = Publish::read_from(&mut stream, control_byte)
+        .unwrap_err()
+        .kind();
     assert_eq!(expected_error, result);
 }
 
@@ -301,13 +308,17 @@ fn test_publish_cannot_have_packet_identifier_with_qos_0() {
         "message",
         Some(350),
     );
-    assert!(packet.is_err());
+    let result = packet.err().unwrap().kind();
+    let expected_error = ErrorKind::Other;
+    assert_eq!(result, expected_error);
 }
 
 #[test]
 fn test_publish_must_have_packet_identifier_with_qos_1() {
     let packet = Publish::new(false, QoSLevel::QoSLevel1, false, "topic", "message", None);
-    assert!(packet.is_err());
+    let result = packet.err().unwrap().kind();
+    let expected_error = ErrorKind::Other;
+    assert_eq!(result, expected_error);
 }
 
 #[test]
@@ -320,7 +331,9 @@ fn test_topic_name_cannot_contain_single_level_wildcard() {
         "message",
         Some(350),
     );
-    assert!(packet.is_err());
+    let result = packet.err().unwrap().kind();
+    let expected_error = ErrorKind::Other;
+    assert_eq!(result, expected_error);
 }
 
 #[test]
@@ -333,7 +346,9 @@ fn test_topic_name_cannot_contain_multi_level_wildcard() {
         "message",
         Some(350),
     );
-    assert!(packet.is_err());
+    let result = packet.err().unwrap().kind();
+    let expected_error = ErrorKind::Other;
+    assert_eq!(result, expected_error);
 }
 
 #[test]

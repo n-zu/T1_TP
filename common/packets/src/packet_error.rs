@@ -3,6 +3,7 @@ use std::string::FromUtf8Error;
 use std::{fmt, io};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+/// Represents all kind of errors that could appear on processing any type of packet
 pub enum ErrorKind {
     InvalidProtocol,
     InvalidProtocolLevel,
@@ -28,6 +29,7 @@ pub enum ErrorKind {
 }
 
 #[derive(Debug, PartialEq)]
+/// Represents a packet's error. It includes a message and the error's kind
 pub struct PacketError {
     msg: String,
     kind: ErrorKind,
@@ -39,10 +41,12 @@ impl Default for PacketError {
     }
 }
 
+#[doc(hidden)]
 const DEFAULT_MSG: &str = "Invalid packet encoding";
 pub type PacketResult<T> = Result<T, PacketError>;
 
 impl PacketError {
+    /// Returns a new PacketError with a default message
     pub fn new() -> PacketError {
         PacketError {
             msg: DEFAULT_MSG.to_string(),
@@ -50,13 +54,14 @@ impl PacketError {
         }
     }
 
+    /// Returns a new PacketError with the given message
     pub fn new_msg<T: Into<String>>(msg: T) -> PacketError {
         PacketError {
             msg: msg.into(),
             kind: ErrorKind::Other,
         }
     }
-
+    /// Returns a new PacketError with the given message and the given kind
     pub fn new_kind<T: Into<String>>(msg: T, kind: ErrorKind) -> PacketError {
         PacketError {
             msg: msg.into(),
@@ -64,6 +69,7 @@ impl PacketError {
         }
     }
 
+    /// Returns the kind of the PacketError
     pub fn kind(&self) -> ErrorKind {
         self.kind
     }

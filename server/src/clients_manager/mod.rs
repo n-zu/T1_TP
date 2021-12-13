@@ -4,6 +4,7 @@ use core::fmt;
 use std::{
     collections::HashMap,
     io::{Read, Write},
+    ops::DerefMut,
     sync::Mutex,
     vec,
 };
@@ -111,10 +112,23 @@ where
         }
     }
 
-    /// Locks a client and applies the received function to it.
-    /// If the client does not exist, it returns an error of
-    /// kind [`ServerErrorKind::ClientNotFound`]
-    pub fn client_do<F, T>(&self, id: &ClientIdArg, action: F) -> ServerResult<T>
+    pub fn client_do<F>(&self, id: &ClientIdArg, action: F) -> ServerResult<()>
+    where
+        F: FnOnce(&mut Client<S, I>) -> ServerResult<()>,
+    {
+        match self.clients.get(id) {
+            Some(session) => {
+                action(session.lock()?.deref_mut())?;
+                Ok(())
+            }
+            None => Err(ServerError::new_kind(
+                &format!("No existe el cliente con id <{}>", id),
+                ServerErrorKind::ClientNotFound,
+            )),
+        }
+    }
+
+    pub fn get_client_property<F, T>(&self, id: &ClientIdArg, action: F) -> ServerResult<T>
     where
         F: FnOnce(std::sync::MutexGuard<'_, Client<S, I>>) -> ServerResult<T>,
     {

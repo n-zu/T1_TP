@@ -1,7 +1,7 @@
 use crate::qos::QoSLevel;
 
 use crate::{
-    packet_error::{ErrorKind, PacketError},
+    packet_error::ErrorKind,
     traits::{MQTTDecoding, MQTTEncoding},
     utf8::Field,
 };
@@ -17,9 +17,10 @@ fn test_unsubscribe_packet_with_empty_topic_filter_should_raise_invalid_protocol
     let control_byte = 0b10100010u8;
     let v: Vec<u8> = vec![2, 0, 1]; // remaining length + packet id + no payload
     let mut stream = Cursor::new(v);
-    let result = Unsubscribe::read_from(&mut stream, control_byte).unwrap_err();
-    let expected_error =
-        PacketError::new_kind(MSG_AT_LEAST_ONE_TOPIC_FILTER, ErrorKind::InvalidProtocol);
+    let result = Unsubscribe::read_from(&mut stream, control_byte)
+        .unwrap_err()
+        .kind();
+    let expected_error = ErrorKind::InvalidProtocol;
     assert_eq!(result, expected_error);
 }
 
@@ -28,11 +29,10 @@ fn test_unsubscribe_packet_with_empty_string_as_topic_filter_should_raise_invali
     let control_byte = 0b10100010u8;
     let v: Vec<u8> = vec![4, 0, 1, 0, 0]; // remaining length + packet id + two bytes as 0 indicating empty string as topic filter
     let mut stream = Cursor::new(v);
-    let result = Unsubscribe::read_from(&mut stream, control_byte).unwrap_err();
-    let expected_error = PacketError::new_kind(
-        MSG_AT_LEAST_ONE_CHAR_LONG_TOPIC_FILTER,
-        ErrorKind::InvalidProtocol,
-    );
+    let result = Unsubscribe::read_from(&mut stream, control_byte)
+        .unwrap_err()
+        .kind();
+    let expected_error = ErrorKind::InvalidProtocol;
     assert_eq!(result, expected_error);
 }
 
@@ -46,8 +46,11 @@ fn test_unsubscribe_packet_with_control_byte_other_than_10_should_raise_invalid_
     let mut v: Vec<u8> = vec![23, 0, 1]; // remaining length + packet id
     v.append(&mut topic); // + payload
     let mut stream = Cursor::new(v);
-    let result = Unsubscribe::read_from(&mut stream, control_byte).unwrap_err();
-    assert_eq!(result.kind(), ErrorKind::InvalidControlPacketType);
+    let result = Unsubscribe::read_from(&mut stream, control_byte)
+        .unwrap_err()
+        .kind();
+    let expected_error = ErrorKind::InvalidControlPacketType;
+    assert_eq!(result, expected_error);
 }
 
 #[test]
@@ -59,8 +62,11 @@ fn test_unsubscribe_packet_with_reserved_bits_other_than_2_should_raise_error() 
     let mut v: Vec<u8> = vec![23, 0, 1]; // remaining length + packet id
     v.append(&mut topic); // + payload
     let mut stream = Cursor::new(v);
-    let result = Unsubscribe::read_from(&mut stream, control_byte).unwrap_err();
-    assert_eq!(result.kind(), ErrorKind::InvalidReservedBits);
+    let result = Unsubscribe::read_from(&mut stream, control_byte)
+        .unwrap_err()
+        .kind();
+    let expected_error = ErrorKind::InvalidReservedBits;
+    assert_eq!(result, expected_error);
 }
 
 #[test]
@@ -100,8 +106,8 @@ fn test_valid_unsubscribe_packet_with_two_topics() {
 #[test]
 fn unsubscribe_packet_with_packet_id_0_should_raise_protocol_error() {
     let topics = vec![TopicFilter::new("temperatura/Argentina", QoSLevel::QoSLevel0).unwrap()];
-    let result = Unsubscribe::new(0, topics).unwrap_err();
-    let expected_error = PacketError::new_kind(MSG_INVALID_PACKET_ID, ErrorKind::InvalidProtocol);
+    let result = Unsubscribe::new(0, topics).unwrap_err().kind();
+    let expected_error = ErrorKind::InvalidProtocol;
     assert_eq!(result, expected_error)
 }
 

@@ -10,7 +10,7 @@ use crate::{
 const RESERVED_BYTES_MASK: u8 = 0b00001111;
 
 #[test]
-fn test_valid() {
+fn test_valid_pingreq() {
     let control_byte = 0b11000000;
     let remaining_bytes = vec![0b00000000];
     let mut stream = Cursor::new(remaining_bytes);
@@ -19,25 +19,25 @@ fn test_valid() {
 }
 
 #[test]
-fn test_invalid_packet_type() {
+fn test_invalid_packet_type_should_raise_error() {
     let control_byte = 0b11100000;
     let remaining_bytes = vec![0b00000000];
     let mut stream = Cursor::new(remaining_bytes);
     let packet = PingReq::read_from(&mut stream, control_byte);
-    assert!(packet.is_err());
-    assert_eq!(
-        packet.err().unwrap().kind(),
-        ErrorKind::InvalidControlPacketType
-    );
+    let result = packet.err().unwrap().kind();
+    let expected_error = ErrorKind::InvalidControlPacketType;
+    assert_eq!(result, expected_error);
 }
 
 #[test]
-fn test_invalid_reserved_bytes() {
+fn test_invalid_reserved_bytes_should_raise_error() {
     let control_byte = 0b11000010;
     let remaining_bytes = vec![0b00000000];
     let mut stream = Cursor::new(remaining_bytes);
     let packet = PingReq::read_from(&mut stream, control_byte);
-    assert!(packet.is_err());
+    let result = packet.err().unwrap().kind();
+    let expected_error = ErrorKind::InvalidReservedBits;
+    assert_eq!(result, expected_error);
 }
 
 #[test]
@@ -46,7 +46,9 @@ fn test_invalid_remaining_length() {
     let remaining_bytes = vec![0b00000001, 0b00000000];
     let mut stream = Cursor::new(remaining_bytes);
     let packet = PingReq::read_from(&mut stream, control_byte);
-    assert!(packet.is_err());
+    let result = packet.err().unwrap().kind();
+    let expected_error = ErrorKind::Other;
+    assert_eq!(result, expected_error);
 }
 
 #[test]
