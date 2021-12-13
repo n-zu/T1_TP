@@ -58,16 +58,15 @@ impl<S, I> NetworkConnection<S, I> {
         I: Clone + Copy,
         S: TryClone,
     {
-        if let Some(stream_copy) = self.stream.try_clone() {
-            Ok(Self {
-                stream: stream_copy,
-                id: self.id,
-            })
-        } else {
-            Err(ServerError::new_kind(
-                "Error clonando stream de network_connection",
+        let stream = self.stream.try_clone().map_err(|e| {
+            ServerError::new_kind(
+                &format!("Error clonando stream de network_connection: {}", e),
                 ServerErrorKind::Irrecoverable,
-            ))
-        }
+            )
+        })?;
+        Ok(NetworkConnection {
+            id: self.id,
+            stream,
+        })
     }
 }

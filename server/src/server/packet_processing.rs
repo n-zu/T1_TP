@@ -12,7 +12,9 @@ impl<C: Config> Server<C> {
         let id_copy = id.to_owned();
         self.pool.lock()?.spawn(move || {
             action(sv_copy, &id_copy).unwrap_or_else(|e| {
-                error!("Error de ThreadPool: {}", e);
+                if e.kind() != ServerErrorKind::ClientNotFound {
+                    error!("Error de ThreadPool: {}", e);
+                }
             });
         })?;
         Ok(())
@@ -74,27 +76,15 @@ impl<C: Config> Server<C> {
     ///
     /// In case the client associated with the stream has disconnected,
     /// it returns an error of kin [`ServerErrorKind::ClientDisconnected`]
+    #[instrument(skip(self, stream, id))]
     pub fn process_packet<T: Read>(
         self: &Arc<Self>,
         stream: &mut T,
         id: &ClientIdArg,
     ) -> ServerResult<PacketType> {
         let mut control_byte_buff = [0u8; 1];
-        match stream.read_exact(&mut control_byte_buff) {
-            Ok(_) => {
-                Ok(self.process_packet_given_control_byte(control_byte_buff[0], stream, id)?)
-            }
-            Err(error)
-                if error.kind() == io::ErrorKind::UnexpectedEof
-                    || error.kind() == io::ErrorKind::ConnectionReset =>
-            {
-                Err(ServerError::new_kind(
-                    "Cliente se desconecto sin avisar",
-                    ServerErrorKind::ClientDisconnected,
-                ))
-            }
-            Err(err) => Err(ServerError::from(err)),
-        }
+        stream.read_exact(&mut control_byte_buff)?;
+        self.process_packet_given_control_byte(control_byte_buff[0], stream, id)
     }
 
     #[inline]
@@ -127,7 +117,11 @@ impl<C: Config> Server<C> {
                 sv_copy
                     ._send_publish(client_id_receiver, publish)
                     .unwrap_or_else(|e| {
-                        error!("Error enviando PUBLISH: {}", e);
+                        if e.kind() != ServerErrorKind::ClientNotFound
+                            && e.kind() != ServerErrorKind::ClientDisconnected
+                        {
+                            error!("Error enviando PUBLISH: {}", e);
+                        }
                     });
             })
             .unwrap_or_else(|e| {
@@ -154,13 +148,11 @@ impl<C: Config> Server<C> {
     fn broadcast_publish(self: &Arc<Self>, publish: Publish) -> ServerResult<()> {
         let (sender, receiver) = mpsc::channel();
         let sv_copy = self.clone();
-        let lock = self.pool.lock()?;
-        lock.spawn(move || {
-            sv_copy.publish_dispatcher_loop(receiver).unwrap_or_else(|e| {
-                error!("Error despachando el PUBLISH: {}", e)
-            });
+        self.pool.lock()?.spawn(move || {
+            sv_copy
+                .publish_dispatcher_loop(receiver)
+                .unwrap_or_else(|e| error!("Error despachando el PUBLISH: {}", e));
         })?;
-        drop(lock);
 
         self.topic_handler.publish(&publish, sender)?;
         Ok(())
@@ -174,24 +166,25 @@ impl<C: Config> Server<C> {
         id: &ClientIdArg,
     ) -> ServerResult<()> {
         publish.set_max_qos(QoSLevel::QoSLevel1);
-        if let Some(packet_id) = publish.packet_id() {
+        let packet_id = publish.packet_id();
+        self.broadcast_publish(publish)?;
+        if let Some(packet_id) = packet_id {
             self.clients_manager.read()?.client_do(id, |mut client| {
                 client.send_packet(&Puback::new(packet_id)?)
             })?;
         }
-        self.broadcast_publish(publish)
+        Ok(())
     }
 
     /// Subscribes the client to all the topics specified in the
-    /// [Subscribe] packet
+    /// [`Subscribe`] packet
     /// Send the corresponding Suback
     fn handle_subscribe(&self, mut subscribe: Subscribe, id: &ClientIdArg) -> ServerResult<()> {
         subscribe.set_max_qos(QoSLevel::QoSLevel1);
+        let retained_messages = self.topic_handler.subscribe(&subscribe, id)?;
         self.clients_manager
             .read()?
             .client_do(id, |mut client| client.send_packet(&subscribe.response()?))?;
-
-        let retained_messages = self.topic_handler.subscribe(&subscribe, id)?;
         if !retained_messages.is_empty() {
             self.clients_manager.read()?.client_do(id, |mut client| {
                 for retained in retained_messages {
@@ -200,6 +193,7 @@ impl<C: Config> Server<C> {
                 Ok(())
             })?;
         }
+
         Ok(())
     }
 

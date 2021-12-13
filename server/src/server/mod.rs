@@ -42,16 +42,23 @@ const UNACK_RESENDING_FREQ: Duration = Duration::from_millis(500);
 /// How long the server sleeps between each failed TCP connection
 /// atempt
 const ACCEPT_SLEEP_DUR: Duration = Duration::from_millis(100);
-
+/// Minimum time since the last sending of a packet for
+/// it to be resent. This prevents very recent packets
+/// from being resent
 const MIN_ELAPSED_TIME: Option<Duration> = Some(Duration::from_millis(100));
-
-const INFLIGHT_MESSAGES: Option<usize> = None;
+/// Number of packets that are resent each time an
+/// [`UNACK_RESENDING_FREQ`] elapses. If it is `Some(1)`, the server
+/// guarantees that no QoS 1 message will be received after any later
+/// one. For example a subscriber might receive them in the order
+/// 1,2,3,3,4 but not 1,2,3,2,3,4
+/// (See [4.6 Message ordering](http://docs.oasis-open.org/mqtt/mqtt/v3.1.1/os/mqtt-v3.1.1-os.html#_Toc398718105))
+const INFLIGHT_MESSAGES: Option<usize> = Some(1);
 
 use packets::publish::Publish;
 use packets::qos::QoSLevel;
 
 use crate::{
-    clients_manager::{ClientsManager, ConnectInfo, DisconnectInfo},
+    clients_manager::{ClientsManager, ConnectInfo},
     network_connection::NetworkConnection,
     server::server_error::ServerErrorKind,
     thread_joiner::ThreadJoiner,
@@ -134,6 +141,7 @@ impl<C: Config> Server<C> {
                     Some(server)
                 } else {
                     info!("No se encontro un archivo de DUMP - Creando servidor en blanco");
+
                     let server = Arc::new(Self {
                         clients_manager: RwLock::new(ClientsManager::new(config.authenticator())),
                         config,
@@ -212,33 +220,30 @@ impl<C: Config> Server<C> {
     }
 
     /// Process a client until it disconnects. This includes receiving the
-    /// packets that the client send, processing them, sending the corresponding
-    /// acknowledgements, and finally disconnecting it. It does not publish the
-    /// LastWill packet in case of an ungracefully disconnection. It also does
-    /// not remove the data from the TopicHandler.
+    /// packets that the client send, processing them, and sending the corresponding
+    /// acknowledgements. It does not disconnect the client.
     ///
-    /// Returns information related to the disconnection, as well as the
-    /// Last will [Publish] that, if it is not None, must be published.
+    /// Returns true if the client should be disconnected gracefully.
+    /// If it returns false or error, it should be disconnected
+    /// ungracefully
     #[instrument(skip(self, id, network_connection))]
     fn client_loop(
         self: &Arc<Self>,
         id: &ClientIdArg,
-        mut network_connection: NetworkConnection<TcpStream, SocketAddr>,
-    ) -> ServerResult<DisconnectInfo> {
+        network_connection: &mut NetworkConnection<TcpStream, SocketAddr>,
+    ) -> ServerResult<bool> {
         let mut timeout_counter = Duration::ZERO;
         let keep_alive_opt = self
             .clients_manager
             .read()?
             .client_do(id, |client| Ok(client.keep_alive()))?;
 
-        let mut gracefully = true;
-
         loop {
-            match self.process_packet(&mut network_connection, id) {
+            match self.process_packet(network_connection, id) {
                 Ok(packet_type) => {
                     timeout_counter = Duration::ZERO;
                     if packet_type == PacketType::Disconnect {
-                        break;
+                        return Ok(true);
                     }
                 }
                 Err(err) if err.kind() == ServerErrorKind::Timeout => {
@@ -251,21 +256,16 @@ impl<C: Config> Server<C> {
                     if err.kind() != ServerErrorKind::ClientDisconnected {
                         error!("Error inesperado: {}", err);
                     }
-                    gracefully = false;
-                    break;
+                    return Ok(false);
                 }
             }
             if let Some(keep_alive) = keep_alive_opt {
                 if timeout_counter > keep_alive {
                     warn!("KeepAlive Timeout");
-                    gracefully = false;
-                    break;
+                    return Ok(false);
                 }
             }
         }
-        self.clients_manager
-            .write()?
-            .disconnect(id, network_connection, gracefully)
     }
 
     /// Process a client after it sends the [`Connect`] packet. That is,
@@ -291,10 +291,22 @@ impl<C: Config> Server<C> {
         if let Some(last_will) = connect_info.takeover_last_will {
             self.send_last_will(last_will, &connect_info.id)?;
         }
-
         // En caso de que haya ocurrido una reconexion y el cliente
         // tenia un last will, se publica
-        let disconnect_info = self.client_loop(&connect_info.id, network_connection)?;
+        let disconnect_info;
+        if let Ok(gracefully) = self.client_loop(&connect_info.id, &mut network_connection) {
+            disconnect_info = self.clients_manager.write()?.disconnect(
+                &connect_info.id,
+                network_connection,
+                gracefully,
+            )?;
+        } else {
+            disconnect_info = self.clients_manager.write()?.disconnect(
+                &connect_info.id,
+                network_connection,
+                false,
+            )?;
+        }
         if disconnect_info.clean_session {
             self.topic_handler.remove_client(&connect_info.id)?;
         }
@@ -305,7 +317,7 @@ impl<C: Config> Server<C> {
     }
 
     /// Send a [`Connack`] to the client if the connection failed due to one
-    /// of the errors listed in section 3.2.2.3* of the MQTT v3.1.1 protocol
+    /// of the errors listed in section `3.2.2.3` of the MQTT v3.1.1 protocol
     /// Otherwise, it returns a [`ServerError`]
     #[instrument(skip(self, network_connection, error))]
     fn manage_failed_connection(
@@ -340,7 +352,7 @@ impl<C: Config> Server<C> {
             .lock()
             .expect("Lock envenenado")
             .finished(thread::current().id())
-            .unwrap_or_else(|err| panic!("Error irrecuperable: {}", err.to_string()));
+            .unwrap_or_else(|err| error!("Error irrecuperable: {}", err.to_string()));
         Ok(())
     }
 
@@ -355,7 +367,9 @@ impl<C: Config> Server<C> {
         let handle = thread::spawn(move || {
             sv_copy._run_client(network_connection).unwrap_or_else(|e| {
                 // Si llega un error a este punto ya no se puede solucionar
-                error!("Error no manejado: {}", e);
+                if e.kind() != ServerErrorKind::ClientDisconnected {
+                    error!("Error no manejado: {}", e);
+                }
             });
         });
         self.client_thread_joiner
@@ -395,12 +409,20 @@ impl<C: Config> Server<C> {
             }
             if let Some(dump_info) = dump_info_opt {
                 if SystemTime::now().duration_since(time_last_dump).unwrap() >= dump_info.1 {
-                    self.dump().unwrap();
+                    self.dump()?;
                     time_last_dump = SystemTime::now();
                 }
             }
         }
         info!("Apagando servidor");
+        let shutdown_info = self.clients_manager.write()?.shutdown(false)?;
+        for client_id in shutdown_info.clean_session_ids {
+            self.topic_handler.remove_client(&client_id)?;
+        }
+        for (id, last_will) in shutdown_info.last_will_packets {
+            self.send_last_will(last_will, &id)?;
+        }
+        println!("{}", Arc::try_unwrap(self).is_err());
         Ok(())
     }
 
@@ -433,6 +455,10 @@ impl<C: Config> Server<C> {
 impl<C: Config> Drop for Server<C> {
     fn drop(&mut self) {
         self.dump().unwrap_or_else(|e| {
+            println!(
+                "Error realizando el Dump durante el apagado del servidor: {}",
+                &e
+            );
             error!(
                 "Error realizando el Dump durante el apagado del servidor: {}",
                 e

@@ -201,7 +201,7 @@ fn test_session_present_dump() {
 
     // Apago server: debería dumpear
     s.shutdown().unwrap();
-
+    thread::sleep(Duration::from_millis(50));
     let (_s, port) = start_server(
         Some(("tests/files/dumps/dump1.json", Duration::from_secs(10))),
         None,

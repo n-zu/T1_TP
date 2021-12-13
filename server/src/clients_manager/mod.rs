@@ -148,7 +148,16 @@ where
     {
         // Chequeo si ya fue desconectado por el proceso
         // de Client Take-Over
-        let old_id = self.client_do(id, |client| Ok(client.connection_id().cloned()))?;
+        let old_id = match self.client_do(id, |client| Ok(client.connection_id().cloned())) {
+            Ok(old_id) => old_id,
+            Err(e) if e.kind() == ServerErrorKind::ClientNotFound => {
+                return Ok(DisconnectInfo {
+                    publish_last_will: None,
+                    clean_session: false,
+                })
+            }
+            Err(e) => return Err(e),
+        };
         if let Some(old_id) = old_id {
             if *network_connection.id() != old_id {
                 return Ok(DisconnectInfo {

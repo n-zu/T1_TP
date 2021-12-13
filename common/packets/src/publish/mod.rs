@@ -71,4 +71,8 @@ impl Publish {
     pub fn set_retain_flag(&mut self, retain: bool) {
         self.retain_flag = retain;
     }
+
+    pub fn set_packet_id(&mut self, packet_id: u16) {
+        self.packet_id = Some(packet_id);
+    }
 }

@@ -16,7 +16,7 @@ use crate::{
 #[cfg(test)]
 mod tests;
 
-/// Represents the state of a client on the server
+/// Represents the state of a client on the server.
 ///
 /// This structure only handles the state of the client
 /// session. It does not handle things like retained messages,
@@ -31,7 +31,7 @@ where
     /// Id of the client.
     ///
     /// The server guarantees that two clients
-    /// cannot have the same id at the same time
+    /// cannot have the same id at the same time.
     id: ClientId,
     /// Connection used to communicate with the client
     /// To allow simultaneous reading and writing with
@@ -40,7 +40,7 @@ where
     /// copy is for reading.
     ///
     /// If the client is currently disconnected, it is
-    /// None
+    /// None.
     #[serde(skip, default = "Default::default")]
     connection: Option<NetworkConnection<S, I>>,
     /// [Connect] packet received in the last client
@@ -49,10 +49,10 @@ where
     /// Note that a client can have a [`Connect`] packet
     /// and be disconnected. However, when a reconnection
     /// occurs, said packet is replaced by the packet
-    /// received on the new connection
+    /// received on the new connection.
     connect: Connect,
     /// Unacknowledged packets, along with the time they
-    /// were last sent
+    /// were last sent.
     unacknowledged: Vec<(SystemTime, Publish)>,
 }
 
@@ -71,13 +71,13 @@ where
         }
     }
 
-    /// Return the id of the client
+    /// Return the id of the client.
     pub fn id(&self) -> &str {
         &self.id
     }
 
     /// Return true if the client is connected.
-    /// Othrewise, return false
+    /// Othrewise, return false.
     pub fn connected(&self) -> bool {
         self.connection.is_some()
     }
@@ -90,7 +90,7 @@ where
     /// list if the Quality of Service is greater than 0. Instead,
     /// the *send_publish()* method should be used.
     ///
-    /// Returns error if the client is disconnected
+    /// Returns error if the client is disconnected.
     pub fn send_packet<T: MQTTEncoding>(&mut self, packet: &T) -> ServerResult<()> {
         if let Some(connection) = &mut self.connection {
             connection.write_all(&packet.encode()?)?;
@@ -107,7 +107,7 @@ where
     }
 
     /// Returns true if the client specified clean_session to
-    /// true on its last connection
+    /// true on its last connection.
     pub fn clean_session(&self) -> bool {
         *self.connect.clean_session()
     }
@@ -122,7 +122,7 @@ where
     /// published is returned. Otherwise, it returns None.
     ///
     /// If the client was already disconnected, it silently does
-    /// nothing
+    /// nothing.
     pub fn disconnect(&mut self, gracefully: bool) -> ServerResult<Option<Publish>>
     where
         S: Close,
@@ -163,7 +163,7 @@ where
     ///
     /// If they do not match, it returns an error of kind
     /// [`ServerErrorKind::Irrecoverable`]. Therefore, the server
-    /// should ensure that said ids are the same
+    /// should ensure that said ids are the same.
     fn check_reconnect_id(&self, new_connect: &Connect) -> ServerResult<()> {
         if self.id != new_connect.client_id() {
             return Err(ServerError::new_kind(
@@ -183,7 +183,7 @@ where
     ///
     /// If the reconnection produces a Client TakeOver and LastWill
     /// was specified in the previous session, a [`Publish`] packet is
-    /// returned. Otherwise, it returns None
+    /// returned. Otherwise, it returns None.
     pub fn reconnect(
         &mut self,
         new_connect: Connect,
@@ -217,13 +217,13 @@ where
     }
 
     /// Returns the username of the client, if specified.
-    /// Otherwise, it returns None
+    /// Otherwise, it returns None.
     pub fn user_name(&self) -> Option<&String> {
         self.connect.user_name()
     }
 
     /// Returns the connection id, if the client is connected.
-    /// Otherwise, it returns None
+    /// Otherwise, it returns None.
     pub fn connection_id(&self) -> Option<&I> {
         self.connection.as_ref().map(|connection| connection.id())
     }
@@ -231,7 +231,7 @@ where
     /// Removes from the unacknowledged list, the packet whose
     /// *packet_id* matches the *packet_id* of the received [`Puback`]
     /// packet. If no packet meets this condition, it returns an
-    /// error of kind [`ServerErrorKind::Other`]
+    /// error of kind [`ServerErrorKind::Other`].
     #[instrument(skip(self, puback) fields(client_id = %self.id, packet_id = %puback.packet_id()))]
     pub fn acknowledge(&mut self, puback: Puback) -> ServerResult<()> {
         info!("Acknowledge");
@@ -244,13 +244,8 @@ where
         });
         if let Some(idx) = idx {
             self.unacknowledged.remove(idx);
-            Ok(())
-        } else {
-            Err(ServerError::new_msg(&format!(
-                "No se encontro el paquete con id {} en los unacknowledged",
-                puback.packet_id()
-            )))
         }
+        Ok(())
     }
 
     /// Sends the packets that have not been acknowledged by
@@ -263,21 +258,24 @@ where
     /// `min_elapsed_time` is the minimum time that must have elapsed
     /// between the last time the packet was sent and the moment the
     /// method is executed, for the packet to be sent. If it is None,
-    /// `inflight_messages` packets will be sent
+    /// `inflight_messages` packets will be sent.
     pub fn send_unacknowledged(
         &mut self,
         inflight_messages: Option<usize>,
         min_elapsed_time: Option<Duration>,
-    ) -> ServerResult<()> {
+    ) -> ServerResult<()>
+    where
+        S: fmt::Debug,
+        I: fmt::Debug,
+    {
         info!("Reenviando paquetes UNACKNOWLEDGED");
 
         let inflight_messages = inflight_messages.unwrap_or(self.unacknowledged.len());
         let inflight_messages = std::cmp::min(inflight_messages, self.unacknowledged.len());
-        let mut messages_sent = 0;
 
         let now = SystemTime::now();
 
-        while messages_sent < inflight_messages {
+        for _ in 0..inflight_messages {
             let (last_time_published, publish) = self.unacknowledged.remove(0);
             if let Some(min_elapsed_time) = min_elapsed_time {
                 if now.duration_since(last_time_published).unwrap() > min_elapsed_time {
@@ -295,13 +293,12 @@ where
                 self.send_packet(&publish)?;
                 self.unacknowledged.push((now, publish));
             }
-            messages_sent += 1;
         }
         Ok(())
     }
 
     /// Sends a [`Publish`] packet to the client and, if applicable,
-    /// adds it to the unacknowledged packet list
+    /// adds it to the unacknowledged packet list.
     pub fn send_publish(&mut self, mut publish: Publish) -> ServerResult<()> {
         if self.connected() {
             self.send_packet(&publish)?;

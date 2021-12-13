@@ -9,7 +9,7 @@ pub trait Close {
 }
 
 pub trait TryClone {
-    fn try_clone(&self) -> Option<Self>
+    fn try_clone(&self) -> io::Result<Self>
     where
         Self: Sized;
 }
@@ -26,15 +26,11 @@ pub trait Login: fmt::Debug + Send + Sync + 'static {
 }
 
 impl TryClone for TcpStream {
-    fn try_clone(&self) -> Option<Self>
+    fn try_clone(&self) -> io::Result<Self>
     where
         Self: Sized,
     {
-        if let Ok(clone) = TcpStream::try_clone(self) {
-            Some(clone)
-        } else {
-            None
-        }
+        TcpStream::try_clone(self)
     }
 }
 
