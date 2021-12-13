@@ -192,7 +192,7 @@ fn test_session_present_dump() {
         Some(("tests/files/dumps/dump1.json", Duration::from_secs(10))),
         None,
     );
-    let builder = ConnectBuilder::new("id", 1, false).unwrap();
+    let builder = ConnectBuilder::new("id", 0, false).unwrap();
 
     let mut stream = connect_client(builder, port, true);
 
@@ -208,7 +208,7 @@ fn test_session_present_dump() {
         Some(("tests/files/dumps/dump1.json", Duration::from_secs(10))),
         None,
     );
-    let builder = ConnectBuilder::new("id", 1, false).unwrap();
+    let builder = ConnectBuilder::new("id", 0, false).unwrap();
     let mut stream = connect_client(builder, port, false);
 
     let mut control = [0u8];

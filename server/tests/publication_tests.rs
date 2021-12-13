@@ -430,7 +430,7 @@ fn test_subscription_dump() {
         Some(("tests/files/dumps/dump2.json", Duration::from_secs(10))),
         None,
     );
-    let builder = ConnectBuilder::new("id", 1, false).unwrap();
+    let builder = ConnectBuilder::new("id", 0, false).unwrap();
 
     let mut stream = connect_client(builder, port, true);
 
@@ -459,7 +459,7 @@ fn test_subscription_dump() {
         Some(("tests/files/dumps/dump2.json", Duration::from_secs(10))),
         None,
     );
-    let builder = ConnectBuilder::new("id", 1, false).unwrap();
+    let builder = ConnectBuilder::new("id", 0, false).unwrap();
     let mut stream = connect_client(builder, port, true);
 
     stream
@@ -477,3 +477,61 @@ fn test_subscription_dump() {
     assert!(publish.packet_id().is_none());
     assert_eq!(publish.payload(), "msg");
 }
+/*
+#[test]
+fn test_subscription_dump_qos1() {
+    let _ = fs::remove_file("tests/files/dumps/dump3.json");
+    let (s, port) = start_server(
+        Some(("tests/files/dumps/dump3.json", Duration::from_secs(10))),
+        None,
+    );
+    let builder_1 = ConnectBuilder::new("id1", 0, false).unwrap();
+    let builder_2 = ConnectBuilder::new("id2", 0, true).unwrap();
+
+    let mut stream_1 = connect_client(builder_1, port, true);
+    let mut stream_2 = connect_client(builder_2, port, true);
+
+    // Me suscribo con cliente 1 y QoS 1
+    stream_1
+        .write_all(
+            &Subscribe::new(tpc![("topic", QoSLevel1)], 123)
+                .encode()
+                .unwrap(),
+        )
+        .unwrap();
+
+    let mut control = [0u8];
+    stream_1.read_exact(&mut control).unwrap();
+    Suback::read_from(&mut stream_1, control[0]).unwrap();
+
+    // Me desconecto gracefully con cliente 1
+    stream_1
+        .write_all(&Disconnect::new().encode().unwrap())
+        .unwrap();
+
+    // Envio publish QoS 1 con cliente 2
+    stream_2.write_all(&Publish::new(false, QoSLevel1, false, "topic", "msg", Some(123)).unwrap().encode().unwrap()).unwrap();
+
+    stream_2.read_exact(&mut control).unwrap();
+    Puback::read_from(&mut stream_2, control[0]).unwrap();
+
+    // Apago server: debería dumpear
+    drop(s); // Por alguna razón, si dejo esta línea se borra el dump.
+
+    /*
+    // Vuelvo a cargar el dump y conecto cliente 1
+    let (_s, port) = start_server(
+        Some(("tests/files/dumps/dump3.json", Duration::from_secs(10))),
+        None,
+    );
+    let builder_1 = ConnectBuilder::new("id1", 0, false).unwrap();
+    let mut stream_1 = connect_client(builder_1, port, true);
+
+    // Debería recibir el publish
+    stream_1.read_exact(&mut control).unwrap();
+    let publish = Publish::read_from(&mut stream_1, control[0]).unwrap();
+    assert_eq!(publish.payload(), "msg");
+    assert_eq!(publish.topic_name(), "topic");
+    assert_eq!(publish.qos(), QoSLevel1);*/
+}
+ */
