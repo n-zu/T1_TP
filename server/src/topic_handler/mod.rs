@@ -105,7 +105,7 @@ impl Topic {
                     subtopic.publish(rest, sender, packet, false)?;
                     if subtopic.is_empty()? {
                         drop(subtopics);
-                        self.clean()?;
+                        self.clean([current])?;
                     }
                 }
             }
@@ -164,7 +164,7 @@ impl Topic {
                             subtopic.unsubscribe(rest, client_id)?;
                             if subtopic.is_empty()? {
                                 drop(subtopics);
-                                self.clean()?;
+                                self.clean([current])?;
                             }
                         }
                     }
@@ -179,16 +179,14 @@ impl Topic {
 
     /// Removes all the information from a given client_id
     fn remove_client(&self, client_id: &str) -> Result<(), TopicHandlerError> {
-        let mut clean = false;
-        for subtopic in self.subtopics.read()?.values() {
+        let lock = self.subtopics.read()?;
+        for subtopic in lock.values() {
             subtopic.remove_client(client_id)?;
-            if !clean && subtopic.is_empty()? {
-                clean = true;
-            }
         }
-        if clean {
-            self.clean()?;
-        }
+        let names = lock.keys().cloned().collect::<Vec<_>>();
+        drop(lock);
+
+        self.clean(names.iter().map(String::as_str))?;
         self.remove_subscriber(client_id)?;
         Ok(())
     }
@@ -480,21 +478,20 @@ impl Topic {
     }
 
     #[doc(hidden)]
-    /// Delete all empty subtopics of this node
-    fn clean(&self) -> Result<(), TopicHandlerError> {
+    /// Delete all empty subtopics of this node from a given list
+    /// If one of them is not empty, it won't be deleted
+    fn clean<'a, I: IntoIterator<Item = &'a str>>(
+        &self,
+        subtopics: I,
+    ) -> Result<(), TopicHandlerError> {
         let mut subtopics_dic = self.subtopics.write()?;
-        let mut to_be_cleaned = Vec::new();
 
-        // En principio, el desbloqueo de los locks de is_empty debería ser
-        // inmediato ya que tenemos a su nodo padre en modo lectura
-        for (name, node) in subtopics_dic.iter() {
-            if node.is_empty()? {
-                to_be_cleaned.push(name.clone());
+        for name in subtopics {
+            if let Some(node) = subtopics_dic.get(name) {
+                if node.is_empty()? {
+                    subtopics_dic.remove(name);
+                }
             }
-        }
-
-        for name in to_be_cleaned {
-            subtopics_dic.remove(&name);
         }
 
         Ok(())
