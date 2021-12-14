@@ -403,14 +403,26 @@ impl Topic {
     }
 
     #[doc(hidden)]
-    /// Returns true if all the subtopics, subscribers, subscription and retained messages
-    /// are empty
+    /// Returns true if all the subtopics, subscribers, subscription and
+    /// retained messages are empty
     fn is_empty(&self) -> Result<bool, TopicHandlerError> {
         Ok(self.subtopics.read()?.is_empty()
             && self.subscribers.read()?.is_empty()
             && self.multilevel_subscribers.read()?.is_empty()
             && self.singlelevel_subscriptions.read()?.is_empty()
             && self.retained_message.read()?.is_none())
+    }
+
+    #[doc(hidden)]
+    /// Returns true if all the subtopics, subscribers, subscription and
+    /// retained messages are empty (mutable version doesn't need to wait
+    /// for locks)
+    fn is_empty_mut(&mut self) -> Result<bool, TopicHandlerError> {
+        Ok(self.subtopics.get_mut()?.is_empty()
+            && self.subscribers.get_mut()?.is_empty()
+            && self.multilevel_subscribers.get_mut()?.is_empty()
+            && self.singlelevel_subscriptions.get_mut()?.is_empty()
+            && self.retained_message.get_mut()?.is_none())
     }
 
     #[doc(hidden)]
@@ -483,8 +495,8 @@ impl Topic {
         let mut subtopics_dic = self.subtopics.write()?;
 
         for name in subtopics {
-            if let Some(node) = subtopics_dic.get(name) {
-                if node.is_empty()? {
+            if let Some(node) = subtopics_dic.get_mut(name) {
+                if node.is_empty_mut()? {
                     subtopics_dic.remove(name);
                 }
             }
