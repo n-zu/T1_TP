@@ -16,6 +16,9 @@ const CONTINUATION_SHIFT: u8 = 7;
 const ENCODED_LEN_MAX_BYTES: usize = 4;
 #[doc(hidden)]
 const PACKET_TYPE_SHIFT: u8 = 4;
+#[doc(hidden)]
+const USER_NAME_WITHOUT_PASSWORD_MSG: &str =
+    "Se intento crear un paquete con user_name pero sin password";
 
 /// Connect packet builder
 pub struct ConnectBuilder {
@@ -155,9 +158,7 @@ impl ConnectBuilder {
     /// requirements of the MQTT V3.1.1 protocol
     pub fn build(self) -> PacketResult<Connect> {
         if self.connect.password.is_some() && self.connect.user_name.is_none() {
-            return Err(PacketError::new_msg(
-                "Se intento crear un paquete con user_name pero sin password",
-            ));
+            return Err(PacketError::new_msg(USER_NAME_WITHOUT_PASSWORD_MSG));
         }
 
         Ok(self.connect)

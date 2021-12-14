@@ -21,13 +21,15 @@ fn test_identifier() {
 }
 
 #[test]
-fn test_no_topics_should_fail() {
+fn test_subscribe_with_no_topics_should_raise_error() {
     let mut v: Vec<u8> = Vec::new();
     v.extend_from_slice(&[123, 5]); // identifier
 
     v.insert(0, v.len() as u8);
     let packet = Subscribe::read_from(&mut Cursor::new(v), CONTROL_BYTE);
-    assert!(packet.is_err());
+    let result = packet.err().unwrap().kind();
+    let expected_error = ErrorKind::InvalidProtocol;
+    assert_eq!(result, expected_error);
 }
 
 #[test]
@@ -79,7 +81,9 @@ fn test_invalid_reserved_flags() {
 
     v.insert(0, v.len() as u8);
     let packet = Subscribe::read_from(&mut Cursor::new(v), invalid_first).unwrap_err();
-    assert_eq!(packet.kind(), ErrorKind::InvalidReservedBits);
+    let result = packet.kind();
+    let expected_error = ErrorKind::InvalidReservedBits;
+    assert_eq!(result, expected_error);
 }
 
 #[test]
@@ -91,7 +95,9 @@ fn test_invalid_qos() {
 
     v.insert(0, v.len() as u8);
     let packet = Subscribe::read_from(&mut Cursor::new(v), CONTROL_BYTE);
-    assert!(packet.is_err());
+    let result = packet.err().unwrap().kind();
+    let expected_error = ErrorKind::InvalidQoSLevel;
+    assert_eq!(result, expected_error);
 }
 
 #[test]

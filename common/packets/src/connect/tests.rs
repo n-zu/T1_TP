@@ -1,6 +1,7 @@
 use std::io::Cursor;
 
 use super::*;
+use crate::packet_error::PacketError;
 use crate::{
     packet_error::ErrorKind,
     traits::{MQTTDecoding, MQTTEncoding},
@@ -129,11 +130,11 @@ fn test_username_missing_but_needed() {
 }
 
 #[test]
-fn test_username_present_but_shouldnt() {
+fn test_username_present_as_remaining_bytes_should_raise_error() {
     let mut v = Field::new_from_string("MQTT").unwrap().encode();
     v.push(4u8); // Nivel
-    v.push(0); //Flags
-    v.append(&mut vec![0u8, 60u8]); //Keep alive
+    v.push(0); // Flags
+    v.append(&mut vec![0u8, 60u8]); // Keep alive
     v.append(&mut Field::new_from_string("id").unwrap().encode());
     v.append(&mut Field::new_from_string("unNombre").unwrap().encode());
 
@@ -141,15 +142,18 @@ fn test_username_present_but_shouldnt() {
     bytes.append(&mut v);
     let mut stream = Cursor::new(bytes);
 
-    assert!(Connect::read_from(&mut stream, CONNECT_CONTROL_BYTE).is_err());
+    let error_result = Connect::read_from(&mut stream, CONNECT_CONTROL_BYTE).unwrap_err();
+    let expected = PacketError::new();
+
+    assert_eq!(error_result, expected);
 }
 
 #[test]
 fn test_connect_clean_session() {
     let mut v = Field::new_from_string("MQTT").unwrap().encode();
     v.push(4u8); // Nivel
-    v.push(CLEAN_SESSION); //Flags
-    v.append(&mut vec![0u8, 60u8]); //Keep alive
+    v.push(CLEAN_SESSION); // Flags
+    v.append(&mut vec![0u8, 60u8]); // Keep alive
     v.append(&mut Field::new_from_string("id").unwrap().encode());
 
     let mut bytes = vec![v.len() as u8];
@@ -165,8 +169,8 @@ fn test_connect_clean_session() {
 fn test_will_flag() {
     let mut v = Field::new_from_string("MQTT").unwrap().encode();
     v.push(4u8); // Nivel
-    v.push(LAST_WILL_PRESENT | WILL_RETAIN); //Flags
-    v.append(&mut vec![0u8, 60u8]); //Keep alive
+    v.push(LAST_WILL_PRESENT | WILL_RETAIN); // Flags
+    v.append(&mut vec![0u8, 60u8]); // Keep alive
     v.append(&mut Field::new_from_string("id").unwrap().encode());
     v.append(&mut Field::new_from_string("soyUnTopic").unwrap().encode());
     v.append(&mut Field::new_from_string("soyUnMensaje").unwrap().encode());
@@ -268,13 +272,16 @@ fn test_username_password() {
 }
 
 #[test]
-fn test_password_without_username() {
+fn test_password_without_username_should_raise_error() {
     let builder = ConnectBuilder::new("rust", 25, true)
         .unwrap()
         .password("pass")
         .unwrap();
+    let result = builder.build().unwrap_err();
+    let expected_error =
+        PacketError::new_msg("Se intento crear un paquete con user_name pero sin password");
 
-    assert!(builder.build().is_err());
+    assert_eq!(result, expected_error);
 }
 
 #[test]

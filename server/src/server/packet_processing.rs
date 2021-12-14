@@ -43,7 +43,7 @@ impl<C: Config> Server<C> {
                 let packet = Puback::read_from(stream, control_byte)?;
                 self.clients_manager
                     .read()?
-                    .client_do(id, |mut client| client.acknowledge(packet))?;
+                    .client_do(id, |client| client.acknowledge(packet))?;
             }
             PacketType::Subscribe => {
                 let subscribe = Subscribe::read_from(stream, control_byte)?;
@@ -57,7 +57,7 @@ impl<C: Config> Server<C> {
                 let _packet = PingReq::read_from(stream, control_byte)?;
                 self.clients_manager
                     .read()?
-                    .client_do(id, |mut client| client.send_packet(&PingResp::new()))?;
+                    .client_do(id, |client| client.send_packet(&PingResp::new()))?;
             }
             PacketType::Disconnect => {
                 let _packet = Disconnect::read_from(stream, control_byte)?;
@@ -97,9 +97,7 @@ impl<C: Config> Server<C> {
     ) -> ServerResult<()> {
         self.clients_manager
             .read()?
-            .client_do(&client_id_receiver, |mut client| {
-                client.send_publish(publish)
-            })
+            .client_do(&client_id_receiver, |client| client.send_publish(publish))
     }
 
     #[instrument(skip(self, threadpool_copy, message), fields(client_id_receiver = %message.client_id))]
@@ -169,9 +167,9 @@ impl<C: Config> Server<C> {
         let packet_id = publish.packet_id();
         self.broadcast_publish(publish)?;
         if let Some(packet_id) = packet_id {
-            self.clients_manager.read()?.client_do(id, |mut client| {
-                client.send_packet(&Puback::new(packet_id)?)
-            })?;
+            self.clients_manager
+                .read()?
+                .client_do(id, |client| client.send_packet(&Puback::new(packet_id)?))?;
         }
         Ok(())
     }
@@ -184,16 +182,15 @@ impl<C: Config> Server<C> {
         let retained_messages = self.topic_handler.subscribe(&subscribe, id)?;
         self.clients_manager
             .read()?
-            .client_do(id, |mut client| client.send_packet(&subscribe.response()?))?;
+            .client_do(id, |client| client.send_packet(&subscribe.response()?))?;
         if !retained_messages.is_empty() {
-            self.clients_manager.read()?.client_do(id, |mut client| {
+            self.clients_manager.read()?.client_do(id, |client| {
                 for retained in retained_messages {
                     client.send_publish(retained)?;
                 }
                 Ok(())
             })?;
         }
-
         Ok(())
     }
 
@@ -203,7 +200,7 @@ impl<C: Config> Server<C> {
     fn handle_unsubscribe(&self, unsubscribe: Unsubscribe, id: &ClientIdArg) -> ServerResult<()> {
         let packet_id = unsubscribe.packet_id();
         self.topic_handler.unsubscribe(unsubscribe, id)?;
-        self.clients_manager.read()?.client_do(id, |mut client| {
+        self.clients_manager.read()?.client_do(id, |client| {
             client.send_packet(&Unsuback::new(packet_id)?)?;
             Ok(())
         })?;

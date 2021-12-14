@@ -3,6 +3,7 @@ use serde::{Deserialize, Serialize};
 use std::convert::TryFrom;
 
 #[derive(Debug, PartialEq, Eq, Clone, Copy, Serialize, Deserialize)]
+/// Represents the available QoS levels
 pub enum QoSLevel {
     QoSLevel0,
     QoSLevel1,

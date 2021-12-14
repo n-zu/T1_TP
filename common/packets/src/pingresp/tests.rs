@@ -17,34 +17,36 @@ fn test_valid() {
 }
 
 #[test]
-fn test_invalid_packet_type() {
+fn test_invalid_packet_type_should_raise_error() {
     let control_byte = 0b11110000;
     let remaining_bytes = vec![0b00000000];
     let mut stream = Cursor::new(remaining_bytes);
     let packet = PingResp::read_from(&mut stream, control_byte);
-    assert!(packet.is_err());
-    assert_eq!(
-        packet.err().unwrap().kind(),
-        ErrorKind::InvalidControlPacketType
-    );
+    let result = packet.err().unwrap().kind();
+    let expected_error = ErrorKind::InvalidControlPacketType;
+    assert_eq!(result, expected_error);
 }
 
 #[test]
-fn test_invalid_reserved_bytes() {
+fn test_invalid_reserved_bytes_should_raise_error() {
     let control_byte = 0b11010010;
     let remaining_bytes = vec![0b00000000];
     let mut stream = Cursor::new(remaining_bytes);
     let packet = PingResp::read_from(&mut stream, control_byte);
-    assert!(packet.is_err());
+    let result = packet.err().unwrap().kind();
+    let expected_error = ErrorKind::InvalidReservedBits;
+    assert_eq!(result, expected_error);
 }
 
 #[test]
-fn test_invalid_remaining_length() {
+fn test_invalid_remaining_length_should_raise_error() {
     let control_byte = 0b11010000;
     let remaining_bytes = vec![0b00000001, 0b00000000];
     let mut stream = Cursor::new(remaining_bytes);
     let packet = PingResp::read_from(&mut stream, control_byte);
-    assert!(packet.is_err());
+    let result = packet.err().unwrap().kind();
+    let expected_error = ErrorKind::Other;
+    assert_eq!(result, expected_error);
 }
 
 // server_side tests
