@@ -4,8 +4,9 @@ use std::{io::Write, vec};
 
 use packets::{connect::Connect, qos::QoSLevel, traits::MQTTEncoding};
 use packets::{puback::Puback, publish::Publish};
+use rand::Rng;
 use serde::{Deserialize, Serialize};
-use tracing::{info, instrument};
+use tracing::{info, instrument, warn, debug};
 
 use crate::traits::{Close, Interrupt};
 use crate::{
@@ -62,8 +63,7 @@ where
     I: fmt::Display,
 {
     /// Create a new connected client
-    pub fn new(connect: Connect, mut network_connection: NetworkConnection<S, I>) -> Self {
-        network_connection.alert(Duration::from_millis((1500 * connect.keep_alive()) as u64)).unwrap();
+    pub fn new(connect: Connect, network_connection: NetworkConnection<S, I>) -> Self {
         Self {
             id: connect.client_id().to_owned(),
             connect,
@@ -89,7 +89,7 @@ where
     /// This method should not be used to send a [`Publish`]
     /// packet, since it would not be saved in the unacknowledged
     /// list if the Quality of Service is greater than 0. Instead,
-    /// the *send_publish()* method should be used.
+    /// the `send_publish()` method should be used.
     ///
     /// Returns error if the client is disconnected.
     pub fn send_packet<T: MQTTEncoding>(&mut self, packet: &T) -> ServerResult<()> {
@@ -235,7 +235,7 @@ where
     /// error of kind [`ServerErrorKind::Other`].
     #[instrument(skip(self, puback) fields(client_id = %self.id, packet_id = %puback.packet_id()))]
     pub fn acknowledge(&mut self, puback: Puback) -> ServerResult<()> {
-        info!("Acknowledge");
+        debug!("Acknowledge");
         let idx = self.unacknowledged.iter().position(|publish| {
             puback.packet_id()
                 == publish
@@ -245,11 +245,6 @@ where
         });
         if let Some(idx) = idx {
             self.unacknowledged.remove(idx);
-        }
-        if self.unacknowledged.is_empty() {
-            if let Some(connection) = &mut self.connection {
-                connection.sleep()?;
-            }
         }
         Ok(())
     }
@@ -274,8 +269,6 @@ where
         S: fmt::Debug,
         I: fmt::Debug,
     {
-        info!("Reenviando paquetes UNACKNOWLEDGED");
-
         let inflight_messages = inflight_messages.unwrap_or(self.unacknowledged.len());
         let inflight_messages = std::cmp::min(inflight_messages, self.unacknowledged.len());
 
@@ -286,7 +279,7 @@ where
             if let Some(min_elapsed_time) = min_elapsed_time {
                 if now.duration_since(last_time_published).unwrap() > min_elapsed_time {
                     self.send_packet(&publish)?;
-                    self.unacknowledged.push((now, publish));
+                    self.unacknowledged.insert(0, (now, publish));
                 } else {
                     // No se envio, no actualizo la hora y lo inserto
                     // al inicio de la cola, porque debe ser el primero
@@ -312,15 +305,6 @@ where
         if publish.qos() == QoSLevel::QoSLevel1 {
             publish.set_dup(true);
             self.unacknowledged.push((SystemTime::now(), publish));
-            let keep_alive = match self.keep_alive() {
-                Some(keep_alive) => keep_alive,
-                None => return Ok(())
-            };
-            let connection = match &mut self.connection {
-                Some(connection) => connection,
-                None => return Ok(())
-            };
-            connection.alert(keep_alive)?;
         }
         Ok(())
     }

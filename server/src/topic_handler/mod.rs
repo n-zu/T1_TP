@@ -414,11 +414,14 @@ impl Topic {
     /// Returns true if all the subtopics, subscribers, subscription and retained messages
     /// are empty
     fn is_empty(&self) -> Result<bool, TopicHandlerError> {
+        Ok(false)
+        /*
         Ok(self.subtopics.read()?.is_empty()
             && self.subscribers.read()?.is_empty()
             && self.multilevel_subscribers.read()?.is_empty()
             && self.singlelevel_subscriptions.read()?.is_empty()
             && self.retained_message.read()?.is_none())
+        */
     }
 
     #[doc(hidden)]

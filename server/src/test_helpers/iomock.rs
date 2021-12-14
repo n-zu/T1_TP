@@ -59,7 +59,7 @@ impl TryClone for IOMock {
 }
 
 impl Interrupt for IOMock {
-    fn alert(&mut self, when: Duration) -> io::Result<()> {
+    fn alert(&mut self, _when: Duration) -> io::Result<()> {
         Ok(())
     }
 

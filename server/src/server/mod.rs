@@ -209,6 +209,7 @@ impl<C: Config> Server<C> {
     ) -> ServerResult<ConnectInfo> {
         info!("Conectando cliente");
         let connect = self.wait_for_connect(network_connection)?;
+        network_connection.stream_mut().set_read_timeout(Some(UNACK_RESENDING_FREQ))?;
         let connect_info = self
             .clients_manager
             .write()?

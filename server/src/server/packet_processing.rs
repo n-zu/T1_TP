@@ -111,7 +111,6 @@ impl<C: Config> Server<C> {
     ) -> ServerResult<()> {
         let client_id_receiver = message.client_id;
         let publish = message.packet;
-        info!("Enviando PUBLISH");
         let sv_copy = self.clone();
         threadpool_copy
             .spawn(move || {
