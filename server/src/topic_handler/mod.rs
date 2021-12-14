@@ -105,7 +105,7 @@ impl Topic {
                     subtopic.publish(rest, sender, packet, false)?;
                     if subtopic.is_empty()? {
                         drop(subtopics);
-                        self.subtopics.write()?.remove(current);
+                        self.clean()?;
                     }
                 }
             }
@@ -164,7 +164,7 @@ impl Topic {
                             subtopic.unsubscribe(rest, client_id)?;
                             if subtopic.is_empty()? {
                                 drop(subtopics);
-                                self.subtopics.write()?.remove(current);
+                                self.clean()?;
                             }
                         }
                     }
@@ -179,18 +179,15 @@ impl Topic {
 
     /// Removes all the information from a given client_id
     fn remove_client(&self, client_id: &str) -> Result<(), TopicHandlerError> {
-        let mut to_be_cleaned = Vec::new();
-        for (name, subtopic) in self.subtopics.read()?.deref() {
+        let mut clean = false;
+        for subtopic in self.subtopics.read()?.values() {
             subtopic.remove_client(client_id)?;
-            if subtopic.is_empty()? {
-                to_be_cleaned.push(name.to_string());
+            if !clean && subtopic.is_empty()? {
+                clean = true;
             }
         }
-        if !to_be_cleaned.is_empty() {
-            let mut subtopics = self.subtopics.write()?;
-            for name in to_be_cleaned {
-                subtopics.remove(&name);
-            }
+        if clean {
+            self.clean()?;
         }
         self.remove_subscriber(client_id)?;
         Ok(())
@@ -234,7 +231,8 @@ impl Topic {
                     drop(subtopics);
                     self.subtopics
                         .write()?
-                        .insert(current.to_string(), Topic::new());
+                        .entry(current.to_string())
+                        .or_insert_with(Topic::new);
                     subtopics = self.subtopics.read()?;
                 }
 
@@ -479,6 +477,27 @@ impl Topic {
             Some((splitted, rest)) => (splitted, Some(rest)),
             None => (topic, None),
         }
+    }
+
+    #[doc(hidden)]
+    /// Delete all empty subtopics of this node
+    fn clean(&self) -> Result<(), TopicHandlerError> {
+        let mut subtopics_dic = self.subtopics.write()?;
+        let mut to_be_cleaned = Vec::new();
+
+        // En principio, el desbloqueo de los locks de is_empty debería ser
+        // inmediato ya que tenemos a su nodo padre en modo lectura
+        for (name, node) in subtopics_dic.iter() {
+            if node.is_empty()? {
+                to_be_cleaned.push(name.clone());
+            }
+        }
+
+        for name in to_be_cleaned {
+            subtopics_dic.remove(&name);
+        }
+
+        Ok(())
     }
 }
 
