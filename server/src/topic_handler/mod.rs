@@ -389,13 +389,9 @@ impl Topic {
     }
 
     #[doc(hidden)]
-    /// Removes a client id's subscriptions
+    /// Removes a client id's subscriptions from this node
     fn remove_subscriber(&self, client_id: &str) -> Result<(), TopicHandlerError> {
-        let subs_read = self.subscribers.read()?;
-        if subs_read.contains_key(client_id) {
-            drop(subs_read);
-            self.subscribers.write()?.remove(client_id);
-        }
+        self.subscribers.write()?.remove(client_id);
         self.multilevel_subscribers.write()?.remove(client_id);
         self.singlelevel_subscriptions
             .write()?
