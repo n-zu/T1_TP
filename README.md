@@ -23,3 +23,11 @@ Algunos de los comandos disponibles en el Makefile son:
 * **make run:** abre el cliente y el servidor
 * **make stress:** abre el servidor y ejecuta una [prueba de estrés](https://github.com/inovex/mqtt-stresser) sobre este *[requiere [docker](https://www.docker.com/)]*
 * **make**: ejecuta el linter, clippy y las pruebas de todo el proyecto
+
+## Servidor de prueba
+Tenemos un servidor de prueba disponible abierto todo el día.
+Datos de conexión:
+* **IP:** 150.230.76.67
+* **Puerto:** 1883
+* **Usuario:** demo
+* **Clave:** demo
