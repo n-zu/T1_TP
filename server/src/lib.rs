@@ -21,6 +21,7 @@ pub fn init() {
 
     let file_appender = tracing_appender::rolling::hourly(config.log_path(), "logs.log");
     let (file_writer, _guard) = tracing_appender::non_blocking(file_appender);
+    let (stdout, _guard2) = tracing_appender::non_blocking(std::io::stdout());
     let subscriber = Registry::default()
         .with(
             fmt::Layer::default()
@@ -32,7 +33,7 @@ pub fn init() {
             fmt::Layer::default()
                 .with_thread_names(true)
                 .pretty()
-                .with_writer(std::io::stdout),
+                .with_writer(stdout),
         );
 
     tracing::subscriber::set_global_default(subscriber).unwrap();

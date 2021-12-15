@@ -1,7 +1,7 @@
 use std::{
     error::Error,
     fmt::Display,
-    sync::{mpsc::SendError, PoisonError, RwLockReadGuard, RwLockWriteGuard},
+    sync::{mpsc::SendError, PoisonError},
 };
 
 use super::Message;
@@ -33,14 +33,8 @@ impl TopicHandlerError {
 
 const DEFAULT_MSG: &str = "TopicHandlerError: No se pudo desbloquear contenido del Topic";
 
-impl<T> From<PoisonError<RwLockReadGuard<'_, T>>> for TopicHandlerError {
-    fn from(err: PoisonError<RwLockReadGuard<T>>) -> TopicHandlerError {
-        TopicHandlerError::new(&format!("{} ({})", DEFAULT_MSG, err))
-    }
-}
-
-impl<T> From<PoisonError<RwLockWriteGuard<'_, T>>> for TopicHandlerError {
-    fn from(err: PoisonError<RwLockWriteGuard<T>>) -> TopicHandlerError {
+impl<T> From<PoisonError<T>> for TopicHandlerError {
+    fn from(err: PoisonError<T>) -> TopicHandlerError {
         TopicHandlerError::new(&format!("{} ({})", DEFAULT_MSG, err))
     }
 }

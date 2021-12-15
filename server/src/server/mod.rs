@@ -422,7 +422,7 @@ impl<C: Config> Server<C> {
         for (id, last_will) in shutdown_info.last_will_packets {
             self.send_last_will(last_will, &id)?;
         }
-        println!("{}", Arc::try_unwrap(self).is_err());
+
         Ok(())
     }
 
@@ -455,10 +455,6 @@ impl<C: Config> Server<C> {
 impl<C: Config> Drop for Server<C> {
     fn drop(&mut self) {
         self.dump().unwrap_or_else(|e| {
-            println!(
-                "Error realizando el Dump durante el apagado del servidor: {}",
-                &e
-            );
             error!(
                 "Error realizando el Dump durante el apagado del servidor: {}",
                 e

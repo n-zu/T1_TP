@@ -105,7 +105,7 @@ impl Topic {
                     subtopic.publish(rest, sender, packet, false)?;
                     if subtopic.is_empty()? {
                         drop(subtopics);
-                        self.subtopics.write()?.remove(current);
+                        self.clean([current])?;
                     }
                 }
             }
@@ -164,7 +164,7 @@ impl Topic {
                             subtopic.unsubscribe(rest, client_id)?;
                             if subtopic.is_empty()? {
                                 drop(subtopics);
-                                self.subtopics.write()?.remove(current);
+                                self.clean([current])?;
                             }
                         }
                     }
@@ -179,19 +179,14 @@ impl Topic {
 
     /// Removes all the information from a given client_id
     fn remove_client(&self, client_id: &str) -> Result<(), TopicHandlerError> {
-        let mut to_be_cleaned = Vec::new();
-        for (name, subtopic) in self.subtopics.read()?.deref() {
+        let lock = self.subtopics.read()?;
+        for subtopic in lock.values() {
             subtopic.remove_client(client_id)?;
-            if subtopic.is_empty()? {
-                to_be_cleaned.push(name.to_string());
-            }
         }
-        if !to_be_cleaned.is_empty() {
-            let mut subtopics = self.subtopics.write()?;
-            for name in to_be_cleaned {
-                subtopics.remove(&name);
-            }
-        }
+        let names = lock.keys().cloned().collect::<Vec<_>>();
+        drop(lock);
+
+        self.clean(names.iter().map(String::as_str))?;
         self.remove_subscriber(client_id)?;
         Ok(())
     }
@@ -234,7 +229,8 @@ impl Topic {
                     drop(subtopics);
                     self.subtopics
                         .write()?
-                        .insert(current.to_string(), Topic::new());
+                        .entry(current.to_string())
+                        .or_insert_with(Topic::new);
                     subtopics = self.subtopics.read()?;
                 }
 
@@ -393,13 +389,9 @@ impl Topic {
     }
 
     #[doc(hidden)]
-    /// Removes a client id's subscriptions
+    /// Removes a client id's subscriptions from this node
     fn remove_subscriber(&self, client_id: &str) -> Result<(), TopicHandlerError> {
-        let subs_read = self.subscribers.read()?;
-        if subs_read.contains_key(client_id) {
-            drop(subs_read);
-            self.subscribers.write()?.remove(client_id);
-        }
+        self.subscribers.write()?.remove(client_id);
         self.multilevel_subscribers.write()?.remove(client_id);
         self.singlelevel_subscriptions
             .write()?
@@ -411,14 +403,26 @@ impl Topic {
     }
 
     #[doc(hidden)]
-    /// Returns true if all the subtopics, subscribers, subscription and retained messages
-    /// are empty
+    /// Returns true if all the subtopics, subscribers, subscription and
+    /// retained messages are empty
     fn is_empty(&self) -> Result<bool, TopicHandlerError> {
         Ok(self.subtopics.read()?.is_empty()
             && self.subscribers.read()?.is_empty()
             && self.multilevel_subscribers.read()?.is_empty()
             && self.singlelevel_subscriptions.read()?.is_empty()
             && self.retained_message.read()?.is_none())
+    }
+
+    #[doc(hidden)]
+    /// Returns true if all the subtopics, subscribers, subscription and
+    /// retained messages are empty (mutable version doesn't need to wait
+    /// for locks)
+    fn is_empty_mut(&mut self) -> Result<bool, TopicHandlerError> {
+        Ok(self.subtopics.get_mut()?.is_empty()
+            && self.subscribers.get_mut()?.is_empty()
+            && self.multilevel_subscribers.get_mut()?.is_empty()
+            && self.singlelevel_subscriptions.get_mut()?.is_empty()
+            && self.retained_message.get_mut()?.is_none())
     }
 
     #[doc(hidden)]
@@ -479,6 +483,26 @@ impl Topic {
             Some((splitted, rest)) => (splitted, Some(rest)),
             None => (topic, None),
         }
+    }
+
+    #[doc(hidden)]
+    /// Delete all empty subtopics of this node from a given list
+    /// If one of them is not empty, it won't be deleted
+    fn clean<'a, I: IntoIterator<Item = &'a str>>(
+        &self,
+        subtopics: I,
+    ) -> Result<(), TopicHandlerError> {
+        let mut subtopics_dic = self.subtopics.write()?;
+
+        for name in subtopics {
+            if let Some(node) = subtopics_dic.get_mut(name) {
+                if node.is_empty_mut()? {
+                    subtopics_dic.remove(name);
+                }
+            }
+        }
+
+        Ok(())
     }
 }
 
