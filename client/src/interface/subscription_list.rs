@@ -10,7 +10,7 @@ use packets::{qos::QoSLevel, topic_filter::TopicFilter};
 pub struct SubscriptionList {
     list: ListBox,
     unsub_entry: Entry,
-    subs: RefCell<HashMap<String, Box>>,
+    subs: RefCell<HashMap<String, (Box, QoSLevel)>>,
 }
 
 impl SubscriptionList {
@@ -25,7 +25,7 @@ impl SubscriptionList {
 
     /// Removes the given topic from the SubsList and updates the view accordingly
     pub fn remove_sub(&self, topic: &str) {
-        if let Some(box_) = self.subs.borrow_mut().remove(topic) {
+        if let Some((box_, _)) = self.subs.borrow_mut().remove(topic) {
             let row: Widget = box_.parent().unwrap();
             self.list.remove(&row);
             self.list.show_all();
@@ -48,11 +48,19 @@ impl SubscriptionList {
 
     /// Adds the given topic to the SubsList and updates the view accordingly
     pub fn add_sub(&self, topic: &str, qos: QoSLevel) {
-        self.remove_sub(topic);
+        if let Some((_, prev_qos)) = self.subs.borrow().get(topic) {
+            if *prev_qos as u8 >= qos as u8 {
+                return;
+            } else {
+                self.remove_sub(topic);
+            }
+        }
         let box_ = self.create_sub_box(topic, qos);
         self.list.add(&box_);
         self.list.show_all();
-        self.subs.borrow_mut().insert(topic.to_string(), box_);
+        self.subs
+            .borrow_mut()
+            .insert(topic.to_string(), (box_, qos));
     }
 
     #[doc(hidden)]

@@ -160,6 +160,7 @@ impl InternalObserver {
         self.pub_counter.update_new_messages_amount();
         list.add(&row);
         list.show_all();
+        self.subs.add_sub(publish.topic_name(), publish.qos());
     }
 
     /// Re-enables the interface and shows information

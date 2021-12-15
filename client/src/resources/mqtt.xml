@@ -591,7 +591,6 @@
                                   <object class="GtkEntry" id="unsub_top">
                                     <property name="visible">True</property>
                                     <property name="can_focus">True</property>
-                                    <property name="editable">False</property>
                                     <property name="text" translatable="yes">top/sub</property>
                                   </object>
                                   <packing>
@@ -674,7 +673,7 @@
                             <property name="can_focus">False</property>
                             <property name="halign">start</property>
                             <property name="hexpand">True</property>
-                            <property name="label" translatable="yes">Suscripciones recientes</property>
+                            <property name="label" translatable="yes">Suscripciones detectadas</property>
                             <attributes>
                               <attribute name="weight" value="bold"/>
                             </attributes>
@@ -756,11 +755,11 @@
                       <object class="GtkScrolledWindow">
                         <property name="visible">True</property>
                         <property name="can_focus">True</property>
-                        <property name="hexpand">True</property>
                         <property name="margin_left">10</property>
                         <property name="margin_right">10</property>
                         <property name="margin_top">10</property>
                         <property name="margin_bottom">10</property>
+                        <property name="hexpand">True</property>
                         <property name="vexpand">True</property>
                         <property name="vscrollbar_policy">always</property>
                         <property name="shadow_type">in</property>
