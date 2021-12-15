@@ -48,8 +48,9 @@ impl SubscriptionList {
 
     /// Adds the given topic to the SubsList and updates the view accordingly
     pub fn add_sub(&self, topic: &str, qos: QoSLevel) {
-        if let Some((_, prev_qos)) = self.subs.borrow().get(topic) {
-            if *prev_qos as u8 >= qos as u8 {
+        let prev = self.subs.borrow().get(topic).map(|t| t.1);
+        if let Some(prev_qos) = prev {
+            if prev_qos as u8 >= qos as u8 {
                 return;
             } else {
                 self.remove_sub(topic);
