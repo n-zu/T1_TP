@@ -219,7 +219,7 @@ impl InternalObserver {
     fn create_box(topic: &str, payload: &str, qos: QoSLevel, retain_flag: bool) -> Box {
         let outer_box = Box::new(Orientation::Vertical, 5);
         let inner_box = Box::new(Orientation::Horizontal, 5);
-        let label_topic: Label = Label::new(Some(&("• ".to_owned() + topic)));
+        let label_topic: Label = Label::new(None);
         label_topic.set_markup(&("<b>• ".to_owned() + topic + "</b>"));
         let mut qos_msg = format!("- [QoS: {}]", qos as u8);
         if retain_flag {
