@@ -220,7 +220,8 @@ impl InternalObserver {
         let outer_box = Box::new(Orientation::Vertical, 5);
         let inner_box = Box::new(Orientation::Horizontal, 5);
         let label_topic: Label = Label::new(Some(&("• ".to_owned() + topic)));
-        let mut qos_msg = format!("- QoS: {}", qos as u8);
+        label_topic.set_markup(&("<b>• ".to_owned() + topic + "</b>"));
+        let mut qos_msg = format!("- [QoS: {}]", qos as u8);
         if retain_flag {
             qos_msg.push_str(" (retained)");
         }

@@ -179,7 +179,7 @@
                         </child>
                         <child>
                           <object class="GtkButton" id="con_btn">
-                            <property name="label" translatable="yes">CONECTARSE</property>
+                            <property name="label" translatable="yes">Conectarse</property>
                             <property name="name">connect_btn</property>
                             <property name="visible">True</property>
                             <property name="can_focus">True</property>
@@ -818,7 +818,7 @@
                                 </child>
                                 <child>
                                   <object class="GtkButton" id="pub_btn">
-                                    <property name="label" translatable="yes">PUBLICAR</property>
+                                    <property name="label" translatable="yes">Publicar</property>
                                     <property name="visible">True</property>
                                     <property name="can_focus">True</property>
                                     <property name="receives_default">True</property>
@@ -1342,7 +1342,6 @@
                             <property name="margin_bottom">10</property>
                             <property name="hexpand">True</property>
                             <property name="vexpand">True</property>
-                            <property name="vscrollbar_policy">always</property>
                             <property name="shadow_type">in</property>
                             <child>
                               <object class="GtkViewport">
