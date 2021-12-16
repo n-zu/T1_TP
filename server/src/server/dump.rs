@@ -30,9 +30,9 @@ impl<C: Config> Server<C> {
             Err(err) => return Err(ServerError::from(err)),
         };
 
-        let (topic_handler, clients_manager) = Server::<C>::restore_from_json(&json_str)?;
-        let shutdown_info = clients_manager.write()?.shutdown(false)?;
-
+        let (topic_handler, mut clients_manager) = Server::<C>::restore_from_json(&json_str)?;
+        let shutdown_info = clients_manager.get_mut()?.shutdown(false)?;
+        clients_manager.get_mut()?.set_auth(config.authenticator());
         for client_id in shutdown_info.clean_session_ids {
             topic_handler.remove_client(&client_id)?;
         }

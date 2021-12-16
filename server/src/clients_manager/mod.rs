@@ -112,6 +112,7 @@ where
         }
     }
 
+    /// Executes an arbitrary function on a client
     pub fn client_do<F, T>(&self, id: &ClientIdArg, action: F) -> ServerResult<T>
     where
         F: FnOnce(&mut Client<S, I>) -> ServerResult<T>,
@@ -123,6 +124,11 @@ where
                 ServerErrorKind::ClientNotFound,
             )),
         }
+    }
+
+    /// Replaces the login method
+    pub fn set_auth(&mut self, login: Option<Box<dyn Login>>) {
+        self.login = login;
     }
 
     /// Tries to disconnect a client. If the client specified
