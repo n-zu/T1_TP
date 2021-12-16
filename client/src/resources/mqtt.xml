@@ -614,6 +614,7 @@
                       <object class="GtkLabel" id="connection_info">
                         <property name="visible">True</property>
                         <property name="can_focus">False</property>
+                        <property name="xpad">7</property>
                         <property name="justify">right</property>
                       </object>
                       <packing>
@@ -956,6 +957,7 @@
                                 <property name="can_focus">False</property>
                                 <property name="halign">start</property>
                                 <property name="hexpand">True</property>
+                                <property name="xpad">5</property>
                                 <property name="label" translatable="yes">Suscribirse</property>
                                 <attributes>
                                   <attribute name="weight" value="bold"/>
@@ -1126,6 +1128,7 @@
                                 <property name="can_focus">False</property>
                                 <property name="halign">start</property>
                                 <property name="hexpand">True</property>
+                                <property name="xpad">5</property>
                                 <property name="label" translatable="yes">Desuscribirse</property>
                                 <attributes>
                                   <attribute name="weight" value="bold"/>
@@ -1250,6 +1253,7 @@
                                 <property name="can_focus">False</property>
                                 <property name="halign">start</property>
                                 <property name="hexpand">True</property>
+                                <property name="xpad">5</property>
                                 <property name="label" translatable="yes">Suscripciones detectadas</property>
                                 <attributes>
                                   <attribute name="weight" value="bold"/>
@@ -1265,6 +1269,8 @@
                               <object class="GtkScrolledWindow">
                                 <property name="visible">True</property>
                                 <property name="can_focus">True</property>
+                                <property name="margin_left">10</property>
+                                <property name="margin_right">10</property>
                                 <property name="margin_top">10</property>
                                 <property name="margin_bottom">10</property>
                                 <property name="hexpand">True</property>
@@ -1330,6 +1336,8 @@
                           <object class="GtkScrolledWindow">
                             <property name="visible">True</property>
                             <property name="can_focus">True</property>
+                            <property name="margin_left">10</property>
+                            <property name="margin_right">10</property>
                             <property name="margin_top">10</property>
                             <property name="margin_bottom">10</property>
                             <property name="hexpand">True</property>
