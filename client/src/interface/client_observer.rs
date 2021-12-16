@@ -200,7 +200,7 @@ impl InternalObserver {
     /// Sets up the 'connect_switch_page' signal
     fn setup_notebook(self: &Rc<Self>) {
         let internal_clone = self.clone();
-        let notebook: Notebook = self.builder.object("box_connected").unwrap();
+        let notebook: Notebook = self.builder.object("notebook").unwrap();
         notebook.connect_switch_page(move |notebook, widget, new_page_number| {
             internal_clone.handle_switch_notebook_tab(notebook, widget, new_page_number);
         });

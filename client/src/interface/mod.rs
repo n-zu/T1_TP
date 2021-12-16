@@ -138,7 +138,7 @@ impl Controller {
         let connect = self._create_connect_packet()?;
         let sub_box: ListBox = self.builder.object("sub_subs").unwrap();
         let unsub_entry: Entry = self.builder.object("unsub_top").unwrap();
-        let notebook: Notebook = self.builder.object("box_connected").unwrap();
+        let notebook: Notebook = self.builder.object("notebook").unwrap();
         let feed_label: Label = self.builder.object("label_incoming").unwrap();
         let subs_list = SubscriptionList::new(sub_box, unsub_entry);
         let publication_counter = PublicationCounter::new(notebook, feed_label);
