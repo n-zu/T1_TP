@@ -11,13 +11,15 @@ use crate::interface::client_observer::ClientObserver;
 
 use crate::client::{Client, ClientError};
 
+use gtk::gdk::keys::constants::Return;
+use gtk::gdk::EventKey;
 use gtk::glib::GString;
-use gtk::prelude::{ComboBoxTextExt, SwitchExt};
+use gtk::prelude::{ComboBoxTextExt, SwitchExt, WidgetExt};
 use gtk::{
     prelude::{BuilderExtManual, ButtonExt, EntryExt, TextBufferExt},
     Builder, Button, Entry, Label, Notebook, Switch, TextBuffer,
 };
-use gtk::{ComboBoxText, ListBox};
+use gtk::{ComboBoxText, Inhibit, ListBox, Window};
 use packets::connect::{Connect, ConnectBuilder, LastWill};
 use packets::topic_filter::TopicFilter;
 
@@ -65,6 +67,18 @@ impl Controller {
         self.setup_publish();
         self.setup_disconnect();
         self.setup_unsubscribe();
+        self.setup_keypress();
+    }
+
+    #[doc(hidden)]
+    /// Sets up the key press handler
+    fn setup_keypress(self: &Rc<Self>) {
+        let cont_clone = self.clone();
+        let window: Window = self.builder.object("main_window").unwrap();
+        window.connect_key_press_event(move |_, event| {
+            cont_clone.handle_keypress(event);
+            Inhibit(false)
+        });
     }
 
     #[doc(hidden)]
@@ -114,6 +128,14 @@ impl Controller {
         unsubscribe.connect_clicked(move |button: &Button| {
             cont_clone.handle_unsubscribe(button);
         });
+    }
+
+    #[doc(hidden)]
+    /// Keypress handler (Connect on enter key press)
+    fn handle_keypress(&self, event: &EventKey) {
+        if event.keyval() == Return && self.client.borrow().is_none() {
+            self.builder.object::<Button>("con_btn").unwrap().clicked();
+        }
     }
 
     #[doc(hidden)]
