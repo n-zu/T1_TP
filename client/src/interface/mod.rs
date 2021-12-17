@@ -407,7 +407,7 @@ impl Controller {
         } else {
             return Err(ClientError::new("No hay una conexión activa"));
         }
-        Err(ClientError::new("No implementado"))
+        Ok(())
     }
 
     /// Listener of the Unsubscribe button
