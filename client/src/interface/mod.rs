@@ -14,12 +14,12 @@ use crate::client::{Client, ClientError};
 use gtk::gdk::keys::constants::Return;
 use gtk::gdk::EventKey;
 use gtk::glib::GString;
-use gtk::prelude::{ComboBoxTextExt, SwitchExt, WidgetExt};
+use gtk::prelude::{ComboBoxTextExt, StackExt, SwitchExt, WidgetExt};
 use gtk::{
     prelude::{BuilderExtManual, ButtonExt, EntryExt, TextBufferExt},
     Builder, Button, Entry, Label, Notebook, Switch, TextBuffer,
 };
-use gtk::{ComboBoxText, Inhibit, ListBox, TextView, Window};
+use gtk::{ComboBoxText, Inhibit, ListBox, Stack, TextView, Window};
 use packets::connect::{Connect, ConnectBuilder, LastWill};
 use packets::topic_filter::TopicFilter;
 
@@ -147,7 +147,15 @@ impl Controller {
     /// Keypress handler (Connect on enter key press)
     fn handle_keypress(&self, event: &EventKey) {
         let lw: TextView = self.builder.object("con_lw_msg").unwrap();
-        if event.keyval() == Return && self.client.borrow().is_none() && !lw.is_focus() {
+        let stack: Stack = self.builder.object("content").unwrap();
+        let current_tab = stack.visible_child_name();
+        if event.keyval() == Return
+            && matches!(
+                &current_tab.as_ref().map(GString::as_str),
+                Some("box_connection")
+            )
+            && !lw.is_focus()
+        {
             self.builder.object::<Button>("con_btn").unwrap().clicked();
         }
     }

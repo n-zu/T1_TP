@@ -2,7 +2,7 @@ use std::cell::RefCell;
 use std::collections::HashMap;
 
 use gtk::{
-    prelude::{ButtonExt, ContainerExt, EntryExt, WidgetExt},
+    prelude::{ButtonExt, ContainerExt, EntryExt, LabelExt, WidgetExt},
     Box, Button, Entry, IconSize, Label, ListBox, Orientation, Widget,
 };
 use packets::{qos::QoSLevel, topic_filter::TopicFilter};
@@ -67,8 +67,10 @@ impl SubscriptionList {
     #[doc(hidden)]
     fn create_sub_box(&self, topic: &str, qos: QoSLevel) -> Box {
         let outer_box = Box::new(Orientation::Horizontal, 5);
-        outer_box.add(&Label::new(Some(&format!("[QoS {}]", qos as u8))));
-        outer_box.add(&Label::new(Some(topic)));
+        let topic_label = Label::new(None);
+        topic_label.set_markup(&("<b>• ".to_owned() + topic + "</b>"));
+        outer_box.add(&topic_label);
+        outer_box.add(&Label::new(Some(&format!("- [QoS {}]", qos as u8))));
 
         // ADD UNSUB BUTTON
         let _topic = topic.to_string();
