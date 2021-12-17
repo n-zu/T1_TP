@@ -140,7 +140,7 @@ impl<C: Config> Server<C> {
                     info!("Se encontro un archivo de DUMP - Creando servidor con su informacion");
                     Some(server)
                 } else {
-                    info!("No se encontro un archivo de DUMP - Creando servidor en blanco");
+                    warn!("No se encontro un archivo de DUMP - Creando servidor en blanco");
 
                     let server = Arc::new(Self {
                         clients_manager: RwLock::new(ClientsManager::new(config.authenticator())),
