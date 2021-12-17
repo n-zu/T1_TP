@@ -1,8 +1,11 @@
-use std::{io::{self}, time::Duration};
+use std::{
+    io::{self},
+    time::Duration,
+};
 
 use crate::{
     server::{server_error::ServerErrorKind, ServerError, ServerResult},
-    traits::{Close, TryClone, Interrupt},
+    traits::{Close, Interrupt, TryClone},
 };
 
 /// Information related to the current session of
@@ -50,7 +53,6 @@ impl<S: Interrupt, I> Interrupt for NetworkConnection<S, I> {
         self.stream.sleep()
     }
 }
-
 
 impl<S, I> NetworkConnection<S, I> {
     pub fn new(id: I, stream: S) -> Self {

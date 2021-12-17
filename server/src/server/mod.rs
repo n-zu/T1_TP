@@ -209,7 +209,9 @@ impl<C: Config> Server<C> {
     ) -> ServerResult<ConnectInfo> {
         info!("Conectando cliente");
         let connect = self.wait_for_connect(network_connection)?;
-        network_connection.stream_mut().set_read_timeout(Some(UNACK_RESENDING_FREQ))?;
+        network_connection
+            .stream_mut()
+            .set_read_timeout(Some(UNACK_RESENDING_FREQ))?;
         let connect_info = self
             .clients_manager
             .write()?
@@ -246,7 +248,7 @@ impl<C: Config> Server<C> {
                     continue;
                 }
                 Err(err) if err.kind() == ServerErrorKind::Timeout => {
-                    self.clients_manager.read()?.client_do(id, |mut client| {
+                    self.clients_manager.read()?.client_do(id, |client| {
                         client.send_unacknowledged(INFLIGHT_MESSAGES, MIN_ELAPSED_TIME)
                     })?;
                 }
@@ -258,7 +260,7 @@ impl<C: Config> Server<C> {
                 }
             }
             if let Some(keep_alive) = keep_alive_opt {
-                if SystemTime::now().duration_since(last_activity).unwrap() > keep_alive {
+                if SystemTime::now().duration_since(last_activity)? > keep_alive {
                     warn!("KeepAlive Timeout");
                     return Ok(false);
                 }
@@ -420,7 +422,6 @@ impl<C: Config> Server<C> {
         for (id, last_will) in shutdown_info.last_will_packets {
             self.send_last_will(last_will, &id)?;
         }
-        println!("{}", Arc::try_unwrap(self).is_err());
         Ok(())
     }
 
@@ -453,10 +454,6 @@ impl<C: Config> Server<C> {
 impl<C: Config> Drop for Server<C> {
     fn drop(&mut self) {
         self.dump().unwrap_or_else(|e| {
-            println!(
-                "Error realizando el Dump durante el apagado del servidor: {}",
-                &e
-            );
             error!(
                 "Error realizando el Dump durante el apagado del servidor: {}",
                 e

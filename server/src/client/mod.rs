@@ -4,9 +4,8 @@ use std::{io::Write, vec};
 
 use packets::{connect::Connect, qos::QoSLevel, traits::MQTTEncoding};
 use packets::{puback::Puback, publish::Publish};
-use rand::Rng;
 use serde::{Deserialize, Serialize};
-use tracing::{info, instrument, warn, debug};
+use tracing::{debug, instrument, warn};
 
 use crate::traits::{Close, Interrupt};
 use crate::{

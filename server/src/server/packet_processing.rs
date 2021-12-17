@@ -31,8 +31,7 @@ impl<C: Config> Server<C> {
         control_byte: u8,
         stream: &mut T,
         id: &ClientIdArg,
-    ) -> ServerResult<PacketType>
-    {
+    ) -> ServerResult<PacketType> {
         let packet_type = PacketType::try_from(control_byte)?;
         match packet_type {
             PacketType::Publish => {

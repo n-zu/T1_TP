@@ -17,7 +17,7 @@ use crate::{
     client::Client,
     network_connection::NetworkConnection,
     server::{server_error::ServerErrorKind, ClientId, ClientIdArg, ServerError, ServerResult},
-    traits::{Close, Login, LoginResult, Interrupt},
+    traits::{Close, Interrupt, Login, LoginResult},
 };
 
 const GENERIC_ID_SUFFIX: &str = "__CLIENT__";

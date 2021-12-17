@@ -1,10 +1,13 @@
 #![allow(dead_code)]
 
-use std::{io::{self, Read}, time::Duration};
+use std::{
+    io::{self, Read},
+    time::Duration,
+};
 
 use serde::{Deserialize, Serialize};
 
-use crate::traits::{Close, TryClone, Interrupt};
+use crate::traits::{Close, Interrupt, TryClone};
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct IOMock {

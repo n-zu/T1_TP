@@ -1,6 +1,7 @@
 use std::{
     fmt, io,
     sync::{mpsc::SendError, PoisonError},
+    time::SystemTimeError,
 };
 
 use packets::{
@@ -81,6 +82,12 @@ impl From<PacketError> for ServerError {
 impl<T> From<PoisonError<T>> for ServerError {
     fn from(err: PoisonError<T>) -> Self {
         ServerError::new_kind(&err.to_string(), ServerErrorKind::PoinsonedLock)
+    }
+}
+
+impl From<SystemTimeError> for ServerError {
+    fn from(err: SystemTimeError) -> Self {
+        ServerError::new_msg(err.to_string())
     }
 }
 
