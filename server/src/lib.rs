@@ -1,14 +1,16 @@
 use std::io::Read;
 
+use tracing::info;
+
 use crate::config::FileConfig;
+use crate::logger::Logger;
 pub use crate::server::{Server, ServerController};
 pub use crate::traits::Config;
-use tracing::info;
-use tracing_subscriber::{fmt, prelude::__tracing_subscriber_SubscriberExt, Registry};
 
 mod client;
 mod clients_manager;
 mod config;
+mod logger;
 mod network_connection;
 mod server;
 mod test_helpers;
@@ -16,27 +18,11 @@ mod thread_joiner;
 mod topic_handler;
 pub mod traits;
 
-pub fn init() {
-    let config = FileConfig::new("config.txt").expect("Error cargando la configuracion");
+/// Initializes the server
+pub fn init(config_path: &str) {
+    let config = FileConfig::new(config_path).expect("Error cargando la configuracion");
 
-    let file_appender = tracing_appender::rolling::hourly(config.log_path(), "logs.log");
-    let (file_writer, _guard) = tracing_appender::non_blocking(file_appender);
-    let (stdout, _guard2) = tracing_appender::non_blocking(std::io::stdout());
-    let subscriber = Registry::default()
-        .with(
-            fmt::Layer::default()
-                .json()
-                .with_thread_names(true)
-                .with_writer(file_writer),
-        )
-        .with(
-            fmt::Layer::default()
-                .with_thread_names(true)
-                .pretty()
-                .with_writer(stdout),
-        );
-
-    tracing::subscriber::set_global_default(subscriber).unwrap();
+    let _logger = Logger::new(config.log_path());
 
     let threadpool_size = 8;
     let server = Server::new(config, threadpool_size).unwrap();
