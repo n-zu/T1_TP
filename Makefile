@@ -10,6 +10,7 @@ run-server:
 	(cd server; cargo run --release config.txt)
 
 run-client:
+	(cd client; cargo build --release)
 	(cd client; cargo run --release &)
 	sleep 0.5
 
