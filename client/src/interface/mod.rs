@@ -38,6 +38,7 @@ use self::utils::{Icon, InterfaceUtils};
 pub struct Controller {
     builder: Builder,
     client: RefCell<Option<Client<ClientObserver>>>,
+    observer: ClientObserver,
 }
 
 impl InterfaceUtils for Controller {
@@ -51,12 +52,24 @@ impl Controller {
     /// interface builder
     pub fn new(builder: Builder) -> Rc<Self> {
         let cont = Rc::new(Self {
+            observer: Self::get_observer(&builder),
             builder,
             client: RefCell::new(None),
         });
         cont.setup_handlers();
         cont.show_connect_menu();
         cont
+    }
+
+    /// Builds the ClientObserver
+    fn get_observer(builder: &Builder) -> ClientObserver {
+        let sub_box: ListBox = builder.object("sub_subs").unwrap();
+        let unsub_entry: Entry = builder.object("unsub_top").unwrap();
+        let notebook: Notebook = builder.object("notebook").unwrap();
+        let feed_label: Label = builder.object("label_incoming").unwrap();
+        let subs_list = SubscriptionList::new(sub_box, unsub_entry);
+        let publication_counter = PublicationCounter::new(notebook, feed_label);
+        ClientObserver::new(builder.clone(), subs_list, publication_counter)
     }
 
     /// Sets up the different listeners for
@@ -159,14 +172,7 @@ impl Controller {
         );
 
         let connect = self._create_connect_packet()?;
-        let sub_box: ListBox = self.builder.object("sub_subs").unwrap();
-        let unsub_entry: Entry = self.builder.object("unsub_top").unwrap();
-        let notebook: Notebook = self.builder.object("notebook").unwrap();
-        let feed_label: Label = self.builder.object("label_incoming").unwrap();
-        let subs_list = SubscriptionList::new(sub_box, unsub_entry);
-        let publication_counter = PublicationCounter::new(notebook, feed_label);
-        let observer = ClientObserver::new(self.builder.clone(), subs_list, publication_counter);
-        let client = Client::new(&full_addr, observer, connect)?;
+        let client = Client::new(&full_addr, self.observer.clone(), connect)?;
 
         self.connection_info(Some(&format!(
             "Conectado a {} ({})",
