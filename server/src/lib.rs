@@ -22,14 +22,13 @@ pub fn init() {
     let file_appender = tracing_appender::rolling::hourly(config.log_path(), "logs.log");
     let (file_writer, _guard) = tracing_appender::non_blocking(file_appender);
     let (stdout, _guard2) = tracing_appender::non_blocking(std::io::stdout());
-
     let subscriber = Registry::default()
-        /*.with(
+        .with(
             fmt::Layer::default()
                 .json()
                 .with_thread_names(true)
                 .with_writer(file_writer),
-        )*/
+        )
         .with(
             fmt::Layer::default()
                 .with_thread_names(true)
