@@ -1,6 +1,6 @@
 use std::io::Read;
 
-use tracing::info;
+use tracing::{info, Level};
 
 use crate::config::FileConfig;
 use crate::logger::Logger;
@@ -22,11 +22,13 @@ pub mod traits;
 pub fn init(config_path: &str) {
     let config = FileConfig::new(config_path).expect("Error cargando la configuracion");
 
-    let _logger = Logger::new(config.log_path());
+    let _logger = Logger::new(config.log_path(), Level::INFO, Level::DEBUG);
 
     let threadpool_size = 8;
-    let server = Server::new(config, threadpool_size).unwrap();
-    let _controller = server.run().unwrap();
+    let server = Server::new(config, threadpool_size).expect("Error iniciando el servidor");
+    let _controller = server
+        .run()
+        .expect("Error iniciando ejecución del servidor");
 
     info!("Presione [ENTER] para detener la ejecucion del servidor");
 

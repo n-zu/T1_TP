@@ -1,6 +1,10 @@
-use tracing::Subscriber;
-use tracing_appender::non_blocking::{NonBlocking, WorkerGuard};
-use tracing_subscriber::{fmt, prelude::__tracing_subscriber_SubscriberExt, Registry};
+use tracing::{Level, Subscriber};
+use tracing_appender::non_blocking::WorkerGuard;
+use tracing_subscriber::{
+    fmt::{self, writer::MakeWriterExt, MakeWriter},
+    prelude::__tracing_subscriber_SubscriberExt,
+    Registry,
+};
 
 //trait Subscriber: tracing::Subscriber + Send + Sync + 'static {}
 
@@ -14,13 +18,16 @@ pub struct Logger {
 }
 
 impl Logger {
-    pub fn new(log_path: &str) -> Self {
+    pub fn new(log_path: &str, file_level: Level, stdout_level: Level) -> Self {
         let file_appender = tracing_appender::rolling::hourly(log_path, LOG_PREFIX);
         let (file, _file_guard) = tracing_appender::non_blocking(file_appender);
         let (stdout, _stdout_guard) = tracing_appender::non_blocking(std::io::stdout());
 
-        tracing::subscriber::set_global_default(Self::get_subscriber(file, stdout))
-            .expect("Error inicializando el logger");
+        tracing::subscriber::set_global_default(Self::get_subscriber(
+            file.with_max_level(file_level),
+            stdout.with_max_level(stdout_level),
+        ))
+        .expect("Error inicializando el logger");
 
         Self {
             _file_guard,
@@ -29,10 +36,11 @@ impl Logger {
     }
 
     /// Sets up the tracing log subscriber and returns it
-    fn get_subscriber(
-        file: NonBlocking,
-        stdout: NonBlocking,
-    ) -> impl Subscriber + Send + Sync + 'static {
+    fn get_subscriber<W1, W2>(file: W1, stdout: W2) -> impl Subscriber
+    where
+        W1: for<'writer> MakeWriter<'writer> + 'static,
+        W2: for<'writer> MakeWriter<'writer> + 'static,
+    {
         Registry::default()
             .with(
                 fmt::Layer::default()

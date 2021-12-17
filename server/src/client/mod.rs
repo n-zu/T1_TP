@@ -5,7 +5,7 @@ use std::{io::Write, vec};
 use packets::{connect::Connect, qos::QoSLevel, traits::MQTTEncoding};
 use packets::{puback::Puback, publish::Publish};
 use serde::{Deserialize, Serialize};
-use tracing::{info, instrument};
+use tracing::{debug, instrument};
 
 use crate::traits::Close;
 use crate::{
@@ -234,7 +234,7 @@ where
     /// error of kind [`ServerErrorKind::Other`].
     #[instrument(skip(self, puback) fields(client_id = %self.id, packet_id = %puback.packet_id()))]
     pub fn acknowledge(&mut self, puback: Puback) -> ServerResult<()> {
-        info!("Acknowledge");
+        debug!("Acknowledge");
         let idx = self.unacknowledged.iter().position(|publish| {
             puback.packet_id()
                 == publish

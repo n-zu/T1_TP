@@ -8,7 +8,7 @@ use std::{
 
 use serde_json::json;
 use threadpool::ThreadPool;
-use tracing::info;
+use tracing::debug;
 
 use crate::{
     clients_manager::ClientsManager, thread_joiner::ThreadJoiner, topic_handler::TopicHandler,
@@ -82,7 +82,7 @@ impl<C: Config> Server<C> {
 
     pub fn dump(&self) -> ServerResult<()> {
         if let Some(dump_info) = self.config.dump_info() {
-            info!("DUMP");
+            debug!("DUMP");
             let topic_handler = serde_json::to_value(&self.topic_handler).map_err(|err| {
                 ServerError::new_kind(&err.to_string(), ServerErrorKind::DumpError)
             })?;
