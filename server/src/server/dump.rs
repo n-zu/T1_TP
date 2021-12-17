@@ -97,7 +97,7 @@ impl<C: Config> Server<C> {
             if let Some((folder, _)) = dump_info.0.rsplit_once(MAIN_SEPARATOR) {
                 fs::create_dir_all(folder)?;
             }
-            fs::write(dump_info.0, json.to_string())?;
+            fs::write(dump_info.0, serde_json::to_string_pretty(&json)?)?;
         }
         Ok(())
     }
