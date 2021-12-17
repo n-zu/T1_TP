@@ -843,7 +843,7 @@ mod tests {
         let observer = ObserverMock::new();
         let stream = Cursor::new();
 
-        let client_sender = ClientSender::new(stream.clone(), observer.clone());
+        let client_sender = ClientSender::new(stream.clone(), observer);
 
         client_sender.send_puback(puback);
 

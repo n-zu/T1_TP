@@ -101,7 +101,7 @@ impl ConfigMock {
         users: Option<HashMap<String, String>>,
     ) -> ConfigMock {
         ConfigMock {
-            port: port,
+            port,
             dump_info: dump_info.map(|(str, dur)| (str.to_string(), dur)),
             log_path: "tests/files/logs".to_string(),
             auth: users.map(|u| Box::new(AuthMock { users: u })),

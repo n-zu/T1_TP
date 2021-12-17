@@ -51,8 +51,11 @@ fn test_connect_incorrect_password() {
 fn test_connect_correct_password() {
     let (_s, port) = start_server(None, usr![("user", "password")]);
     let mut connect_builder = ConnectBuilder::new("id", 0, true).unwrap();
-    connect_builder = connect_builder.user_name("user").unwrap();
-    connect_builder = connect_builder.password("password").unwrap();
+    connect_builder = connect_builder
+        .user_name("user")
+        .unwrap()
+        .password("password")
+        .unwrap();
     let mut stream = connect_client(connect_builder, port, false);
 
     let mut control = [0u8];

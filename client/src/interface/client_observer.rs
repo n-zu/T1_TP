@@ -158,9 +158,10 @@ impl InternalObserver {
             publish.retain_flag(),
         ));
         self.pub_counter.update_new_messages_amount();
+        self.subs
+            .add_sub_from_publish(publish.topic_name(), publish.qos());
         list.add(&row);
         list.show_all();
-        self.subs.add_sub(publish.topic_name(), publish.qos());
     }
 
     /// Re-enables the interface and shows information

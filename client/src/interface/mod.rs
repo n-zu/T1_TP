@@ -38,7 +38,6 @@ use self::utils::{Icon, InterfaceUtils};
 pub struct Controller {
     builder: Builder,
     client: RefCell<Option<Client<ClientObserver>>>,
-    observer: ClientObserver,
 }
 
 impl InterfaceUtils for Controller {
@@ -52,24 +51,12 @@ impl Controller {
     /// interface builder
     pub fn new(builder: Builder) -> Rc<Self> {
         let cont = Rc::new(Self {
-            observer: Self::get_observer(&builder),
             builder,
             client: RefCell::new(None),
         });
         cont.setup_handlers();
         cont.show_connect_menu();
         cont
-    }
-
-    /// Builds the ClientObserver
-    fn get_observer(builder: &Builder) -> ClientObserver {
-        let sub_box: ListBox = builder.object("sub_subs").unwrap();
-        let unsub_entry: Entry = builder.object("unsub_top").unwrap();
-        let notebook: Notebook = builder.object("notebook").unwrap();
-        let feed_label: Label = builder.object("label_incoming").unwrap();
-        let subs_list = SubscriptionList::new(sub_box, unsub_entry);
-        let publication_counter = PublicationCounter::new(notebook, feed_label);
-        ClientObserver::new(builder.clone(), subs_list, publication_counter)
     }
 
     /// Sets up the different listeners for
@@ -179,8 +166,9 @@ impl Controller {
             con_client_id_entry.text().to_string()
         );
 
-        let connect = self._create_connect_packet()?;
-        let client = Client::new(&full_addr, self.observer.clone(), connect)?;
+        let connect = self.create_connect_packet()?;
+        let client_observer = self.create_client_observer();
+        let client = Client::new(&full_addr, client_observer, connect)?;
 
         self.connection_info(Some(&format!(
             "Conectado a {} ({})",
@@ -192,8 +180,20 @@ impl Controller {
     }
 
     #[doc(hidden)]
+    /// Builds a ClientObserver
+    fn create_client_observer(&self) -> ClientObserver {
+        let sub_box: ListBox = self.builder.object("sub_subs").unwrap();
+        let unsub_entry: Entry = self.builder.object("unsub_top").unwrap();
+        let notebook: Notebook = self.builder.object("notebook").unwrap();
+        let feed_label: Label = self.builder.object("label_incoming").unwrap();
+        let subs_list = SubscriptionList::new(sub_box, unsub_entry);
+        let publication_counter = PublicationCounter::new(notebook, feed_label);
+        ClientObserver::new(self.builder.clone(), subs_list, publication_counter)
+    }
+
+    #[doc(hidden)]
     /// Creates a new CONNECT packet given the input data from the UI
-    fn _create_connect_packet(&self) -> Result<Connect, ClientError> {
+    fn create_connect_packet(&self) -> Result<Connect, ClientError> {
         // Get the entries from the interface
         let id_entry: Entry = self.builder.object("con_cli").unwrap();
         let user_entry: Entry = self.builder.object("con_usr").unwrap();

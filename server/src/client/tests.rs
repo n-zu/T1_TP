@@ -61,7 +61,7 @@ fn make_connect(keep_alive: u16, clean_session: bool, last_will_qos: Option<QoSL
                 .last_will(LastWill::new(
                     String::from("top"),
                     String::from("message"),
-                    QoSLevel::QoSLevel0,
+                    QoSLevel::QoSLevel1,
                     false,
                 ))
                 .build()

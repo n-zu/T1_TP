@@ -48,20 +48,26 @@ impl SubscriptionList {
 
     /// Adds the given topic to the SubsList and updates the view accordingly
     pub fn add_sub(&self, topic: &str, qos: QoSLevel) {
-        let prev = self.subs.borrow().get(topic).map(|t| t.1);
-        if let Some(prev_qos) = prev {
-            if prev_qos as u8 >= qos as u8 {
-                return;
-            } else {
-                self.remove_sub(topic);
-            }
-        }
+        self.remove_sub(topic);
         let box_ = self.create_sub_box(topic, qos);
         self.list.add(&box_);
         self.list.show_all();
         self.subs
             .borrow_mut()
             .insert(topic.to_string(), (box_, qos));
+    }
+
+    /// Adds the given topic to the SubsList and updates the view accordingly.
+    /// This function is used in case of any incoming PUBLISH
+    pub fn add_sub_from_publish(&self, topic: &str, qos: QoSLevel) {
+        let prev = self.subs.borrow().get(topic).map(|t| t.1);
+        if let Some(prev_qos) = prev {
+            if (prev_qos as u8) < qos as u8 {
+                self.add_sub(topic, qos);
+            }
+        } else {
+            self.add_sub(topic, qos);
+        }
     }
 
     #[doc(hidden)]
