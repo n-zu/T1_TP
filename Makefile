@@ -7,14 +7,13 @@ all: fmt test clippy;
 	$(foreach t, $(TARGETS), (cd $(t); cargo $@);)
 
 run-server:
-	(cd server; cargo run)
+	(cd server; cargo run --release config.txt)
 
 run-client:
-	(cd client; cargo run)
+	(cd client; cargo run --release &)
+	sleep 0.5
 
-run:
-	(cd client; cargo run &)
-	(cd server; cargo run)
+run: run-client run-server;
 
 online-config:
 	sed -i 's/^ip=.*/ip='$$(hostname -I | grep -Eo '^[^ ]+' | sed 's/\./\\\./g')'/' server/config.txt	

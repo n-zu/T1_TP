@@ -14,7 +14,7 @@ use std::{
 };
 
 use threadpool::ThreadPool;
-use tracing::{error, info, instrument, warn};
+use tracing::{debug, error, info, instrument, warn};
 
 use packets::{
     connack::{Connack, ConnackReturnCode},
@@ -140,7 +140,7 @@ impl<C: Config> Server<C> {
                     info!("Se encontro un archivo de DUMP - Creando servidor con su informacion");
                     Some(server)
                 } else {
-                    info!("No se encontro un archivo de DUMP - Creando servidor en blanco");
+                    warn!("No se encontro un archivo de DUMP - Creando servidor en blanco");
 
                     let server = Arc::new(Self {
                         clients_manager: RwLock::new(ClientsManager::new(config.authenticator())),
@@ -207,7 +207,7 @@ impl<C: Config> Server<C> {
         self: &Arc<Self>,
         network_connection: &mut NetworkConnection<TcpStream, SocketAddr>,
     ) -> ServerResult<ConnectInfo> {
-        info!("Conectando cliente");
+        debug!("Conectando cliente");
         let connect = self.wait_for_connect(network_connection)?;
         network_connection
             .stream_mut()

@@ -68,7 +68,7 @@ impl<C: Config> Server<C> {
                 ))
             }
         }
-        info!("Procesando {}", packet_type);
+        debug!("Procesando {}", packet_type);
         Ok(packet_type)
     }
 
@@ -108,7 +108,7 @@ impl<C: Config> Server<C> {
     ) -> ServerResult<()> {
         let client_id_receiver = message.client_id;
         let publish = message.packet;
-        info!("Enviando PUBLISH");
+        debug!("Enviando PUBLISH");
         let sv_copy = self.clone();
         threadpool_copy
             .execute(move || {
@@ -215,7 +215,7 @@ impl<C: Config> Server<C> {
         mut last_will: Publish,
         id: &ClientIdArg,
     ) -> ServerResult<()> {
-        info!("Enviando LAST WILL");
+        debug!("Enviando LAST WILL");
         last_will.set_max_qos(QoSLevel::QoSLevel1);
 
         self.broadcast_publish(last_will)
@@ -231,7 +231,7 @@ impl<C: Config> Server<C> {
     ) -> ServerResult<Connect> {
         match Connect::new_from_zero(network_connection) {
             Ok(connect) => {
-                info!("Recibido CONNECT");
+                debug!("Recibido CONNECT");
                 Ok(connect)
             }
             Err(err) => Err(ServerError::from(err)),
