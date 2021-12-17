@@ -19,7 +19,7 @@ use gtk::{
     prelude::{BuilderExtManual, ButtonExt, EntryExt, TextBufferExt},
     Builder, Button, Entry, Label, Notebook, Switch, TextBuffer,
 };
-use gtk::{ComboBoxText, Inhibit, ListBox, Window};
+use gtk::{ComboBoxText, Inhibit, ListBox, TextView, Window};
 use packets::connect::{Connect, ConnectBuilder, LastWill};
 use packets::topic_filter::TopicFilter;
 
@@ -133,7 +133,8 @@ impl Controller {
     #[doc(hidden)]
     /// Keypress handler (Connect on enter key press)
     fn handle_keypress(&self, event: &EventKey) {
-        if event.keyval() == Return && self.client.borrow().is_none() {
+        let lw: TextView = self.builder.object("con_lw_msg").unwrap();
+        if event.keyval() == Return && self.client.borrow().is_none() && !lw.is_focus() {
             self.builder.object::<Button>("con_btn").unwrap().clicked();
         }
     }
