@@ -90,19 +90,23 @@ impl Topic {
         match topic_name {
             Some(topic) => {
                 let (current, rest) = Self::split(topic);
-                let mut subtopics = self.subtopics.read()?;
+                let subtopics = self.subtopics.read()?;
                 if !subtopics.contains_key(current)
                     && packet.retain_flag()
                     && !packet.payload().is_empty()
                 {
+                    // No hay suscriptores pero el mensaje es retained y tiene payload
                     drop(subtopics);
                     self.subtopics
                         .write()?
-                        .insert(current.to_string(), Topic::new());
-                    subtopics = self.subtopics.read()?;
-                }
-                if let Some(subtopic) = subtopics.get(current) {
+                        .entry(current.to_string())
+                        .or_insert_with(Topic::new)
+                        .publish(rest, sender, packet, false)?;
+                } else if let Some(subtopic) = subtopics.get(current) {
+                    // Puede haber suscriptores
                     subtopic.publish(rest, sender, packet, false)?;
+                    // Si el mensaje era retained sin payload cabe la posibilidad que deje
+                    // un nodo vacío (sacando el retained message), asi que limpiamos
                     if subtopic.is_empty()? {
                         drop(subtopics);
                         self.clean([current])?;
@@ -224,20 +228,18 @@ impl Topic {
                 self.add_multi_level_subscription(topic, user_id, sub_data, is_root)
             }
             _ => {
-                let mut subtopics = self.subtopics.read()?;
-                if subtopics.get(current).is_none() {
-                    drop(subtopics);
-                    self.subtopics
-                        .write()?
-                        .entry(current.to_string())
-                        .or_insert_with(Topic::new);
-                    subtopics = self.subtopics.read()?;
+                let subtopics = self.subtopics.read()?;
+                match subtopics.get(current) {
+                    None => {
+                        drop(subtopics);
+                        self.subtopics
+                            .write()?
+                            .entry(current.to_string())
+                            .or_insert_with(Topic::new)
+                            .subscribe(rest, user_id, sub_data, false)
+                    }
+                    Some(subtopic) => subtopic.subscribe(rest, user_id, sub_data, false),
                 }
-
-                let subtopic = subtopics.get(current).ok_or_else(|| {
-                    TopicHandlerError::new("Unexpected error, subtopic not created")
-                })?;
-                subtopic.subscribe(rest, user_id, sub_data, false)
             }
         }
     }
