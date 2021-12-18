@@ -91,26 +91,27 @@ impl Topic {
             Some(topic) => {
                 let (current, rest) = Self::split(topic);
                 let subtopics = self.subtopics.read()?;
-                if !subtopics.contains_key(current)
-                    && packet.retain_flag()
-                    && !packet.payload().is_empty()
-                {
-                    // No hay suscriptores pero el mensaje es retained y tiene payload
-                    drop(subtopics);
-                    self.subtopics
-                        .write()?
-                        .entry(current.to_string())
-                        .or_insert_with(Topic::new)
-                        .publish(rest, sender, packet, false)?;
-                } else if let Some(subtopic) = subtopics.get(current) {
-                    // Puede haber suscriptores
-                    subtopic.publish(rest, sender, packet, false)?;
-                    // Si el mensaje era retained sin payload cabe la posibilidad que deje
-                    // un nodo vacío (sacando el retained message), asi que limpiamos
-                    if subtopic.is_empty()? {
+                match subtopics.get(current) {
+                    None if packet.retain_flag() && !packet.payload().is_empty() => {
+                        // No hay suscriptores pero el mensaje es retained y tiene payload
                         drop(subtopics);
-                        self.clean([current])?;
+                        self.subtopics
+                            .write()?
+                            .entry(current.to_string())
+                            .or_insert_with(Topic::new)
+                            .publish(rest, sender, packet, false)?;
                     }
+                    Some(subtopic) => {
+                        // Puede haber suscriptores
+                        subtopic.publish(rest, sender, packet, false)?;
+                        // Si el mensaje era retained sin payload cabe la posibilidad que deje
+                        // un nodo vacío (sacando el retained message), asi que limpiamos
+                        if subtopic.is_empty()? {
+                            drop(subtopics);
+                            self.clean([current])?;
+                        }
+                    }
+                    _ => (),
                 }
             }
             None => {
