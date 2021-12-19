@@ -4,7 +4,7 @@ use std::{
     thread::{self, JoinHandle, ThreadId},
 };
 
-use tracing::{error, trace, warn};
+use tracing::{error, trace};
 
 /// Joins threads in a simple way.
 /// It creates a thread that receives
@@ -123,7 +123,7 @@ impl ThreadGuard {
 
 impl Drop for ThreadGuard {
     fn drop(&mut self) {
-        warn!("Drop de ThreadGuard: {:?}", self.id);
+        trace!("Drop de ThreadGuard: {:?}", self.id);
         self.sender
             .send(Message::Finished(self.id))
             .unwrap_or_else(|e| {

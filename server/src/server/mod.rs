@@ -286,19 +286,15 @@ impl<C: Config> Server<C> {
             self.send_last_will(last_will, &connect_info.id)?;
         }
         let disconnect_info;
-        if let Ok(gracefully) = self.client_loop(&connect_info.id, &mut network_connection) {
-            disconnect_info = self.clients_manager.write()?.disconnect(
-                &connect_info.id,
-                network_connection,
-                gracefully,
-            )?;
-        } else {
-            disconnect_info = self.clients_manager.write()?.disconnect(
-                &connect_info.id,
-                network_connection,
-                false,
-            )?;
-        }
+        let gracefully = self
+            .client_loop(&connect_info.id, &mut network_connection)
+            .unwrap_or(false);
+        debug!("Cliente desconectado (Gracefully: {})", gracefully);
+        disconnect_info = self.clients_manager.write()?.disconnect(
+            &connect_info.id,
+            network_connection,
+            gracefully,
+        )?;
         if disconnect_info.clean_session {
             self.topic_handler.remove_client(&connect_info.id)?;
         }
