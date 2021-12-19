@@ -4,5 +4,5 @@ dump_time=
 log_path=logs
 accounts_path=accounts.csv
 ip=localhost
-log_file_level=warn
-log_stdout_level=info
+log_file_level=info
+log_stdout_level=debug
