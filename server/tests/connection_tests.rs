@@ -30,9 +30,9 @@ fn test_connect_clean_session_true() {
 fn test_connect_incorrect_password() {
     let (_s, port) = start_server(None, usr![("user", "password")]);
     let mut connect_builder = ConnectBuilder::new("id", 0, true).unwrap();
-    connect_builder = connect_builder.user_name("user").unwrap();
+    connect_builder = connect_builder.with_user_name("user").unwrap();
     connect_builder = connect_builder
-        .password("contraseña totalmente incorrecta")
+        .with_password("contraseña totalmente incorrecta")
         .unwrap();
     let mut stream = connect_client(connect_builder, port, false);
 
@@ -52,9 +52,9 @@ fn test_connect_correct_password() {
     let (_s, port) = start_server(None, usr![("user", "password")]);
     let mut connect_builder = ConnectBuilder::new("id", 0, true).unwrap();
     connect_builder = connect_builder
-        .user_name("user")
+        .with_user_name("user")
         .unwrap()
-        .password("password")
+        .with_password("password")
         .unwrap();
     let mut stream = connect_client(connect_builder, port, false);
 
@@ -167,15 +167,15 @@ fn test_takeover_only_works_with_same_username() {
     let (_s, port) = start_server(None, usr![("foo", "bar"), ("user", "pass")]);
     let builder_1 = ConnectBuilder::new("id", 60, true)
         .unwrap()
-        .user_name("user")
+        .with_user_name("user")
         .unwrap()
-        .password("pass")
+        .with_password("pass")
         .unwrap();
     let builder_2 = ConnectBuilder::new("id", 1, true)
         .unwrap()
-        .user_name("foo")
+        .with_user_name("foo")
         .unwrap()
-        .password("bar")
+        .with_password("bar")
         .unwrap();
 
     let mut control = [0u8];

@@ -231,10 +231,10 @@ impl Controller {
         // Create the connect builder
         let mut connect_builder = ConnectBuilder::new(&client_id, keep_alive, clean_session)?;
         if !user_name.is_empty() {
-            connect_builder = connect_builder.user_name(&user_name)?;
+            connect_builder = connect_builder.with_user_name(&user_name)?;
         }
         if !password.is_empty() {
-            connect_builder = connect_builder.password(&password)?;
+            connect_builder = connect_builder.with_password(&password)?;
         }
 
         if !last_will_topic.trim().is_empty() {
@@ -243,7 +243,7 @@ impl Controller {
                 last_will_msg,
                 last_will_retain,
             );
-            connect_builder = connect_builder.last_will(last_will);
+            connect_builder = connect_builder.with_last_will(last_will);
         }
 
         // Return the built connect packet

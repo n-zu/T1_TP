@@ -213,7 +213,7 @@ fn test_last_will() {
     let (_s, port) = start_server(None, None);
     // Me conecto con last will
     let mut builder_1 = ConnectBuilder::new("id1", 0, false).unwrap();
-    builder_1 = builder_1.last_will(LastWill::new(
+    builder_1 = builder_1.with_last_will(LastWill::new(
         TopicFilter::new("topic", QoSLevel0).unwrap(),
         "message".to_string(),
         false,
@@ -252,7 +252,7 @@ fn test_gracefully_disconnection_should_not_send_last_will() {
     let (_s, port) = start_server(None, None);
     // Me conecto con last will
     let mut builder_1 = ConnectBuilder::new("id1", 0, false).unwrap();
-    builder_1 = builder_1.last_will(LastWill::new(
+    builder_1 = builder_1.with_last_will(LastWill::new(
         TopicFilter::new("topic", QoSLevel0).unwrap(),
         "message".to_string(),
         false,
@@ -301,7 +301,7 @@ fn test_takeover_should_change_clean_session() {
     let builder_1 = ConnectBuilder::new("id", 1, false).unwrap();
     let builder_2 = ConnectBuilder::new("id", 1, true)
         .unwrap()
-        .last_will(LastWill::new(
+        .with_last_will(LastWill::new(
             TopicFilter::new("topic", QoSLevel1).unwrap(),
             "no deberia llegar".to_owned(),
             false,
@@ -375,7 +375,7 @@ fn test_retained_message_in_last_will() {
     );
     let builder_2 = ConnectBuilder::new("id2", 0, true)
         .unwrap()
-        .last_will(last_will);
+        .with_last_will(last_will);
     let stream_2 = connect_client(builder_2, port, true);
     let mut control = [0u8];
 

@@ -135,17 +135,17 @@ impl ConnectBuilder {
         })
     }
 
-    pub fn user_name(mut self, user_name: &str) -> PacketResult<Self> {
+    pub fn with_user_name(mut self, user_name: &str) -> PacketResult<Self> {
         self.connect.user_name = Some(user_name.to_owned());
         Ok(self)
     }
 
-    pub fn password(mut self, password: &str) -> PacketResult<Self> {
+    pub fn with_password(mut self, password: &str) -> PacketResult<Self> {
         self.connect.password = Some(password.to_owned());
         Ok(self)
     }
 
-    pub fn last_will(mut self, last_will: LastWill) -> Self {
+    pub fn with_last_will(mut self, last_will: LastWill) -> Self {
         self.connect.last_will = Some(last_will);
         self
     }

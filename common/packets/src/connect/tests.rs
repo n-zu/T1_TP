@@ -250,9 +250,9 @@ fn test_basics() {
 fn test_username_password() {
     let packet = ConnectBuilder::new("rust", 25, true)
         .unwrap()
-        .user_name("yo")
+        .with_user_name("yo")
         .unwrap()
-        .password("pass")
+        .with_password("pass")
         .unwrap()
         .build()
         .unwrap();
@@ -276,7 +276,7 @@ fn test_username_password() {
 fn test_password_without_username_should_raise_error() {
     let builder = ConnectBuilder::new("rust", 25, true)
         .unwrap()
-        .password("pass")
+        .with_password("pass")
         .unwrap();
     let result = builder.build().unwrap_err();
     let expected_error =

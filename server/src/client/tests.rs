@@ -49,7 +49,7 @@ fn make_connect(keep_alive: u16, clean_session: bool, last_will_qos: Option<QoSL
     if let Some(qos) = last_will_qos {
         if qos == QoSLevel::QoSLevel0 {
             connect_builder
-                .last_will(LastWill::new(
+                .with_last_will(LastWill::new(
                     TopicFilter::new("top", QoSLevel::QoSLevel0).unwrap(),
                     String::from("message"),
                     false,
@@ -58,7 +58,7 @@ fn make_connect(keep_alive: u16, clean_session: bool, last_will_qos: Option<QoSL
                 .unwrap()
         } else {
             connect_builder
-                .last_will(LastWill::new(
+                .with_last_will(LastWill::new(
                     TopicFilter::new("top", QoSLevel::QoSLevel0).unwrap(),
                     String::from("top"),
                     false,

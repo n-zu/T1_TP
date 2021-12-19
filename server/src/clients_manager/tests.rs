@@ -105,9 +105,9 @@ fn test_authorized_session() {
     let iomock = IOMock::new();
     let connect = ConnectBuilder::new("client_id", 0, false)
         .unwrap()
-        .user_name("user")
+        .with_user_name("user")
         .unwrap()
-        .password("pass")
+        .with_password("pass")
         .unwrap()
         .build()
         .unwrap();
@@ -125,9 +125,9 @@ fn test_invalid_username_should_fail() {
     let iomock = IOMock::new();
     let connect = ConnectBuilder::new("client_id", 0, false)
         .unwrap()
-        .user_name("usuario invalido")
+        .with_user_name("usuario invalido")
         .unwrap()
-        .password("pass")
+        .with_password("pass")
         .unwrap()
         .build()
         .unwrap();
@@ -148,9 +148,9 @@ fn test_invalid_password_should_fail() {
     let iomock = IOMock::new();
     let connect = ConnectBuilder::new("client_id", 0, false)
         .unwrap()
-        .user_name("user")
+        .with_user_name("user")
         .unwrap()
-        .password("contraseña invalida")
+        .with_password("contraseña invalida")
         .unwrap()
         .build()
         .unwrap();
@@ -173,17 +173,17 @@ fn test_ids_collision_should_fail() {
 
     let connect_1 = ConnectBuilder::new("client_id", 0, false)
         .unwrap()
-        .user_name("user")
+        .with_user_name("user")
         .unwrap()
-        .password("pass")
+        .with_password("pass")
         .unwrap()
         .build()
         .unwrap();
     let connect_2 = ConnectBuilder::new("client_id", 0, false)
         .unwrap()
-        .user_name("foo")
+        .with_user_name("foo")
         .unwrap()
-        .password("bar")
+        .with_password("bar")
         .unwrap()
         .build()
         .unwrap();
@@ -220,9 +220,9 @@ fn test_takeover() {
 
     let connect_1 = ConnectBuilder::new("client_id", 0, false)
         .unwrap()
-        .user_name("user")
+        .with_user_name("user")
         .unwrap()
-        .password("pass")
+        .with_password("pass")
         .unwrap()
         .build()
         .unwrap();
@@ -256,17 +256,17 @@ fn test_takeover_should_update_client_properties() {
 
     let connect_1 = ConnectBuilder::new("client_id", 0, false)
         .unwrap()
-        .user_name("user")
+        .with_user_name("user")
         .unwrap()
-        .password("pass")
+        .with_password("pass")
         .unwrap()
         .build()
         .unwrap();
     let connect_2 = ConnectBuilder::new("client_id", 15, true)
         .unwrap()
-        .user_name("user")
+        .with_user_name("user")
         .unwrap()
-        .password("pass")
+        .with_password("pass")
         .unwrap()
         .build()
         .unwrap();
@@ -302,11 +302,11 @@ fn test_takeover_should_return_lastwill() {
 
     let connect_1 = ConnectBuilder::new("client_id", 0, false)
         .unwrap()
-        .user_name("user")
+        .with_user_name("user")
         .unwrap()
-        .password("pass")
+        .with_password("pass")
         .unwrap()
-        .last_will(LastWill::new(
+        .with_last_will(LastWill::new(
             TopicFilter::new("top", QoSLevel::QoSLevel0).unwrap(),
             String::from("message"),
             false,
@@ -378,7 +378,7 @@ fn test_disconnect_gracefully_should_not_return_last_will() {
 
     let connect = ConnectBuilder::new("client_id", 0, false)
         .unwrap()
-        .last_will(LastWill::new(
+        .with_last_will(LastWill::new(
             TopicFilter::new("top", QoSLevel::QoSLevel0).unwrap(),
             String::from("message"),
             false,
@@ -405,7 +405,7 @@ fn test_disconnect_ungracefully_should_return_last_will() {
 
     let connect = ConnectBuilder::new("client_id", 0, false)
         .unwrap()
-        .last_will(LastWill::new(
+        .with_last_will(LastWill::new(
             TopicFilter::new("top", QoSLevel::QoSLevel0).unwrap(),
             String::from("message"),
             false,
