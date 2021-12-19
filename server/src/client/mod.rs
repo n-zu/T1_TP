@@ -261,7 +261,6 @@ where
                 }
             }
         }
-
         Ok(())
     }
 
@@ -277,28 +276,26 @@ where
         S: fmt::Debug,
         I: fmt::Debug,
     {
-        let len = self.unacknowledged.len();
         let now = SystemTime::now();
-
-        for _ in 0..len {
-            let (last_time_published, publish) = self.unacknowledged.remove(0);
-            if let Some(min_elapsed_time) = min_elapsed_time {
-                if now.duration_since(last_time_published).unwrap() > min_elapsed_time {
-                    self.send_packet(&publish)?;
-                    self.unacknowledged.insert(0, (now, publish));
-                } else {
-                    // No se envio, no actualizo la hora y lo inserto
-                    // al inicio de la cola, porque debe ser el primero
-                    // en reenviarse al llamar nuevamente al metodo
-                    self.unacknowledged
-                        .insert(0, (last_time_published, publish));
-                    break;
-                }
-            } else {
-                self.send_packet(&publish)?;
-                self.unacknowledged.push((now, publish));
-            }
+        if self.unacknowledged.is_empty() {
+            return Ok(());
         }
+
+        let (last_time_published, publish) = self.unacknowledged.remove(0);
+        if let Some(min_elapsed_time) = min_elapsed_time {
+            if now.duration_since(last_time_published).unwrap() > min_elapsed_time {
+                self.send_packet(&publish)?;
+                self.unacknowledged.insert(0, (now, publish));
+            } else {
+                // No se envio, no actualizo la hora
+                self.unacknowledged
+                    .insert(0, (last_time_published, publish));
+            }
+        } else {
+            self.send_packet(&publish)?;
+            self.unacknowledged.insert(0, (now, publish));
+        }
+
         Ok(())
     }
 
