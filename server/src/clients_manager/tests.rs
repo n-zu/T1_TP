@@ -26,16 +26,14 @@ fn make_manager_with_clients(
         Some(path) => ClientsManager::new(Some(Box::new(SimpleLogin::new(path).unwrap()))),
         None => ClientsManager::new(None),
     };
-    let mut i = 0;
-    for id in ids {
+    for (i, id) in ids.into_iter().enumerate() {
         let iomock = IOMock::new();
         let connect = ConnectBuilder::new(id, 0, clean_session)
             .unwrap()
             .build()
             .unwrap();
-        let network_connection = NetworkConnection::new(i, iomock);
+        let network_connection = NetworkConnection::new(i as u16, iomock);
         manager.new_session(network_connection, connect)?;
-        i += 1;
     }
     Ok(manager)
 }
@@ -294,7 +292,7 @@ fn test_takeover_should_update_client_properties() {
         .unwrap();
 
     assert_eq!(keep_alive, Some(Duration::from_millis(22500)));
-    assert_eq!(clean_session, true);
+    assert!(clean_session);
 }
 
 #[test]

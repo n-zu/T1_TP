@@ -11,13 +11,15 @@ use crate::interface::client_observer::ClientObserver;
 
 use crate::client::{Client, ClientError};
 
+use gtk::gdk::keys::constants::Return;
+use gtk::gdk::EventKey;
 use gtk::glib::GString;
-use gtk::prelude::{ComboBoxTextExt, SwitchExt};
+use gtk::prelude::{ComboBoxTextExt, StackExt, SwitchExt, WidgetExt};
 use gtk::{
     prelude::{BuilderExtManual, ButtonExt, EntryExt, TextBufferExt},
     Builder, Button, Entry, Label, Notebook, Switch, TextBuffer,
 };
-use gtk::{ComboBoxText, ListBox};
+use gtk::{ComboBoxText, Inhibit, ListBox, Stack, TextView, Window};
 use packets::connect::{Connect, ConnectBuilder, LastWill};
 use packets::topic_filter::TopicFilter;
 
@@ -65,6 +67,18 @@ impl Controller {
         self.setup_publish();
         self.setup_disconnect();
         self.setup_unsubscribe();
+        self.setup_keypress();
+    }
+
+    #[doc(hidden)]
+    /// Sets up the key press handler
+    fn setup_keypress(self: &Rc<Self>) {
+        let cont_clone = self.clone();
+        let window: Window = self.builder.object("main_window").unwrap();
+        window.connect_key_press_event(move |_, event| {
+            cont_clone.handle_keypress(event);
+            Inhibit(false)
+        });
     }
 
     #[doc(hidden)]
@@ -117,6 +131,23 @@ impl Controller {
     }
 
     #[doc(hidden)]
+    /// Keypress handler (Connect on enter key press)
+    fn handle_keypress(&self, event: &EventKey) {
+        let lw: TextView = self.builder.object("con_lw_msg").unwrap();
+        let stack: Stack = self.builder.object("content").unwrap();
+        let current_tab = stack.visible_child_name();
+        if event.keyval() == Return
+            && matches!(
+                &current_tab.as_ref().map(GString::as_str),
+                Some("box_connection")
+            )
+            && !lw.is_focus()
+        {
+            self.builder.object::<Button>("con_btn").unwrap().clicked();
+        }
+    }
+
+    #[doc(hidden)]
     /// Retrieves all the necessary input data from the UI in order to create and connect
     /// a new Client
     fn _connect(&self) -> Result<(), ClientError> {
@@ -135,15 +166,9 @@ impl Controller {
             con_client_id_entry.text().to_string()
         );
 
-        let connect = self._create_connect_packet()?;
-        let sub_box: ListBox = self.builder.object("sub_subs").unwrap();
-        let unsub_entry: Entry = self.builder.object("unsub_top").unwrap();
-        let notebook: Notebook = self.builder.object("box_connected").unwrap();
-        let feed_label: Label = self.builder.object("label_incoming").unwrap();
-        let subs_list = SubscriptionList::new(sub_box, unsub_entry);
-        let publication_counter = PublicationCounter::new(notebook, feed_label);
-        let observer = ClientObserver::new(self.builder.clone(), subs_list, publication_counter);
-        let client = Client::new(&full_addr, observer, connect)?;
+        let connect = self.create_connect_packet()?;
+        let client_observer = self.create_client_observer();
+        let client = Client::new(&full_addr, client_observer, connect)?;
 
         self.connection_info(Some(&format!(
             "Conectado a {} ({})",
@@ -155,8 +180,20 @@ impl Controller {
     }
 
     #[doc(hidden)]
+    /// Builds a ClientObserver
+    fn create_client_observer(&self) -> ClientObserver {
+        let sub_box: ListBox = self.builder.object("sub_subs").unwrap();
+        let unsub_entry: Entry = self.builder.object("unsub_top").unwrap();
+        let notebook: Notebook = self.builder.object("notebook").unwrap();
+        let feed_label: Label = self.builder.object("label_incoming").unwrap();
+        let subs_list = SubscriptionList::new(sub_box, unsub_entry);
+        let publication_counter = PublicationCounter::new(notebook, feed_label);
+        ClientObserver::new(self.builder.clone(), subs_list, publication_counter)
+    }
+
+    #[doc(hidden)]
     /// Creates a new CONNECT packet given the input data from the UI
-    fn _create_connect_packet(&self) -> Result<Connect, ClientError> {
+    fn create_connect_packet(&self) -> Result<Connect, ClientError> {
         // Get the entries from the interface
         let id_entry: Entry = self.builder.object("con_cli").unwrap();
         let user_entry: Entry = self.builder.object("con_usr").unwrap();
@@ -369,7 +406,7 @@ impl Controller {
         } else {
             return Err(ClientError::new("No hay una conexión activa"));
         }
-        Err(ClientError::new("No implementado"))
+        Ok(())
     }
 
     /// Listener of the Unsubscribe button

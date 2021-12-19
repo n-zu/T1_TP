@@ -35,10 +35,7 @@ impl ClientError {
 
 impl From<PacketError> for ClientError {
     fn from(err: PacketError) -> ClientError {
-        ClientError::new(&format!(
-            "Error parseando paquete proveniente del servidor: {}",
-            err
-        ))
+        ClientError::new(&format!("{}", err))
     }
 }
 

@@ -4,8 +4,8 @@ use gtk::{
         BuilderExtManual, DialogExt, EntryExt, LabelExt, StackExt, SwitchExt, TextBufferExt,
         WidgetExt,
     },
-    Box, Builder, Button, ButtonsType, DialogFlags, Entry, Label, ListBox, MessageDialog,
-    MessageType, Stack, Switch, TextBuffer, Window,
+    Builder, Button, ButtonsType, DialogFlags, Entry, Label, ListBox, MessageDialog, MessageType,
+    Stack, Switch, TextBuffer, Window,
 };
 
 /// Icons of the status bar
@@ -69,13 +69,9 @@ pub(crate) trait InterfaceUtils {
     /// info bar with the given message. If it is None,
     /// it hides it.
     fn connection_info(&self, msg: Option<&str>) {
-        let info_box: Box = self.builder().object("info_box").unwrap();
         if let Some(text) = msg {
             let label: Label = self.builder().object("connection_info").unwrap();
-            info_box.set_visible(true);
             label.set_text(text);
-        } else {
-            info_box.set_visible(false);
         }
     }
 

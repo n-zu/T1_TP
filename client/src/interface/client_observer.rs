@@ -158,6 +158,8 @@ impl InternalObserver {
             publish.retain_flag(),
         ));
         self.pub_counter.update_new_messages_amount();
+        self.subs
+            .add_sub_from_publish(publish.topic_name(), publish.qos());
         list.add(&row);
         list.show_all();
     }
@@ -199,7 +201,7 @@ impl InternalObserver {
     /// Sets up the 'connect_switch_page' signal
     fn setup_notebook(self: &Rc<Self>) {
         let internal_clone = self.clone();
-        let notebook: Notebook = self.builder.object("box_connected").unwrap();
+        let notebook: Notebook = self.builder.object("notebook").unwrap();
         notebook.connect_switch_page(move |notebook, widget, new_page_number| {
             internal_clone.handle_switch_notebook_tab(notebook, widget, new_page_number);
         });
@@ -218,8 +220,9 @@ impl InternalObserver {
     fn create_box(topic: &str, payload: &str, qos: QoSLevel, retain_flag: bool) -> Box {
         let outer_box = Box::new(Orientation::Vertical, 5);
         let inner_box = Box::new(Orientation::Horizontal, 5);
-        let label_topic: Label = Label::new(Some(&("• ".to_owned() + topic)));
-        let mut qos_msg = format!("- QoS: {}", qos as u8);
+        let label_topic: Label = Label::new(None);
+        label_topic.set_markup(&("<b>• ".to_owned() + topic + "</b>"));
+        let mut qos_msg = format!("- [QoS: {}]", qos as u8);
         if retain_flag {
             qos_msg.push_str(" (retained)");
         }

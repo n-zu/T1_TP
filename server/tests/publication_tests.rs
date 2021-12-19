@@ -276,7 +276,7 @@ fn test_gracefully_disconnection_should_not_send_last_will() {
 
     // Me desconecto mandando disconnect
     stream_1
-        .write_all(&mut Disconnect::new().encode().unwrap())
+        .write_all(&Disconnect::new().encode().unwrap())
         .unwrap();
 
     // El otro no debería recibir publish

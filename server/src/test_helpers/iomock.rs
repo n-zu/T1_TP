@@ -94,9 +94,9 @@ mod tests {
     fn test_read_write_one_byte() {
         let mut iomock = IOMock::new();
 
-        let mut byte = [5u8];
+        let byte = [5u8];
 
-        iomock.write_all(&mut byte).unwrap();
+        iomock.write_all(&byte).unwrap();
         let mut buf = [0u8];
         iomock.read_exact(&mut buf).unwrap();
 
@@ -107,9 +107,9 @@ mod tests {
     fn test_read_write_multiple_bytes() {
         let mut iomock = IOMock::new();
 
-        let mut byte = [5u8, 10u8];
+        let byte = [5u8, 10u8];
 
-        iomock.write_all(&mut byte).unwrap();
+        iomock.write_all(&byte).unwrap();
         let mut buf = [0u8; 2];
         iomock.read_exact(&mut buf).unwrap();
 
@@ -121,9 +121,9 @@ mod tests {
     fn test_read_write_multiple_bytes_separately() {
         let mut iomock = IOMock::new();
 
-        let mut byte = [5u8, 10u8];
+        let byte = [5u8, 10u8];
 
-        iomock.write_all(&mut byte).unwrap();
+        iomock.write_all(&byte).unwrap();
         let mut buf = [0u8];
 
         iomock.read_exact(&mut buf).unwrap();
