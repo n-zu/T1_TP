@@ -4,7 +4,7 @@ use gtk::{
     prelude::{BuilderExtManual, ButtonExt, ContainerExt, WidgetExt},
     Box, Builder, Button, Label, ListBox, ListBoxRow, Notebook, Orientation, Widget,
 };
-use packets::{connack::Connack, qos::QoSLevel, unsuback::Unsuback};
+use packets::{connack::Connack, unsuback::Unsuback};
 use packets::{puback::Puback, publish::Publish, suback::Suback};
 use std::rc::Rc;
 
@@ -151,12 +151,7 @@ impl InternalObserver {
     fn add_publish(&self, publish: Publish) {
         let list: ListBox = self.builder.object("sub_msgs").unwrap();
         let row = ListBoxRow::new();
-        row.add(&Self::create_box(
-            publish.topic_name(),
-            publish.payload(),
-            publish.qos(),
-            publish.retain_flag(),
-        ));
+        row.add(&Self::create_box(&publish));
         self.pub_counter.update_new_messages_amount();
         self.subs
             .add_sub_from_publish(publish.topic_name(), publish.qos());
@@ -217,17 +212,20 @@ impl InternalObserver {
 
     #[doc(hidden)]
     /// Returns a Box with the given topic, payload and QoS added on it
-    fn create_box(topic: &str, payload: &str, qos: QoSLevel, retain_flag: bool) -> Box {
+    fn create_box(publish: &Publish) -> Box {
         let outer_box = Box::new(Orientation::Vertical, 5);
         let inner_box = Box::new(Orientation::Horizontal, 5);
         let label_topic: Label = Label::new(None);
-        label_topic.set_markup(&("<b>• ".to_owned() + topic + "</b>"));
-        let mut qos_msg = format!("- [QoS: {}]", qos as u8);
-        if retain_flag {
+        label_topic.set_markup(&("<b>• ".to_owned() + publish.topic_name() + "</b>"));
+        let mut qos_msg = format!("- [QoS: {}]", publish.qos() as u8);
+        if publish.retain_flag() {
             qos_msg.push_str(" (retained)");
         }
+        if publish.dup_flag() {
+            qos_msg.push_str(" (duplicate)");
+        }
         let label_qos: Label = Label::new(Some(&qos_msg));
-        let label_payload: Label = Label::new(Some(payload));
+        let label_payload: Label = Label::new(Some(publish.payload()));
         label_topic.set_line_wrap(true);
         label_qos.set_line_wrap(true);
         label_payload.set_line_wrap(true);
