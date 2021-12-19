@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# trap ctrl-c and call ctrl_c()
+# trap ctrl-c and call end()
 trap end INT
 
 function end() {
@@ -16,7 +16,7 @@ rm -f /tmp/srv-input
 mkfifo /tmp/srv-input
 cargo build --release
 printf "Ejecutando stress test con flags:\n\033[2;37m$SFLAGS\033[0m\n"
-cat /tmp/srv-input | cargo run --release > /dev/null &
+cat /tmp/srv-input | cargo run --release config.txt > /dev/null &
 docker run --net=host --rm inovex/mqtt-stresser -broker tcp://localhost:1883 \
     -username fdelu -password fdelu $SFLAGS
 end

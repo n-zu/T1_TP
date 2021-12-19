@@ -118,6 +118,15 @@ impl From<ThreadPoolError> for ServerError {
     }
 }
 
+impl From<serde_json::Error> for ServerError {
+    fn from(err: serde_json::Error) -> Self {
+        ServerError::new_kind(
+            &format!("Dump error: {}", err.to_string()),
+            ServerErrorKind::Irrecoverable,
+        )
+    }
+}
+
 impl ServerError {
     pub fn new_msg<T: Into<String>>(msg: T) -> ServerError {
         ServerError {

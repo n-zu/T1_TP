@@ -87,7 +87,7 @@ impl<T: Observer> Client<T> {
     pub fn subscribe(&mut self, subscribe: Subscribe) -> Result<(), ClientError> {
         let sender = self.sender.clone();
 
-        self.thread_pool.spawn(move || {
+        self.thread_pool.execute(move || {
             sender.send_subscribe(subscribe);
         })?;
 
@@ -100,7 +100,7 @@ impl<T: Observer> Client<T> {
     pub fn unsubscribe(&mut self, unsubscribe: Unsubscribe) -> Result<(), ClientError> {
         let sender = self.sender.clone();
 
-        self.thread_pool.spawn(move || {
+        self.thread_pool.execute(move || {
             sender.send_unsubscribe(unsubscribe);
         })?;
 
@@ -116,7 +116,7 @@ impl<T: Observer> Client<T> {
     /// packet had QoSLevel1. Behaviour is undefined for QoSLevel2.
     pub fn publish(&mut self, publish: Publish) -> Result<(), ClientError> {
         let sender = self.sender.clone();
-        self.thread_pool.spawn(move || {
+        self.thread_pool.execute(move || {
             sender.send_publish(publish);
         })?;
 
@@ -140,11 +140,11 @@ impl<T: Observer> Client<T> {
 
         let sender = self.sender.clone();
         let stop = self.stop.clone();
-        self.thread_pool.spawn(move || {
+        self.thread_pool.execute(move || {
             sender.send_connect(connect, stop);
         })?;
 
-        self.thread_pool.spawn(move || {
+        self.thread_pool.execute(move || {
             listener.wait_for_packets();
         })?;
 
@@ -160,7 +160,7 @@ impl<T: Observer> Client<T> {
         let sender = self.sender.clone();
         let stop = self.stop.clone();
 
-        self.thread_pool.spawn(move || {
+        self.thread_pool.execute(move || {
             Self::keep_alive(sender, stop, duration);
         })?;
 
@@ -194,7 +194,7 @@ impl<T: Observer> Drop for Client<T> {
     fn drop(&mut self) {
         self.stop.store(true, std::sync::atomic::Ordering::Relaxed);
         let sender = self.sender.clone();
-        if let Err(err) = self.thread_pool.spawn(move || {
+        if let Err(err) = self.thread_pool.execute(move || {
             sender.send_disconnect();
         }) {
             let msg = "Error enviándo paquete disconnect, se desconectará de manera forzosa";

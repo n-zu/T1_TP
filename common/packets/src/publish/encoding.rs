@@ -34,7 +34,7 @@ impl MQTTEncoding for Publish {
     /// Returns error if:
     /// * packet_identifier is None and QoS is 1
     /// * packet_identifier is not None and QoS is 0
-    /// * topic_name or topic_message exceedes the maximum length
+    /// * topic_name or topic_message exceeds the maximum length
     ///   established for UTF-8 fields in MQTT V3.1.1 standard
     /// * topic_name contains wildcard characters
     fn encode(&self) -> PacketResult<MQTTBytes> {
@@ -54,7 +54,7 @@ impl Publish {
     /// Returns error if:
     /// * packet_identifier is None and QoS is 1
     /// * packet_identifier is not None and QoS is 0
-    /// * topic_name or topic_message exceedes the maximum length
+    /// * topic_name or topic_message exceeds the maximum length
     ///   established for uft8 fields in MQTT V3.1.1 standard
     /// * topic_name contains wildcard characters
     pub fn new(

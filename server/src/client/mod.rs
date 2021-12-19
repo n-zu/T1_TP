@@ -5,7 +5,7 @@ use std::{io::Write, vec};
 use packets::{connect::Connect, qos::QoSLevel, traits::MQTTEncoding};
 use packets::{puback::Puback, publish::Publish};
 use serde::{Deserialize, Serialize};
-use tracing::{debug, instrument, warn};
+use tracing::{debug, instrument};
 
 use crate::traits::{Close, Interrupt};
 use crate::{
@@ -77,7 +77,7 @@ where
     }
 
     /// Return true if the client is connected.
-    /// Othrewise, return false.
+    /// Otherwise, return false.
     pub fn connected(&self) -> bool {
         self.connection.is_some()
     }

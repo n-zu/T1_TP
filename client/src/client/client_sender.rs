@@ -50,7 +50,7 @@ impl<T: Observer, W: Write> AckSender for ClientSender<T, W> {
 
 impl<T: Observer, W: Write> ClientSender<T, W> {
     /// Creates a new sender with the given stream and observer,
-    /// and intializes pending_ack to None.
+    /// and initializes pending_ack to None.
     pub fn new(stream: W, observer: T) -> Self {
         Self {
             stream: Mutex::new(stream),
@@ -95,7 +95,7 @@ impl<T: Observer, W: Write> ClientSender<T, W> {
     /// and will wait until it is None. Every time a RESEND_TIMEOUT duration passes,
     /// it will resend the package up to a maximum of MAX_RETRIES times, after which
     /// it fails.
-    /// If it fails, it sets failure_stop to true and sends a Message::Conected
+    /// If it fails, it sets failure_stop to true and sends a Message::Connected
     /// with the error to the observer and pending_ack is set to None.
     pub fn send_connect(&self, connect: Connect, failure_stop: Arc<AtomicBool>) {
         if let Err(err) = self._connect(connect) {
@@ -410,7 +410,7 @@ mod tests {
         // haber quedado en None
 
         assert!(!stop.load(std::sync::atomic::Ordering::Relaxed));
-        // No falló asique no tiene por que cambiar el stop
+        // No falló asi que no tiene por que cambiar el stop
 
         assert_eq!(stream.content(), bytes);
         // Debería haber escrito el connect en el stream
@@ -771,7 +771,7 @@ mod tests {
         bytes.append(&mut dup_bytes.repeat(MAX_RETRIES as usize));
         assert_eq!(stream.content(), bytes);
         // Debería haber escrito el unsubscribe en el stream, con el intento inicial + MAX_RETRIES veces,
-        // y los ultimos deberían tener la flag de DUP
+        // y los últimos deberían tener la flag de DUP
 
         assert!(matches!(
             observer.messages.lock().unwrap()[0],

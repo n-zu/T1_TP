@@ -10,7 +10,7 @@ impl<C: Config> Server<C> {
     {
         let sv_copy = self.clone();
         let id_copy = id.to_owned();
-        self.pool.lock()?.spawn(move || {
+        self.pool.lock()?.execute(move || {
             action(sv_copy, &id_copy).unwrap_or_else(|e| {
                 if e.kind() != ServerErrorKind::ClientNotFound {
                     error!("Error de ThreadPool: {}", e);
@@ -68,7 +68,7 @@ impl<C: Config> Server<C> {
                 ))
             }
         }
-        info!("Procesando {}", packet_type);
+        debug!("Procesando {}", packet_type);
         Ok(packet_type)
     }
 
@@ -108,9 +108,10 @@ impl<C: Config> Server<C> {
     ) -> ServerResult<()> {
         let client_id_receiver = message.client_id;
         let publish = message.packet;
+        debug!("Enviando PUBLISH");
         let sv_copy = self.clone();
         threadpool_copy
-            .spawn(move || {
+            .execute(move || {
                 sv_copy
                     ._send_publish(client_id_receiver, publish)
                     .unwrap_or_else(|e| {
@@ -122,7 +123,7 @@ impl<C: Config> Server<C> {
                     });
             })
             .unwrap_or_else(|e| {
-                error!("Eror de ThreadPool: {}", e);
+                error!("Error de ThreadPool: {}", e);
             });
 
         Ok(())
@@ -145,7 +146,7 @@ impl<C: Config> Server<C> {
     fn broadcast_publish(self: &Arc<Self>, publish: Publish) -> ServerResult<()> {
         let (sender, receiver) = mpsc::channel();
         let sv_copy = self.clone();
-        self.pool.lock()?.spawn(move || {
+        self.pool.lock()?.execute(move || {
             sv_copy
                 .publish_dispatcher_loop(receiver)
                 .unwrap_or_else(|e| error!("Error despachando el PUBLISH: {}", e));
@@ -214,7 +215,7 @@ impl<C: Config> Server<C> {
         mut last_will: Publish,
         id: &ClientIdArg,
     ) -> ServerResult<()> {
-        info!("Enviando LAST WILL");
+        debug!("Enviando LAST WILL");
         last_will.set_max_qos(QoSLevel::QoSLevel1);
 
         self.broadcast_publish(last_will)
@@ -230,7 +231,7 @@ impl<C: Config> Server<C> {
     ) -> ServerResult<Connect> {
         match Connect::new_from_zero(network_connection) {
             Ok(connect) => {
-                info!("Recibido CONNECT");
+                debug!("Recibido CONNECT");
                 Ok(connect)
             }
             Err(err) => Err(ServerError::from(err)),

@@ -114,7 +114,7 @@ pub fn check_reserved_bits(control_byte: u8, expected_reserved_bits: u8) -> Pack
         Ok(())
     } else {
         Err(PacketError::new_kind(
-            "Bits reservados invalidos",
+            "Bits reservados inválidos",
             ErrorKind::InvalidReservedBits,
         ))
     }

@@ -103,7 +103,7 @@ impl<T: Observer, R: ReadTimeout, A: AckSender> ClientListener<T, R, A> {
     /// Subscribe(), Unsubscribe() or Publish() correspondingly with a
     /// packet of the same identifier as the one it was received, it then
     /// sets pending_ack to None and sends a Message Subscribed(Ok()),
-    /// Unsubscribed(Ok()) or Published(Ok(Some())) appropiately with the
+    /// Unsubscribed(Ok()) or Published(Ok(Some())) appropriately with the
     /// packet to the observer. In the case of the Puback, if a QoSLevel0
     /// Publish packet without an id was saved in the pending_ack lock,
     /// the listener will stop and send an InternalError() message to the
