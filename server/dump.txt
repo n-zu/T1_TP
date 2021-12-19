@@ -1,0 +1,48 @@
+{
+  "clients_manager": {
+    "clients": {
+      "default_client": {
+        "connect": {
+          "clean_session": false,
+          "client_id": "default_client",
+          "keep_alive": 0,
+          "last_will": null,
+          "password": "fdelu",
+          "user_name": "fdelu"
+        },
+        "id": "default_client",
+        "unacknowledged": []
+      }
+    },
+    "generic_ids_counter": 0
+  },
+  "topic_handler": {
+    "root": {
+      "multilevel_subscribers": {},
+      "retained_message": null,
+      "singlelevel_subscriptions": {},
+      "subscribers": {},
+      "subtopics": {
+        "top": {
+          "multilevel_subscribers": {},
+          "retained_message": null,
+          "singlelevel_subscriptions": {},
+          "subscribers": {},
+          "subtopics": {
+            "sub": {
+              "multilevel_subscribers": {},
+              "retained_message": null,
+              "singlelevel_subscriptions": {},
+              "subscribers": {
+                "default_client": {
+                  "qos": "QoSLevel0"
+                }
+              },
+              "subtopics": {}
+            }
+          }
+        }
+      }
+    }
+  }
+}

@@ -5,6 +5,7 @@ use packets::{
     connect::{ConnectBuilder, LastWill},
     publish::Publish,
     qos::QoSLevel,
+    topic_filter::TopicFilter,
 };
 
 use crate::{
@@ -308,9 +309,8 @@ fn test_takeover_should_return_lastwill() {
         .password("pass")
         .unwrap()
         .last_will(LastWill::new(
-            String::from("top"),
+            TopicFilter::new("top", QoSLevel::QoSLevel0).unwrap(),
             String::from("message"),
-            QoSLevel::QoSLevel0,
             false,
         ))
         .build()
@@ -381,9 +381,8 @@ fn test_disconnect_gracefully_should_not_return_last_will() {
     let connect = ConnectBuilder::new("client_id", 0, false)
         .unwrap()
         .last_will(LastWill::new(
-            String::from("top"),
+            TopicFilter::new("top", QoSLevel::QoSLevel0).unwrap(),
             String::from("message"),
-            QoSLevel::QoSLevel0,
             false,
         ))
         .build()
@@ -409,9 +408,8 @@ fn test_disconnect_ungracefully_should_return_last_will() {
     let connect = ConnectBuilder::new("client_id", 0, false)
         .unwrap()
         .last_will(LastWill::new(
-            String::from("top"),
+            TopicFilter::new("top", QoSLevel::QoSLevel0).unwrap(),
             String::from("message"),
-            QoSLevel::QoSLevel0,
             false,
         ))
         .build()

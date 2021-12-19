@@ -63,7 +63,7 @@ impl Connect {
                 flags |= WILL_RETAIN;
             }
 
-            flags |= (last_will.qos as u8) << WILL_QOS_SHIFT;
+            flags |= (last_will.topic.qos() as u8) << WILL_QOS_SHIFT;
 
             flags |= LAST_WILL_PRESENT;
         }
@@ -79,7 +79,7 @@ impl Connect {
         let mut payload = vec![];
         payload.append(&mut Field::new_from_string(&self.client_id)?.encode());
         if let Some(last_will) = &self.last_will {
-            payload.append(&mut Field::new_from_string(&last_will.topic_name)?.encode());
+            payload.append(&mut Field::new_from_string(last_will.topic.name())?.encode());
             payload.append(&mut Field::new_from_string(&last_will.topic_message)?.encode());
         }
         if let Some(user_name) = &self.user_name {

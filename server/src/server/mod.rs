@@ -14,7 +14,7 @@ use std::{
 };
 
 use threadpool::ThreadPool;
-use tracing::{debug, error, info, instrument, warn};
+use tracing::{debug, error, info, instrument, trace, warn};
 
 use packets::{
     connack::{Connack, ConnackReturnCode},
@@ -46,13 +46,6 @@ const ACCEPT_SLEEP_DUR: Duration = Duration::from_millis(100);
 /// it to be resent. This prevents very recent packets
 /// from being resent
 const MIN_ELAPSED_TIME: Option<Duration> = Some(Duration::from_millis(100));
-/// Number of packets that are resent each time an
-/// [`UNACK_RESENDING_FREQ`] elapses. If it is `Some(1)`, the server
-/// guarantees that no QoS 1 message will be received after any later
-/// one. For example a subscriber might receive them in the order
-/// 1,2,3,3,4 but not 1,2,3,2,3,4
-/// (See [4.6 Message ordering](http://docs.oasis-open.org/mqtt/mqtt/v3.1.1/os/mqtt-v3.1.1-os.html#_Toc398718105))
-const INFLIGHT_MESSAGES: Option<usize> = Some(1);
 
 use packets::publish::Publish;
 use packets::qos::QoSLevel;
@@ -178,6 +171,7 @@ impl<C: Config> Server<C> {
                     )
                 }
             })?;
+        trace!("Creando thread {:?}", server_handle.thread().id());
         started_receiver.recv().unwrap_or_else(|e| {
             error!("Error iniciando el servidor: {}", e);
         });
@@ -209,9 +203,7 @@ impl<C: Config> Server<C> {
     ) -> ServerResult<ConnectInfo> {
         debug!("Conectando cliente");
         let connect = self.wait_for_connect(network_connection)?;
-        network_connection
-            .stream_mut()
-            .set_read_timeout(Some(UNACK_RESENDING_FREQ))?;
+        network_connection.alert(UNACK_RESENDING_FREQ)?;
         let connect_info = self
             .clients_manager
             .write()?
@@ -248,9 +240,9 @@ impl<C: Config> Server<C> {
                     continue;
                 }
                 Err(err) if err.kind() == ServerErrorKind::Timeout => {
-                    self.clients_manager.read()?.client_do(id, |client| {
-                        client.send_unacknowledged(INFLIGHT_MESSAGES, MIN_ELAPSED_TIME)
-                    })?;
+                    self.clients_manager
+                        .read()?
+                        .client_do(id, |client| client.send_unacknowledged(MIN_ELAPSED_TIME))?;
                 }
                 Err(err) => {
                     if err.kind() != ServerErrorKind::ClientDisconnected {
@@ -288,11 +280,11 @@ impl<C: Config> Server<C> {
         network_connection.write_all(
             &Connack::new(connect_info.session_present, ConnackReturnCode::Accepted).encode()?,
         )?;
+        // En caso de que haya ocurrido una reconexion y el cliente
+        // tenia un last will, se publica
         if let Some(last_will) = connect_info.takeover_last_will {
             self.send_last_will(last_will, &connect_info.id)?;
         }
-        // En caso de que haya ocurrido una reconexion y el cliente
-        // tenia un last will, se publica
         let disconnect_info;
         if let Ok(gracefully) = self.client_loop(&connect_info.id, &mut network_connection) {
             disconnect_info = self.clients_manager.write()?.disconnect(
@@ -348,11 +340,6 @@ impl<C: Config> Server<C> {
             }
             Err(err) => self.manage_failed_connection(network_connection, err)?,
         };
-        self.client_thread_joiner
-            .lock()
-            .expect("Lock envenenado")
-            .finished(thread::current().id())
-            .unwrap_or_else(|err| error!("Error irrecuperable: {}", err.to_string()));
         Ok(())
     }
 
@@ -364,17 +351,16 @@ impl<C: Config> Server<C> {
         network_connection: NetworkConnection<TcpStream, SocketAddr>,
     ) -> ServerResult<()> {
         let sv_copy = self.clone();
-        let handle = thread::spawn(move || {
+        self.client_thread_joiner.lock()?.spawn(move || {
             sv_copy._run_client(network_connection).unwrap_or_else(|e| {
                 // Si llega un error a este punto ya no se puede solucionar
-                if e.kind() != ServerErrorKind::ClientDisconnected {
+                if e.kind() != ServerErrorKind::ClientDisconnected
+                    || e.kind() != ServerErrorKind::ClientNotFound
+                {
                     error!("Error no manejado: {}", e);
                 }
             });
         });
-        self.client_thread_joiner
-            .lock()?
-            .add_thread(handle.thread().id(), handle)?;
         Ok(())
     }
 
@@ -399,7 +385,7 @@ impl<C: Config> Server<C> {
                     self.run_client(connection_stream)
                         .unwrap_or_else(|e| error!("{}: Error - {}", socket_addr, e));
                 }
-                Err(err) if err.kind() == ServerErrorKind::Idle => {
+                Err(e) if e.kind() == ServerErrorKind::Idle => {
                     thread::sleep(ACCEPT_SLEEP_DUR);
                 }
                 Err(e) => {

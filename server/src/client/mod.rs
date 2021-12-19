@@ -4,9 +4,11 @@ use std::{io::Write, vec};
 
 use packets::{connect::Connect, qos::QoSLevel, traits::MQTTEncoding};
 use packets::{puback::Puback, publish::Publish};
+use rand::{self};
 use serde::{Deserialize, Serialize};
 use tracing::{debug, instrument};
 
+use crate::server::UNACK_RESENDING_FREQ;
 use crate::traits::{Close, Interrupt};
 use crate::{
     network_connection::NetworkConnection,
@@ -136,16 +138,16 @@ where
             Ok(None)
         } else if let Some(last_will) = self.connect.take_last_will() {
             let packet_identifier: Option<u16>;
-            if last_will.qos != QoSLevel::QoSLevel0 {
+            if last_will.topic.qos() != QoSLevel::QoSLevel0 {
                 packet_identifier = Some(rand::random());
             } else {
                 packet_identifier = None;
             }
             let publish_last_will = Publish::new(
                 false,
-                last_will.qos,
+                last_will.topic.qos(),
                 last_will.retain_flag,
-                &last_will.topic_name,
+                last_will.topic.name(),
                 &last_will.topic_message,
                 packet_identifier,
             )
@@ -245,35 +247,40 @@ where
         if let Some(idx) = idx {
             self.unacknowledged.remove(idx);
         }
+        if self.unacknowledged.is_empty() {
+            match self.keep_alive() {
+                None => {
+                    if let Some(connection) = &mut self.connection {
+                        connection.sleep()?;
+                    }
+                }
+                Some(keep_alive) => {
+                    if let Some(connection) = &mut self.connection {
+                        connection.alert(keep_alive)?;
+                    }
+                }
+            }
+        }
+
         Ok(())
     }
 
     /// Sends the packets that have not been acknowledged by
     /// the client.
     ///
-    /// `inflight_messages` is the number of packets to be sent.
-    /// If it is None or greater thatn the number of unacknowledged
-    /// packets, all packets will be sent.
-    ///
     /// `min_elapsed_time` is the minimum time that must have elapsed
     /// between the last time the packet was sent and the moment the
     /// method is executed, for the packet to be sent. If it is None,
     /// `inflight_messages` packets will be sent.
-    pub fn send_unacknowledged(
-        &mut self,
-        inflight_messages: Option<usize>,
-        min_elapsed_time: Option<Duration>,
-    ) -> ServerResult<()>
+    pub fn send_unacknowledged(&mut self, min_elapsed_time: Option<Duration>) -> ServerResult<()>
     where
         S: fmt::Debug,
         I: fmt::Debug,
     {
-        let inflight_messages = inflight_messages.unwrap_or(self.unacknowledged.len());
-        let inflight_messages = std::cmp::min(inflight_messages, self.unacknowledged.len());
-
+        let len = self.unacknowledged.len();
         let now = SystemTime::now();
 
-        for _ in 0..inflight_messages {
+        for _ in 0..len {
             let (last_time_published, publish) = self.unacknowledged.remove(0);
             if let Some(min_elapsed_time) = min_elapsed_time {
                 if now.duration_since(last_time_published).unwrap() > min_elapsed_time {
@@ -304,6 +311,11 @@ where
         if publish.qos() == QoSLevel::QoSLevel1 {
             publish.set_dup(true);
             self.unacknowledged.push((SystemTime::now(), publish));
+            if self.unacknowledged.len() > 1 {
+                if let Some(connection) = &mut self.connection {
+                    connection.alert(UNACK_RESENDING_FREQ)?;
+                }
+            }
         }
         Ok(())
     }

@@ -1,10 +1,12 @@
 use std::io::Read;
 
+use serde::{Deserialize, Serialize};
+
 use crate::packet_error::PacketError;
 
 const MAX_FIELD_LEN: usize = 65535;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct Field {
     pub value: String,
 }

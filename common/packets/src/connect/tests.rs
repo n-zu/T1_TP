@@ -2,6 +2,7 @@ use std::io::Cursor;
 
 use super::*;
 use crate::packet_error::PacketError;
+use crate::qos::QoSLevel;
 use crate::{
     packet_error::ErrorKind,
     traits::{MQTTDecoding, MQTTEncoding},
@@ -183,7 +184,7 @@ fn test_will_flag() {
     let will = packet.last_will().unwrap();
 
     assert!(will.retain_flag);
-    assert_eq!(will.topic_name, "soyUnTopic");
+    assert_eq!(will.topic.name(), "soyUnTopic");
     assert_eq!(will.topic_message, "soyUnMensaje");
 }
 
@@ -215,7 +216,7 @@ fn test_will_flag_username_password() {
     let will = packet.last_will().unwrap();
 
     assert!(will.retain_flag);
-    assert_eq!(will.topic_name, "soyUnTopic");
+    assert_eq!(will.topic.name(), "soyUnTopic");
     assert_eq!(will.topic_message, "soyUnMensaje");
     assert_eq!(
         packet.user_name().unwrap(),

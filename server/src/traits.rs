@@ -43,10 +43,12 @@ impl TryClone for TcpStream {
 impl Interrupt for TcpStream {
     #[inline(always)]
     fn alert(&mut self, when: Duration) -> io::Result<()> {
+        self.set_nonblocking(false)?;
         self.set_read_timeout(Some(when))
     }
     #[inline(always)]
     fn sleep(&mut self) -> io::Result<()> {
+        self.set_nonblocking(true)?;
         self.set_read_timeout(None)
     }
 }

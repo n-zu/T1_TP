@@ -1,4 +1,4 @@
-use crate::qos::QoSLevel;
+use crate::topic_filter::TopicFilter;
 
 mod decoding;
 mod encoding;
@@ -27,22 +27,15 @@ const RESERVED_BITS: u8 = 0x0;
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct LastWill {
     pub retain_flag: bool,
-    pub qos: QoSLevel,
-    pub topic_name: String,
+    pub topic: TopicFilter,
     pub topic_message: String,
 }
 
 impl LastWill {
-    pub fn new(
-        topic_name: String,
-        topic_message: String,
-        qos: QoSLevel,
-        retain_flag: bool,
-    ) -> LastWill {
+    pub fn new(topic: TopicFilter, topic_message: String, retain_flag: bool) -> LastWill {
         LastWill {
             retain_flag,
-            qos,
-            topic_name,
+            topic,
             topic_message,
         }
     }
