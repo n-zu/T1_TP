@@ -1,4 +1,4 @@
-use packets::pingresp::PingResp;
+use packets::{packet_error::ErrorKind, pingresp::PingResp};
 
 use super::*;
 
@@ -12,8 +12,10 @@ impl<C: Config> Server<C> {
         let id_copy = id.to_owned();
         self.pool.lock()?.execute(move || {
             action(sv_copy, &id_copy).unwrap_or_else(|e| {
-                if e.kind() != ServerErrorKind::ClientNotFound {
-                    error!("Error de ThreadPool: {}", e);
+                if e.kind() != ServerErrorKind::ClientNotFound
+                    && e.kind() != ServerErrorKind::ClientDisconnected
+                {
+                    error!("{}", e);
                 }
             });
         })?;
@@ -122,8 +124,13 @@ impl<C: Config> Server<C> {
                         }
                     });
             })
+            .map_err(ServerError::from)
             .unwrap_or_else(|e| {
-                error!("Error de ThreadPool: {}", e);
+                if e.kind() != ServerErrorKind::ClientNotFound
+                    && e.kind() != ServerErrorKind::ClientDisconnected
+                {
+                    error!("{}", e);
+                }
             });
 
         Ok(())
@@ -233,6 +240,17 @@ impl<C: Config> Server<C> {
             Ok(connect) => {
                 debug!("Recibido CONNECT");
                 Ok(connect)
+            }
+            Err(err)
+                if err.kind() == ErrorKind::InvalidProtocol
+                    || err.kind() == ErrorKind::InvalidProtocolLevel =>
+            {
+                Err(ServerError::new_kind(
+                    err.to_string(),
+                    ServerErrorKind::ConnectionRefused(
+                        ConnackReturnCode::UnacceptableProtocolVersion,
+                    ),
+                ))
             }
             Err(err) => Err(ServerError::from(err)),
         }

@@ -4,14 +4,32 @@ use std::{
     thread::{self, JoinHandle, ThreadId},
 };
 
-use tracing::{error, instrument};
+use tracing::{error, trace, warn};
 
-use crate::server::{ServerError, ServerResult};
-
+/// Joins threads in a simple way.
+/// It creates a thread that receives
+/// the handles of the threads and
+/// joins them when they finish
 pub struct ThreadJoiner {
-    handles: Option<HashMap<ThreadId, JoinHandle<()>>>,
-    finished_sender: Option<Sender<JoinHandle<()>>>,
+    finished_sender: Sender<Message>,
     joiner_thread_handle: Option<JoinHandle<()>>,
+}
+
+/// It is created by spawning a new thread.
+///
+/// When the thread ends, Drop is invoked, and
+/// sends a message through the channel indicating
+/// the ThreadJoiner the ID of the thread so that
+/// it can join it
+pub struct ThreadGuard {
+    id: ThreadId,
+    sender: Sender<Message>,
+}
+
+enum Message {
+    Started(JoinHandle<()>),
+    Finished(ThreadId),
+    Stop,
 }
 
 impl Default for ThreadJoiner {
@@ -21,76 +39,69 @@ impl Default for ThreadJoiner {
 }
 
 impl ThreadJoiner {
+    /// Creates a new ThreadJoiner. Spawns a new
+    /// thread for its operation
     pub fn new() -> ThreadJoiner {
         let (sender, receiver) = mpsc::channel();
         let joiner_thread_handle = thread::spawn(move || {
             ThreadJoiner::join_loop(receiver);
         });
+        trace!("Creado thread {:?}", joiner_thread_handle.thread().id());
 
         ThreadJoiner {
-            handles: Some(HashMap::new()),
-            finished_sender: Some(sender),
+            finished_sender: sender,
             joiner_thread_handle: Some(joiner_thread_handle),
         }
     }
 
-    pub fn add_thread(&mut self, id: ThreadId, handle: JoinHandle<()>) -> ServerResult<()> {
-        if let Some(_prev_handle) = self
-            .handles
-            .as_mut()
-            .expect("Handles es None")
-            .insert(id, handle)
-        {
-            Err(ServerError::new_msg(&format!(
-                "Se agrego un handle con Id repetido ({:?})",
-                id
-            )))
-        } else {
-            Ok(())
-        }
+    /// Spawns a new thread in which it executes the
+    /// received action
+    pub fn spawn<F>(&mut self, action: F)
+    where
+        F: FnOnce() + Send + 'static,
+    {
+        let sender_clone = self.finished_sender.clone();
+        let handle = thread::spawn(move || {
+            let guard = ThreadGuard::new(thread::current().id(), sender_clone);
+            action();
+            drop(guard);
+        });
+        trace!("Creando thread {:?}", handle.thread().id());
+        self.finished_sender.send(Message::Started(handle)).unwrap();
     }
 
-    #[instrument(skip(receiver) fields(thread_id) target = "thread_joining")]
-    fn join_loop(receiver: Receiver<JoinHandle<()>>) {
-        for handle in receiver {
-            let thread_id = handle.thread().id();
-            handle.join().unwrap_or_else(|e| {
-                error!("{:?} - Thread joineado con panic: {:?}", thread_id, e);
-            });
-        }
-    }
-
-    pub fn finished(&mut self, id: ThreadId) -> ServerResult<()> {
-        if let Some(handle) = self.handles.as_mut().expect("Handles es None").remove(&id) {
-            self.finished_sender
-                .as_ref()
-                .expect("finished_sender es None")
-                .send(handle)
-                .expect("Error de sender");
-            Ok(())
-        } else {
-            Err(ServerError::new_msg(
-                "Se intento joinear un thread invalido",
-            ))
+    /// Executes the loop that joins the threads
+    fn join_loop(receiver: Receiver<Message>) {
+        let mut handles = HashMap::new();
+        for message in receiver {
+            match message {
+                Message::Started(handle) => {
+                    handles.insert(handle.thread().id(), handle);
+                }
+                Message::Finished(id) => {
+                    if let Some(handle) = handles.remove(&id) {
+                        trace!("Join thread {:?}", handle.thread().id());
+                        handle.join().unwrap_or_else(|e| {
+                            error!("{:?} - Thread joineado con panic: {:?}", id, e);
+                        });
+                    }
+                }
+                Message::Stop => break,
+            }
         }
     }
 }
 
 impl Drop for ThreadJoiner {
     fn drop(&mut self) {
-        for (_id, handle) in self.handles.take().expect("handles es None") {
-            self.finished_sender
-                .as_ref()
-                .expect("finished_sender es None")
-                .send(handle)
-                .expect("Error de sender");
-        }
-        drop(
-            self.finished_sender
-                .take()
-                .expect("finished_sender es None"),
-        );
+        self.finished_sender
+            .send(Message::Stop)
+            .unwrap_or_else(|e| {
+                error!("Error de Sender: {}", e);
+            });
+
         let joiner_thread_id = self.joiner_thread_handle.as_ref().unwrap().thread().id();
+        trace!("Join thread {:?}", joiner_thread_id);
         self.joiner_thread_handle
             .take()
             .expect("joiner_thread_handle es None")
@@ -100,6 +111,23 @@ impl Drop for ThreadJoiner {
                     "{:?} - Thread joineado con panic: {:?}",
                     joiner_thread_id, e
                 );
+            });
+    }
+}
+
+impl ThreadGuard {
+    fn new(id: ThreadId, sender: Sender<Message>) -> Self {
+        ThreadGuard { id, sender }
+    }
+}
+
+impl Drop for ThreadGuard {
+    fn drop(&mut self) {
+        warn!("Drop de ThreadGuard: {:?}", self.id);
+        self.sender
+            .send(Message::Finished(self.id))
+            .unwrap_or_else(|e| {
+                error!("Error invocando al drop de ThreadGuard: {}", e);
             });
     }
 }

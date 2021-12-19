@@ -74,8 +74,7 @@ impl Connect {
         if buf[0] & LAST_WILL_PRESENT != 0 {
             return Ok(Some(LastWill {
                 retain_flag: buf[0] & WILL_RETAIN != 0,
-                qos,
-                topic_name: String::new(),
+                topic: TopicFilter::new("placeholder", qos)?,
                 topic_message: String::new(),
             }));
         }
@@ -133,9 +132,9 @@ impl Connect {
 
     fn get_will_data(&mut self, bytes: &mut impl Read) -> PacketResult<()> {
         if let Some(lw) = &mut self.last_will {
-            let topic = Field::new_from_stream(bytes).ok_or_else(PacketError::new)?;
+            let topic_name = Field::new_from_stream(bytes).ok_or_else(PacketError::new)?;
             let message = Field::new_from_stream(bytes).ok_or_else(PacketError::new)?;
-            lw.topic_name = topic.value;
+            lw.topic = TopicFilter::new(topic_name.value, lw.topic.qos())?;
             lw.topic_message = message.value;
         }
         Ok(())
@@ -153,9 +152,6 @@ impl Connect {
         Ok(())
     }
 
-    /***************
-    WIP
-    ****************/
     pub fn new_from_zero(stream: &mut impl Read) -> PacketResult<Connect> {
         let mut control_byte_buff: [u8; 1] = [0];
         stream.read_exact(&mut control_byte_buff)?;

@@ -1,8 +1,11 @@
-use std::io::{self};
+use std::{
+    io::{self},
+    time::Duration,
+};
 
 use crate::{
     server::{server_error::ServerErrorKind, ServerError, ServerResult},
-    traits::{Close, TryClone},
+    traits::{Close, Interrupt, TryClone},
 };
 
 /// Information related to the current session of
@@ -38,6 +41,16 @@ impl<S: io::Write, I> io::Write for NetworkConnection<S, I> {
 
     fn flush(&mut self) -> io::Result<()> {
         self.stream.flush()
+    }
+}
+
+impl<S: Interrupt, I> Interrupt for NetworkConnection<S, I> {
+    fn alert(&mut self, when: Duration) -> io::Result<()> {
+        self.stream.alert(when)
+    }
+
+    fn sleep(&mut self) -> io::Result<()> {
+        self.stream.sleep()
     }
 }
 

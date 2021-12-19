@@ -1,10 +1,13 @@
 #![allow(dead_code)]
 
-use std::io::{self, Read};
+use std::{
+    io::{self, Read},
+    time::Duration,
+};
 
 use serde::{Deserialize, Serialize};
 
-use crate::traits::{Close, TryClone};
+use crate::traits::{Close, Interrupt, TryClone};
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct IOMock {
@@ -55,6 +58,16 @@ impl TryClone for IOMock {
             closed: self.closed,
             buf: self.buf.clone(),
         })
+    }
+}
+
+impl Interrupt for IOMock {
+    fn alert(&mut self, _when: Duration) -> io::Result<()> {
+        Ok(())
+    }
+
+    fn sleep(&mut self) -> io::Result<()> {
+        Ok(())
     }
 }
 

@@ -1,8 +1,10 @@
+use serde::{Deserialize, Serialize};
+
 use crate::packet_error::{ErrorKind, PacketError, PacketResult};
 use crate::qos::QoSLevel;
 use crate::utf8::Field;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct TopicFilter {
     /// Topic for a subscribe packet
     name: Field,
@@ -12,8 +14,9 @@ pub struct TopicFilter {
 impl TopicFilter {
     /// Creates a new topic
     /// Returns PacketError if the topic name is invalid
-    pub fn new(name: &str, qos: QoSLevel) -> PacketResult<TopicFilter> {
-        TopicFilter::check_valid_topic_name(name)?;
+    pub fn new<S: Into<String>>(name: S, qos: QoSLevel) -> PacketResult<TopicFilter> {
+        let name = name.into();
+        TopicFilter::check_valid_topic_name(&name)?;
         Ok(TopicFilter {
             name: Field::new_from_string(name)?,
             qos,

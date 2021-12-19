@@ -239,9 +239,8 @@ impl Controller {
 
         if !last_will_topic.trim().is_empty() {
             let last_will = LastWill::new(
-                last_will_topic,
+                TopicFilter::new(last_will_topic, QoSLevel::try_from(last_will_qos)?)?,
                 last_will_msg,
-                QoSLevel::try_from(last_will_qos)?,
                 last_will_retain,
             );
             connect_builder = connect_builder.last_will(last_will);

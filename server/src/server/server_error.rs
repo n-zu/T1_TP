@@ -1,6 +1,7 @@
 use std::{
     fmt, io,
     sync::{mpsc::SendError, PoisonError},
+    time::SystemTimeError,
 };
 
 use packets::{
@@ -35,7 +36,7 @@ pub enum ServerErrorKind {
 
 impl fmt::Display for ServerError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{:?}-{}", self.kind, self.msg)
+        write!(f, "{}", self.msg)
     }
 }
 
@@ -81,6 +82,12 @@ impl From<PacketError> for ServerError {
 impl<T> From<PoisonError<T>> for ServerError {
     fn from(err: PoisonError<T>) -> Self {
         ServerError::new_kind(&err.to_string(), ServerErrorKind::PoinsonedLock)
+    }
+}
+
+impl From<SystemTimeError> for ServerError {
+    fn from(err: SystemTimeError) -> Self {
+        ServerError::new_msg(err.to_string())
     }
 }
 

@@ -60,6 +60,9 @@ impl Publish {
         if (max_qos as u8) < (self.qos as u8) {
             self.qos = max_qos;
         }
+        if max_qos == QoSLevel::QoSLevel0 {
+            self.dup_flag = false
+        }
     }
 
     /// Set the publish's dup flag.

@@ -14,6 +14,7 @@ use packets::{
     qos::QoSLevel::*,
     suback::Suback,
     subscribe::Subscribe,
+    topic_filter::TopicFilter,
     traits::{MQTTDecoding, MQTTEncoding},
 };
 
@@ -213,9 +214,8 @@ fn test_last_will() {
     // Me conecto con last will
     let mut builder_1 = ConnectBuilder::new("id1", 0, false).unwrap();
     builder_1 = builder_1.last_will(LastWill::new(
-        "topic".to_string(),
+        TopicFilter::new("topic", QoSLevel0).unwrap(),
         "message".to_string(),
-        QoSLevel0,
         false,
     ));
     let stream_1 = connect_client(builder_1, port, true);
@@ -253,9 +253,8 @@ fn test_gracefully_disconnection_should_not_send_last_will() {
     // Me conecto con last will
     let mut builder_1 = ConnectBuilder::new("id1", 0, false).unwrap();
     builder_1 = builder_1.last_will(LastWill::new(
-        "topic".to_string(),
+        TopicFilter::new("topic", QoSLevel0).unwrap(),
         "message".to_string(),
-        QoSLevel0,
         false,
     ));
     let mut stream_1 = connect_client(builder_1, port, true);
@@ -303,9 +302,8 @@ fn test_takeover_should_change_clean_session() {
     let builder_2 = ConnectBuilder::new("id", 1, true)
         .unwrap()
         .last_will(LastWill::new(
-            "topic".to_owned(),
+            TopicFilter::new("topic", QoSLevel1).unwrap(),
             "no deberia llegar".to_owned(),
-            QoSLevel1,
             false,
         ));
     let builder_3 = ConnectBuilder::new("id", 1, false).unwrap();
@@ -370,7 +368,11 @@ fn test_retained_message_in_last_will() {
     let mut stream_1 = connect_client(builder_1, port, true);
 
     // cliente 2 tiene last will con retained message
-    let last_will = LastWill::new("topic".to_string(), "lw".to_string(), QoSLevel0, true);
+    let last_will = LastWill::new(
+        TopicFilter::new("topic", QoSLevel0).unwrap(),
+        "lw".to_string(),
+        true,
+    );
     let builder_2 = ConnectBuilder::new("id2", 0, true)
         .unwrap()
         .last_will(last_will);

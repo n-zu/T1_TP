@@ -14,6 +14,12 @@ pub trait TryClone {
         Self: Sized;
 }
 
+pub trait Interrupt {
+    fn alert(&mut self, when: Duration) -> io::Result<()>;
+
+    fn sleep(&mut self) -> io::Result<()>;
+}
+
 #[derive(Debug, PartialEq)]
 pub enum LoginResult {
     UsernameNotFound,
@@ -31,6 +37,19 @@ impl TryClone for TcpStream {
         Self: Sized,
     {
         TcpStream::try_clone(self)
+    }
+}
+
+impl Interrupt for TcpStream {
+    #[inline(always)]
+    fn alert(&mut self, when: Duration) -> io::Result<()> {
+        self.set_nonblocking(false)?;
+        self.set_read_timeout(Some(when))
+    }
+    #[inline(always)]
+    fn sleep(&mut self) -> io::Result<()> {
+        self.set_nonblocking(true)?;
+        self.set_read_timeout(None)
     }
 }
 
