@@ -50,12 +50,7 @@ fn test_pings() {
     let mut server = ServerMock::new();
     let connect = ConnectBuilder::new("id", 1, true).unwrap().build().unwrap();
     let observer = ObserverMock::new();
-    let _client = Client::new(
-        &format!("localhost:{}", server.port),
-        observer.clone(),
-        connect,
-    )
-    .unwrap();
+    let _client = Client::new(&format!("localhost:{}", server.port), observer, connect).unwrap();
     let connack = Connack::new(false, ConnackReturnCode::Accepted);
     let (mut stream, _) = server.accept_connection(connack);
 
@@ -83,12 +78,7 @@ fn test_disconnect() {
     let mut server = ServerMock::new();
     let connect = ConnectBuilder::new("id", 0, true).unwrap().build().unwrap();
     let observer = ObserverMock::new();
-    let client = Client::new(
-        &format!("localhost:{}", server.port),
-        observer.clone(),
-        connect,
-    )
-    .unwrap();
+    let client = Client::new(&format!("localhost:{}", server.port), observer, connect).unwrap();
     let connack = Connack::new(false, ConnackReturnCode::Accepted);
 
     thread::sleep(Duration::from_millis(500));
