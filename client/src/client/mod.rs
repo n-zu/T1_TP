@@ -136,6 +136,7 @@ impl<T: Observer> Client<T> {
             observer,
             self.stop.clone(),
             self.sender.clone(),
+            self.thread_pool.clone(),
         )?;
 
         let sender = self.sender.clone();

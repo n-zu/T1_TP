@@ -15,6 +15,7 @@ use packets::{
     unsuback::Unsuback,
 };
 use packets::{puback::Puback, publish::Publish, suback::Suback};
+use threadpool::ThreadPool;
 
 use crate::{client::PendingAck, observer::Observer};
 
@@ -36,6 +37,7 @@ pub(crate) struct ClientListener<T: Observer, R: ReadTimeout, A: AckSender> {
     observer: T,
     stop: Arc<AtomicBool>,
     ack_sender: Arc<A>,
+    threadpool: ThreadPool,
 }
 
 enum PacketType {
@@ -64,7 +66,7 @@ const CONNECT_USER_ERRORS: [ErrorKind; 3] = [
 // Acknowledge sender for the listener. Every time a packet
 // which requires an acknowledgement is received, the listener
 // will it through this sender.
-pub(crate) trait AckSender {
+pub(crate) trait AckSender: Sync + Send + 'static {
     fn send_puback(&self, packet: Puback);
 }
 
@@ -78,6 +80,7 @@ impl<T: Observer, R: ReadTimeout, A: AckSender> ClientListener<T, R, A> {
         observer: T,
         stop: Arc<AtomicBool>,
         ack_sender: Arc<A>,
+        threadpool: ThreadPool,
     ) -> Result<Self, ClientError> {
         stream.set_read_timeout(Some(STOP_TIMEOUT))?;
 
@@ -87,6 +90,7 @@ impl<T: Observer, R: ReadTimeout, A: AckSender> ClientListener<T, R, A> {
             observer,
             stop,
             ack_sender,
+            threadpool,
         })
     }
 
@@ -189,7 +193,13 @@ impl<T: Observer, R: ReadTimeout, A: AckSender> ClientListener<T, R, A> {
 
         // Si tiene id no es QoS 0
         if let Some(id) = id_opt {
-            self.ack_sender.send_puback(Puback::new(id)?);
+            let ack_sender_clone = self.ack_sender.clone();
+            self.threadpool.execute(move || {
+                ack_sender_clone.send_puback(Puback::new(id).expect(
+                    "Packet id was invalid
+                even though we got it from a Publish packet",
+                ));
+            })?;
         }
 
         Ok(())
@@ -318,6 +328,7 @@ mod tests {
     use std::io::{self, Cursor};
     use std::sync::atomic::AtomicBool;
     use std::sync::{Arc, Mutex};
+    use std::thread;
     use std::time::Duration;
 
     use crate::client::PendingAck;
@@ -332,6 +343,7 @@ mod tests {
     use packets::topic_filter::TopicFilter;
     use packets::traits::MQTTEncoding;
     use packets::unsubscribe::Unsubscribe;
+    use threadpool::ThreadPool;
 
     use super::{AckSender, ClientListener, ReadTimeout};
 
@@ -396,6 +408,7 @@ mod tests {
             observer.clone(),
             stop,
             SenderMock::new(),
+            ThreadPool::new(1),
         )
         .unwrap();
         listener.wait_for_packets();
@@ -426,6 +439,7 @@ mod tests {
             observer.clone(),
             stop,
             SenderMock::new(),
+            ThreadPool::new(1),
         )
         .unwrap();
         listener.wait_for_packets();
@@ -450,6 +464,7 @@ mod tests {
             observer.clone(),
             stop,
             SenderMock::new(),
+            ThreadPool::new(1),
         )
         .unwrap();
         listener.wait_for_packets();
@@ -481,6 +496,7 @@ mod tests {
             observer.clone(),
             stop,
             SenderMock::new(),
+            ThreadPool::new(1),
         )
         .unwrap();
         listener.wait_for_packets();
@@ -509,6 +525,7 @@ mod tests {
             observer.clone(),
             stop,
             SenderMock::new(),
+            ThreadPool::new(1),
         )
         .unwrap();
         listener.wait_for_packets();
@@ -533,6 +550,7 @@ mod tests {
             observer.clone(),
             stop,
             SenderMock::new(),
+            ThreadPool::new(1),
         )
         .unwrap();
         listener.wait_for_packets();
@@ -562,6 +580,7 @@ mod tests {
             observer.clone(),
             stop,
             SenderMock::new(),
+            ThreadPool::new(1),
         )
         .unwrap();
         listener.wait_for_packets();
@@ -588,6 +607,7 @@ mod tests {
             observer.clone(),
             stop,
             SenderMock::new(),
+            ThreadPool::new(1),
         )
         .unwrap();
         listener.wait_for_packets();
@@ -612,6 +632,7 @@ mod tests {
             observer.clone(),
             stop,
             SenderMock::new(),
+            ThreadPool::new(1),
         )
         .unwrap();
         listener.wait_for_packets();
@@ -641,6 +662,7 @@ mod tests {
             observer.clone(),
             stop,
             SenderMock::new(),
+            ThreadPool::new(1),
         )
         .unwrap();
         listener.wait_for_packets();
@@ -666,6 +688,7 @@ mod tests {
             observer,
             stop,
             SenderMock::new(),
+            ThreadPool::new(1),
         )
         .unwrap();
         listener.wait_for_packets();
@@ -691,6 +714,7 @@ mod tests {
             observer,
             stop,
             SenderMock::new(),
+            ThreadPool::new(1),
         )
         .unwrap();
         listener.wait_for_packets();
@@ -715,6 +739,7 @@ mod tests {
             observer.clone(),
             stop,
             sender.clone(),
+            ThreadPool::new(1),
         )
         .unwrap();
         listener.wait_for_packets();
@@ -747,6 +772,7 @@ mod tests {
             observer.clone(),
             stop,
             sender.clone(),
+            ThreadPool::new(1),
         )
         .unwrap();
         listener.wait_for_packets();
@@ -762,6 +788,7 @@ mod tests {
             assert_eq!(publish.topic_name(), "topic");
             assert_eq!(publish.payload(), "msg");
         }
+        thread::sleep(Duration::from_millis(500));
         assert_eq!(*sender.times_called.lock().unwrap(), 1);
     }
 
@@ -782,6 +809,7 @@ mod tests {
             observer.clone(),
             stop,
             SenderMock::new(),
+            ThreadPool::new(1),
         )
         .unwrap();
         listener.wait_for_packets();
@@ -803,6 +831,7 @@ mod tests {
             observer.clone(),
             stop,
             SenderMock::new(),
+            ThreadPool::new(1),
         )
         .unwrap();
         listener.wait_for_packets();
@@ -835,6 +864,7 @@ mod tests {
             observer.clone(),
             stop,
             SenderMock::new(),
+            ThreadPool::new(1),
         )
         .unwrap();
         listener.wait_for_packets();
@@ -861,6 +891,7 @@ mod tests {
             observer.clone(),
             stop,
             SenderMock::new(),
+            ThreadPool::new(1),
         )
         .unwrap();
         listener.wait_for_packets();
@@ -885,6 +916,7 @@ mod tests {
             observer.clone(),
             stop,
             SenderMock::new(),
+            ThreadPool::new(1),
         )
         .unwrap();
         listener.wait_for_packets();

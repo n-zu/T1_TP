@@ -40,7 +40,7 @@ pub(crate) struct ClientSender<T: Observer, W: Write> {
     observer: Arc<T>,
 }
 
-impl<T: Observer, W: Write> AckSender for ClientSender<T, W> {
+impl<T: Observer, W: Write + Send + 'static> AckSender for ClientSender<T, W> {
     fn send_puback(&self, puback: Puback) {
         if let Err(e) = self._puback(puback) {
             self.observer.update(Message::InternalError(e));
