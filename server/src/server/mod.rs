@@ -45,7 +45,7 @@ const ACCEPT_SLEEP_DUR: Duration = Duration::from_millis(100);
 /// Minimum time since the last sending of a packet for
 /// it to be resent. This prevents very recent packets
 /// from being resent
-const MIN_ELAPSED_TIME: Option<Duration> = Some(Duration::from_millis(100));
+const MIN_ELAPSED_TIME: Option<Duration> = Some(Duration::from_secs(3));
 
 use packets::publish::Publish;
 use packets::qos::QoSLevel;

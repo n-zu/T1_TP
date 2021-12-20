@@ -131,7 +131,7 @@ impl fmt::Display for PacketType {
             PacketType::Connect => "CONNECT",
             PacketType::Connack => "CONNACK",
             PacketType::Publish => "PUBLISH",
-            PacketType::Puback => "SUBSCRIBE",
+            PacketType::Puback => "PUBACK",
             PacketType::PubRec => "PUBREC",
             PacketType::PubRel => "PUBREL",
             PacketType::PubComp => "PUBCOMP",
