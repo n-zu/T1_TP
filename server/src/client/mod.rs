@@ -270,12 +270,8 @@ where
     /// `min_elapsed_time` is the minimum time that must have elapsed
     /// between the last time the packet was sent and the moment the
     /// method is executed, for the packet to be sent. If it is None,
-    /// `inflight_messages` packets will be sent.
-    pub fn send_unacknowledged(&mut self, min_elapsed_time: Option<Duration>) -> ServerResult<()>
-    where
-        S: fmt::Debug,
-        I: fmt::Debug,
-    {
+    /// 1 packet will be sent.
+    pub fn send_unacknowledged(&mut self, min_elapsed_time: Option<Duration>) -> ServerResult<()> {
         let now = SystemTime::now();
         if self.unacknowledged.is_empty() {
             return Ok(());

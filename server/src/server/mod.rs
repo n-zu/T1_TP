@@ -203,11 +203,15 @@ impl<C: Config> Server<C> {
     ) -> ServerResult<ConnectInfo> {
         debug!("Conectando cliente");
         let connect = self.wait_for_connect(network_connection)?;
+        let clean_session = *connect.clean_session();
         network_connection.alert(UNACK_RESENDING_FREQ)?;
         let connect_info = self
             .clients_manager
             .write()?
             .new_session(network_connection.try_clone()?, connect)?;
+        if connect_info.session_present && clean_session {
+            self.topic_handler.remove_client(&connect_info.id)?;
+        }
         Ok(connect_info)
     }
 
