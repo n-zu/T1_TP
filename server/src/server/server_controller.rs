@@ -6,7 +6,7 @@ use std::{
     thread::JoinHandle,
 };
 
-use tracing::error;
+use tracing::{error, trace};
 
 /// It is responsible for shutting down the
 /// server from a different thread than
@@ -30,21 +30,20 @@ impl ServerController {
             handle: Some(handle),
         }
     }
-
-    /// Turn of the server
-    pub fn shutdown(&mut self) {
-        self.shutdown_bool.store(true, Ordering::Relaxed);
-        if let Some(handle) = self.handle.take() {
-            let sv_thread_id = handle.thread().id();
-            handle.join().unwrap_or_else(|e| {
-                error!("{:?}: Thread joineado con panic: {:?}", sv_thread_id, e);
-            });
-        }
-    }
 }
 
 impl Drop for ServerController {
     fn drop(&mut self) {
-        self.shutdown()
+        self.shutdown_bool.store(true, Ordering::Relaxed);
+        let handle = self
+            .handle
+            .take()
+            .expect("Server tried to shut down but it was already turned off");
+        let id = handle.thread().id();
+        if let Err(e) = handle.join() {
+            error!("{:?}: Thread joineado con panic: {:?}", id, e);
+        } else {
+            trace!("{:?}: Server thread joineado con éxito", id);
+        }
     }
 }

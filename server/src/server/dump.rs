@@ -10,10 +10,7 @@ use serde_json::json;
 use threadpool::ThreadPool;
 use tracing::debug;
 
-use crate::{
-    clients_manager::ClientsManager, thread_joiner::ThreadJoiner, topic_handler::TopicHandler,
-    Config, Server,
-};
+use crate::{clients_manager::ClientsManager, topic_handler::TopicHandler, Config, Server};
 
 use super::{server_error::ServerErrorKind, ServerError, ServerResult};
 
@@ -41,7 +38,6 @@ impl<C: Config> Server<C> {
             clients_manager,
             config: config.clone(),
             topic_handler,
-            client_thread_joiner: Mutex::new(ThreadJoiner::new()),
             pool: Mutex::new(ThreadPool::new(threadpool_size)),
         };
         let server = Arc::new(server);
