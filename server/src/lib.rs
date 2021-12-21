@@ -1,6 +1,6 @@
 use std::io::Read;
 
-use tracing::{info, warn};
+use tracing::info;
 
 use crate::config::FileConfig;
 use crate::logger::Logger;
@@ -39,5 +39,4 @@ pub fn init(config_path: &str) {
     let mut buf = [0u8; 1];
     std::io::stdin().read_exact(&mut buf).unwrap_or(());
     drop(controller);
-    warn!("Exiting...");
 }
