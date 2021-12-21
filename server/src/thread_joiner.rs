@@ -90,7 +90,7 @@ impl ThreadJoiner {
     }
 
     /// Joins all the remaining threads in the hashmap which may still
-    /// be executed. Intented to be used on shutdown
+    /// be executing. Intented to be used on shutdown
     fn join_remaining(handles: HashMap<ThreadId, JoinHandle<()>>) {
         for (id, handle) in handles {
             Self::join(id, handle);
