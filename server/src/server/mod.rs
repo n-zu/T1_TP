@@ -109,14 +109,6 @@ pub struct Server<C: Config> {
     /// server is responsible to invoke remove_client() when the client
     /// has clean session set to True.
     topic_handler: TopicHandler,
-    /// Manages the join of the threads that are created for each of the
-    /// clients. It does not interfere in the threads of the threadpool
-    /// or the Server thread.
-    ///
-    /// When a new client thread is created, it saves its JoinHandle
-    /// assosiating it with the ThreadId of the client that just
-    /// connected.
-    client_thread_joiner: Mutex<ThreadJoiner>,
     /// Threadpool used to process packets received from clients
     /// The only ones that are not processed in the Threadpool
     /// are the [`Connect`] and [`Disconnect`] packets.
@@ -139,7 +131,6 @@ impl<C: Config> Server<C> {
                         clients_manager: RwLock::new(ClientsManager::new(config.authenticator())),
                         config,
                         topic_handler: TopicHandler::new(),
-                        client_thread_joiner: Mutex::new(ThreadJoiner::new()),
                         pool: Mutex::new(ThreadPool::new(threadpool_size)),
                     });
                     Some(server)
@@ -345,13 +336,14 @@ impl<C: Config> Server<C> {
 
     /// Creates a new thread in which the client will be handled. Adds that
     /// thread to the list of threads pending to be joined
-    #[instrument(skip(self, network_connection), fields(socket_addr = %network_connection.id()))]
+    #[instrument(skip(self, network_connection, thread_joiner), fields(socket_addr = %network_connection.id()))]
     fn run_client(
         self: &Arc<Self>,
         network_connection: NetworkConnection<TcpStream, SocketAddr>,
+        thread_joiner: &mut ThreadJoiner,
     ) -> ServerResult<()> {
         let sv_copy = self.clone();
-        self.client_thread_joiner.lock()?.spawn(move || {
+        thread_joiner.spawn(move || {
             sv_copy._run_client(network_connection).unwrap_or_else(|e| {
                 // Si llega un error a este punto ya no se puede solucionar
                 if e.kind() != ServerErrorKind::ClientDisconnected
@@ -377,12 +369,13 @@ impl<C: Config> Server<C> {
         let dump_info_opt = self.config.dump_info();
         started_sender.send(())?;
 
+        let mut thread_joiner = ThreadJoiner::new();
         listener.set_nonblocking(true)?;
         while !shutdown_bool.load(Ordering::Relaxed) {
             match self.accept_client(&listener) {
                 Ok(connection_stream) => {
                     let socket_addr = *connection_stream.id();
-                    self.run_client(connection_stream)
+                    self.run_client(connection_stream, &mut thread_joiner)
                         .unwrap_or_else(|e| error!("{}: Error - {}", socket_addr, e));
                 }
                 Err(e) if e.kind() == ServerErrorKind::Idle => {
@@ -400,6 +393,13 @@ impl<C: Config> Server<C> {
                 }
             }
         }
+
+        self.shutdown()
+    }
+
+    /// Shuts down the server and performs various cleanups
+    /// Sends the last will of all conected clients
+    fn shutdown(self: &Arc<Self>) -> ServerResult<()> {
         info!("Apagando servidor");
         let shutdown_info = self.clients_manager.write()?.shutdown(false)?;
         for client_id in shutdown_info.clean_session_ids {

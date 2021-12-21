@@ -30,7 +30,7 @@ pub fn init(config_path: &str) {
 
     let threadpool_size = 8;
     let server = Server::new(config, threadpool_size).expect("Error iniciando el servidor");
-    let _controller = server
+    let controller = server
         .run()
         .expect("Error iniciando ejecución del servidor");
 
@@ -38,4 +38,5 @@ pub fn init(config_path: &str) {
 
     let mut buf = [0u8; 1];
     std::io::stdin().read_exact(&mut buf).unwrap_or(());
+    drop(controller);
 }

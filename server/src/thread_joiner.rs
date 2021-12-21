@@ -80,15 +80,29 @@ impl ThreadJoiner {
                 }
                 Message::Finished(id) => {
                     if let Some(handle) = handles.remove(&id) {
-                        trace!("Join thread {:?}", handle.thread().id());
-                        handle.join().unwrap_or_else(|e| {
-                            error!("{:?} - Thread joineado con panic: {:?}", id, e);
-                        });
+                        Self::join(id, handle);
                     }
                 }
                 Message::Stop => break,
             }
         }
+        Self::join_remaining(handles);
+    }
+
+    /// Joins all the remaining threads in the hashmap which may still
+    /// be executing. Intented to be used on shutdown
+    fn join_remaining(handles: HashMap<ThreadId, JoinHandle<()>>) {
+        for (id, handle) in handles {
+            Self::join(id, handle);
+        }
+    }
+
+    /// Joins a single thread and logs any errors
+    fn join(id: ThreadId, handle: JoinHandle<()>) {
+        trace!("Join thread {:?}", id);
+        handle.join().unwrap_or_else(|e| {
+            error!("{:?} - Thread joineado con panic: {:?}", id, e);
+        });
     }
 }
 
