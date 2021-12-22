@@ -23,7 +23,7 @@ use crate::{
 const GENERIC_ID_SUFFIX: &str = "__CLIENT__";
 
 /// Structure that manages the clients of the server.
-/// This includes connecting, reconneting, disconnecting
+/// This includes connecting, reconnecting, disconnecting
 /// and authenticating clients
 #[derive(Debug, Serialize, Deserialize)]
 pub struct ClientsManager<S, I>
@@ -199,7 +199,7 @@ where
     }
 
     /// Checks that a client_id is not reserved by another
-    /// user. That is, if ther is a session with the specified id,
+    /// user. That is, if there is a session with the specified id,
     /// the associated user must match the new user_name
     fn check_taken_ids(&mut self, id: &ClientIdArg, user_name: &str) -> ServerResult<()> {
         let client = match self.clients.get(id) {

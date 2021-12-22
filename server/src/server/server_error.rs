@@ -28,7 +28,7 @@ pub enum ServerErrorKind {
     ConnectionRefused(ConnackReturnCode),
     DumpError,
     Timeout,
-    PoinsonedLock,
+    PoisonedLock,
     Irrecoverable,
     Idle,
     Other,
@@ -81,7 +81,7 @@ impl From<PacketError> for ServerError {
 
 impl<T> From<PoisonError<T>> for ServerError {
     fn from(err: PoisonError<T>) -> Self {
-        ServerError::new_kind(&err.to_string(), ServerErrorKind::PoinsonedLock)
+        ServerError::new_kind(&err.to_string(), ServerErrorKind::PoisonedLock)
     }
 }
 

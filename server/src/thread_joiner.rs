@@ -90,7 +90,7 @@ impl ThreadJoiner {
     }
 
     /// Joins all the remaining threads in the hashmap which may still
-    /// be executing. Intented to be used on shutdown
+    /// be executing. Intended to be used on shutdown
     fn join_remaining(handles: HashMap<ThreadId, JoinHandle<()>>) {
         for (id, handle) in handles {
             Self::join(id, handle);
@@ -141,7 +141,7 @@ impl Drop for ThreadGuard {
         self.sender
             .send(Message::Finished(self.id))
             .unwrap_or_else(|e| {
-                error!("Error invocando al drop de ThreadGuard: {}", e);
+                trace!("Posible error invocando al drop de ThreadGuard: {}. Probablemente {:?} ya fue joineado", e, self.id);
             });
     }
 }

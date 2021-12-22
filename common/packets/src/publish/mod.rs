@@ -65,12 +65,12 @@ impl Publish {
         }
     }
 
-    /// Set the publish's dup flag.
+    /// Set the publish dup flag.
     pub fn set_dup(&mut self, dup: bool) {
         self.dup_flag = dup;
     }
 
-    /// Set the publish's retain flag.
+    /// Set the publish retain flag.
     pub fn set_retain_flag(&mut self, retain: bool) {
         self.retain_flag = retain;
     }

@@ -40,7 +40,7 @@ const CONNECTION_WAIT_TIMEOUT: Duration = Duration::from_secs(180);
 /// How often unacknowledged packets are sent
 pub const UNACK_RESENDING_FREQ: Duration = Duration::from_millis(500);
 /// How long the server sleeps between each failed TCP connection
-/// atempt
+/// attempt
 const ACCEPT_SLEEP_DUR: Duration = Duration::from_millis(100);
 /// Minimum time since the last sending of a packet for
 /// it to be resent. This prevents very recent packets
@@ -180,9 +180,9 @@ impl<C: Config> Server<C> {
     /// If the connection was successful, it returns [`Ok(ConnectionInfo)`] with
     /// the necessary information to send the Connack, as well as the LastWill
     /// [`Publish`] packet from the previous network_connection, in case a Client Take-Over
-    /// type reconnection has ocurred.
+    /// type reconnection has occurred.
     ///
-    /// In case an error has ocurred, but a Connack must be sent (for example,
+    /// In case an error has occurred, but a Connack must be sent (for example,
     /// if the credentials are invalid), it returns an Error with kind
     /// [`ServerErrorKind::ConnectionRefused`], with the return code that the Connack
     /// must contain. If the error it returns is not of that kind, a Connack should
@@ -398,7 +398,7 @@ impl<C: Config> Server<C> {
     }
 
     /// Shuts down the server and performs various cleanups
-    /// Sends the last will of all conected clients
+    /// Sends the last will of all connected clients
     fn shutdown(self: &Arc<Self>) -> ServerResult<()> {
         info!("Apagando servidor");
         let shutdown_info = self.clients_manager.write()?.shutdown(false)?;

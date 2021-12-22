@@ -483,7 +483,7 @@ impl Topic {
     /// Internal/Custom split function
     fn split(topic: &str) -> (&str, Option<&str>) {
         match topic.split_once(SEP) {
-            Some((splitted, rest)) => (splitted, Some(rest)),
+            Some((split, rest)) => (split, Some(rest)),
             None => (topic, None),
         }
     }
@@ -1029,7 +1029,7 @@ mod tests {
     }
 
     #[test]
-    fn test_singlelevel_wildcard_one_subscribe_one_publish() {
+    fn test_single_level_wildcard_one_subscribe_one_publish() {
         let subscribe = build_subscribe("topic/+/leaf");
         let publish = build_publish("topic/subtopic/leaf", "unMensaje");
         let handler = TopicHandler::new();
@@ -1046,7 +1046,7 @@ mod tests {
     }
 
     #[test]
-    fn test_singlelevel_wildcard_complex_subscribe_one_publish() {
+    fn test_single_level_wildcard_complex_subscribe_one_publish() {
         let subscribe = build_subscribe("topic/+/+//leaf");
         let publish = build_publish("topic/subtopic///leaf", "unMensaje");
         let handler = TopicHandler::new();
@@ -1063,7 +1063,7 @@ mod tests {
     }
 
     #[test]
-    fn test_singlelevel_wildcard_complex_subscribe_3_publish() {
+    fn test_single_level_wildcard_complex_subscribe_3_publish() {
         let subscribe = build_subscribe("topic/+/+//leaf");
         let publish = build_publish("topic/subtopic///leaf", "unMensaje");
         let handler = TopicHandler::new();
@@ -1142,7 +1142,7 @@ mod tests {
     }
 
     #[test]
-    fn test_unsubscribe_singlelevel_stop_sending_messages_to_client() {
+    fn test_unsubscribe_single_level_stop_sending_messages_to_client() {
         let subscribe = build_subscribe("topic/+/+//leaf");
         let unsubscribe = build_unsubscribe("topic/+/+//leaf");
         let first_publish = build_publish("topic/subtopic///leaf", "unMensaje");
@@ -1265,7 +1265,7 @@ mod tests {
     }
 
     #[test]
-    fn test_topic_starting_with_dollar_sign_not_recieve_singlelevel_wildcard() {
+    fn test_topic_starting_with_dollar_sign_not_receive_single_level_wildcard() {
         let subscribe = build_subscribe("+/info");
         let publish = build_publish("$SYS/info", "ERROR");
 

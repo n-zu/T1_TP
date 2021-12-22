@@ -97,11 +97,11 @@ impl SimpleLogin {
                     io::Error::new(io::ErrorKind::InvalidData, "Formato de archivo invalido")
                 })?;
             if found_user_name == user_name {
-                if found_password == password {
-                    return Ok(LoginResult::Accepted);
+                return if found_password == password {
+                    Ok(LoginResult::Accepted)
                 } else {
-                    return Ok(LoginResult::InvalidPassword);
-                }
+                    Ok(LoginResult::InvalidPassword)
+                };
             }
             buf.clear();
         }

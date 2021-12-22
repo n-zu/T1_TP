@@ -50,7 +50,7 @@ impl ReadTimeout for TcpStream {
 pub(crate) const STOP_TIMEOUT: Duration = Duration::from_millis(200);
 
 /// How much to reduce from the given Keep Alive time in orden to have an error margin
-pub(crate) const KEEP_ALIVE_SUBSTRACTION: Duration = Duration::from_secs(2);
+pub(crate) const KEEP_ALIVE_SUBTRACTION: Duration = Duration::from_secs(2);
 
 impl<T: Observer> Client<T> {
     #![allow(dead_code)]
@@ -175,8 +175,8 @@ impl<T: Observer> Client<T> {
         mut duration: Duration,
     ) {
         let mut now = std::time::Instant::now();
-        if duration > KEEP_ALIVE_SUBSTRACTION {
-            duration -= KEEP_ALIVE_SUBSTRACTION;
+        if duration > KEEP_ALIVE_SUBTRACTION {
+            duration -= KEEP_ALIVE_SUBTRACTION;
         }
 
         while !stop.load(std::sync::atomic::Ordering::Relaxed) {

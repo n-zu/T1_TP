@@ -10,7 +10,7 @@ use tracing_subscriber::{
 
 const LOG_PREFIX: &str = "log.";
 
-/// Loger structs. Holds the subscriber guards.
+/// Logger structs. Holds the subscriber guards.
 /// If they were dropped, nothing would be logged.
 pub struct Logger {
     _file_guard: WorkerGuard,
