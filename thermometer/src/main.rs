@@ -1,3 +1,4 @@
+use observer::MyObserver;
 use publisher_config::PublisherConfig;
 use rand::prelude::*;
 use std::env;
@@ -6,6 +7,9 @@ use packets::{
     connect::Connect, connect::ConnectBuilder, publish::Publish, qos::QoSLevel, PacketResult,
 };
 
+use mqtt_client::Client;
+
+mod observer;
 mod publisher_config;
 
 const MAX_TEMP: f32 = 100.0;
@@ -54,4 +58,10 @@ fn main() {
 
     let publish = get_temperature_publish(&config);
     println!("{:?}", publish);
+
+    let _client = Client::new(
+        &format!("{}:{}", config.server, config.port),
+        MyObserver {},
+        connect,
+    );
 }
