@@ -1,0 +1,7 @@
+server=localhost
+port=1883
+client_id=temp_publisher
+topic=temperature
+user=fdelu
+password=fdelu
+period=200
