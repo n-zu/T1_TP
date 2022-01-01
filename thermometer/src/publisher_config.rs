@@ -6,13 +6,13 @@ use std::{
 
 #[derive(Debug)]
 pub struct PublisherConfig {
-    server: String,
-    port: String,
-    client_id: String,
-    topic: String,
-    user: String,
-    password: String,
-    period: u32,
+    pub server: String,
+    pub port: String,
+    pub client_id: String,
+    pub topic: String,
+    pub user: String,
+    pub password: String,
+    pub period: u32,
 }
 
 const SEP: &str = "=";

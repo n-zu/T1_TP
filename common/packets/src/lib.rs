@@ -16,3 +16,5 @@ pub mod traits;
 pub mod unsuback;
 pub mod unsubscribe;
 pub mod utf8;
+
+pub use packet_error::PacketResult;
