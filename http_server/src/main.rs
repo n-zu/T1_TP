@@ -6,7 +6,15 @@ use packets::{
     topic_filter::TopicFilter, PacketResult,
 };
 use server::Server;
-use std::{env, io::Read, sync::Arc};
+use std::{
+    env,
+    io::Read,
+    sync::{
+        mpsc,
+        mpsc::{Receiver, Sender},
+        Arc,
+    },
+};
 
 mod observer;
 mod server;
@@ -31,10 +39,10 @@ fn get_connect(config: &Config) -> PacketResult<Connect> {
         .build()
 }
 
-fn get_client(config: &Config, connect: Connect) -> Client<Observer> {
+fn get_client(config: &Config, connect: Connect, observer: Observer) -> Client<Observer> {
     Client::new(
         &format!("{}:{}", config.server, config.port),
-        Observer {},
+        observer,
         connect,
     )
     .expect("Could not create client")
@@ -56,15 +64,17 @@ fn main() {
     let connect = get_connect(&config).expect("Could not build connect packet");
     println!("CONNECT\n{:?}\n____________\n", connect);
 
-    let mut client = get_client(&config, connect);
+    let (sender, reciever): (Sender<String>, Receiver<String>) = mpsc::channel();
+    let observer = Observer::new(sender);
+    let mut client = get_client(&config, connect, observer);
 
     std::thread::sleep(std::time::Duration::from_millis(CONNECT_TIME));
     println!("____________\n");
 
     subscribe(&mut client, &config);
 
-    let _server = Arc::new(Server::new(&_http_config));
-    _server.run();
+    let server = Arc::new(Server::new(&_http_config));
+    server.run(reciever);
 
     println!("Presione [ENTER] para detener la ejecucion del servidor\n____________\n");
     let mut buf = [0u8; 1];
