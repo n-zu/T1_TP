@@ -12,7 +12,7 @@ pub struct PublisherConfig {
     pub topic: String,
     pub user: String,
     pub password: String,
-    pub period: u32,
+    pub period: u64,
 }
 
 const SEP: &str = "=";

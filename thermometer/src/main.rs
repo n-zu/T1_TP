@@ -17,6 +17,7 @@ const MIN_TEMP: f32 = 0.0;
 
 const KEEP_ALIVE: u16 = 0;
 const CLEAN_SESSION: bool = true;
+const CONNECT_TIME: u64 = 1000;
 
 fn get_config() -> PublisherConfig {
     let args: Vec<String> = env::args().collect();
@@ -35,6 +36,8 @@ fn get_connect(config: &PublisherConfig) -> PacketResult<Connect> {
 }
 
 fn get_temperature() -> f32 {
+    // TODO: Replace with realistic temperature
+    // ( rn it can jump from MIN to MAX between calls )
     thread_rng().gen::<f32>() * (MAX_TEMP - MIN_TEMP) + MIN_TEMP
 }
 
@@ -42,7 +45,7 @@ fn get_temperature_publish(config: &PublisherConfig) -> Publish {
     Publish {
         packet_id: None,
         topic_name: config.topic.clone(),
-        qos: QoSLevel::QoSLevel1,
+        qos: QoSLevel::QoSLevel0,
         retain_flag: false,
         dup_flag: false,
         payload: format!("{}", get_temperature()),
@@ -51,17 +54,27 @@ fn get_temperature_publish(config: &PublisherConfig) -> Publish {
 
 fn main() {
     let config = get_config();
-    println!("{:?}", config);
+    println!("CONFIG\n{:?}\n____________\n", config);
 
     let connect = get_connect(&config).expect("Could not build connect packet");
-    println!("{:?}", connect);
+    println!("CONNECT\n{:?}\n____________\n", connect);
 
-    let publish = get_temperature_publish(&config);
-    println!("{:?}", publish);
-
-    let _client = Client::new(
+    let mut client = Client::new(
         &format!("{}:{}", config.server, config.port),
         MyObserver {},
         connect,
-    );
+    )
+    .expect("Could not create client");
+
+    std::thread::sleep(std::time::Duration::from_millis(CONNECT_TIME));
+    println!("____________\n");
+
+    println!("PUBLISH");
+    loop {
+        let publish = get_temperature_publish(&config);
+        println!("- - - - - - -\n{:?}", publish.payload);
+        client.publish(publish).expect("Could not publish");
+        std::thread::sleep(std::time::Duration::from_millis(config.period));
+        // TODO: Shutdown
+    }
 }
