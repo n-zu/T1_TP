@@ -1,7 +1,10 @@
 use config::config::Config;
 use mqtt_client::Client;
 use observer::Observer;
-use packets::{connect::Connect, connect::ConnectBuilder, subscribe::Subscribe, qos::QoSLevel, PacketResult, topic_filter::TopicFilter};
+use packets::{
+    connect::Connect, connect::ConnectBuilder, qos::QoSLevel, subscribe::Subscribe,
+    topic_filter::TopicFilter, PacketResult,
+};
 use std::env;
 use std::io::Read;
 
@@ -11,13 +14,13 @@ const KEEP_ALIVE: u16 = 0;
 const CLEAN_SESSION: bool = true;
 const CONNECT_TIME: u64 = 1000;
 
-fn get_config() -> Config {
+fn get_config(name: &str, arg_num: usize) -> Config {
     let args: Vec<String> = env::args().collect();
-    let mut path: &str = "./config.txt";
-    if args.len() > 1 {
-        path = &args[1];
+    let mut path: &str = &format!("./{}_config.txt", name);
+    if args.len() > arg_num {
+        path = &args[arg_num];
     }
-    Config::new(path).expect("Invalid config file")
+    Config::new(path).unwrap_or_else(|| panic!("Invalid {} config file", name))
 }
 
 fn get_connect(config: &Config) -> PacketResult<Connect> {
@@ -37,18 +40,17 @@ fn get_client(config: &Config, connect: Connect) -> Client<Observer> {
 }
 
 fn subscribe(client: &mut Client<Observer>, config: &Config) {
-    let topic_filter = TopicFilter::new(
-        String::from(&config.topic),
-        QoSLevel::QoSLevel1
-    ).unwrap();
+    let topic_filter = TopicFilter::new(String::from(&config.topic), QoSLevel::QoSLevel1).unwrap();
     let subscribe = Subscribe::new(vec![topic_filter], 2);
     println!("SUBSCRIBE\n{:?}\n____________\n", subscribe);
     client.subscribe(subscribe).expect("Could not subscribe");
 }
 
 fn main() {
-    let config = get_config();
-    println!("CONFIG\n{:?}\n____________\n", config);
+    let config = get_config("mqtt", 2);
+    println!("MQTT CONFIG\n{:?}\n____________\n", config);
+    let _http_config = get_config("http", 1);
+    println!("HTTP CONFIG\n{:?}\n____________\n", _http_config);
 
     let connect = get_connect(&config).expect("Could not build connect packet");
     println!("CONNECT\n{:?}\n____________\n", connect);

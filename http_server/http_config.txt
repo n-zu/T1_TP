@@ -1,0 +1,7 @@
+server=localhost
+port=3030
+client_id=none
+topic=temperature
+user=none
+password=none
+period=2000
