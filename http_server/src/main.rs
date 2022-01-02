@@ -5,10 +5,11 @@ use packets::{
     connect::Connect, connect::ConnectBuilder, qos::QoSLevel, subscribe::Subscribe,
     topic_filter::TopicFilter, PacketResult,
 };
-use std::env;
-use std::io::Read;
+use server::Server;
+use std::{env, io::Read, sync::Arc};
 
 mod observer;
+mod server;
 
 const KEEP_ALIVE: u16 = 0;
 const CLEAN_SESSION: bool = true;
@@ -61,6 +62,9 @@ fn main() {
     println!("____________\n");
 
     subscribe(&mut client, &config);
+
+    let _server = Arc::new(Server::new(&_http_config));
+    _server.run();
 
     println!("Presione [ENTER] para detener la ejecucion del servidor\n____________\n");
     let mut buf = [0u8; 1];
