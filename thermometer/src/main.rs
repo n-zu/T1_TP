@@ -1,16 +1,13 @@
-use observer::MyObserver;
-use publisher_config::PublisherConfig;
-use rand::prelude::*;
-use std::env;
-
+use config::config::Config;
+use mqtt_client::Client;
+use observer::ThermometerObserver;
 use packets::{
     connect::Connect, connect::ConnectBuilder, publish::Publish, qos::QoSLevel, PacketResult,
 };
-
-use mqtt_client::Client;
+use rand::prelude::*;
+use std::env;
 
 mod observer;
-mod publisher_config;
 
 const MAX_TEMP: f32 = 100.0;
 const MIN_TEMP: f32 = 0.0;
@@ -20,26 +17,26 @@ const KEEP_ALIVE: u16 = 0;
 const CLEAN_SESSION: bool = true;
 const CONNECT_TIME: u64 = 1000;
 
-fn get_config() -> PublisherConfig {
+fn get_config() -> Config {
     let args: Vec<String> = env::args().collect();
     let mut path: &str = "./config.txt";
     if args.len() > 1 {
         path = &args[1];
     }
-    PublisherConfig::new(path).expect("Invalid config file")
+    Config::new(path).expect("Invalid config file")
 }
 
-fn get_connect(config: &PublisherConfig) -> PacketResult<Connect> {
+fn get_connect(config: &Config) -> PacketResult<Connect> {
     ConnectBuilder::new(&config.client_id, KEEP_ALIVE, CLEAN_SESSION)?
         .with_user_name(&config.user)?
         .with_password(&config.password)?
         .build()
 }
 
-fn get_client(config: &PublisherConfig, connect: Connect) -> Client<MyObserver> {
+fn get_client(config: &Config, connect: Connect) -> Client<ThermometerObserver> {
     Client::new(
         &format!("{}:{}", config.server, config.port),
-        MyObserver {},
+        ThermometerObserver {},
         connect,
     )
     .expect("Could not create client")
@@ -52,7 +49,7 @@ fn get_temperature(temperature: Option<f32>) -> f32 {
     }
 }
 
-fn get_temperature_publish(config: &PublisherConfig, temperature: f32) -> Publish {
+fn get_temperature_publish(config: &Config, temperature: f32) -> Publish {
     Publish {
         packet_id: None,
         topic_name: config.topic.clone(),
@@ -63,7 +60,7 @@ fn get_temperature_publish(config: &PublisherConfig, temperature: f32) -> Publis
     }
 }
 
-fn publish_temperature(client: &mut Client<MyObserver>, config: &PublisherConfig) {
+fn publish_temperature(client: &mut Client<ThermometerObserver>, config: &Config) {
     let mut temperature = get_temperature(None);
 
     loop {

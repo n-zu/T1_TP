@@ -1,10 +1,10 @@
 use mqtt_client::{Message, Observer};
 
 #[derive(Clone)]
-pub struct MyObserver;
+pub struct ThermometerObserver;
 
-impl Observer for MyObserver {
+impl Observer for ThermometerObserver {
     fn update(&self, msg: Message) {
-        println!("{:?}", msg);
+        println!("[ {:?} ]", msg);
     }
 }

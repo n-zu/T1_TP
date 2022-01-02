@@ -5,7 +5,7 @@ use std::{
 };
 
 #[derive(Debug)]
-pub struct PublisherConfig {
+pub struct Config {
     pub server: String,
     pub port: String,
     pub client_id: String,
@@ -17,13 +17,13 @@ pub struct PublisherConfig {
 
 const SEP: &str = "=";
 
-impl PublisherConfig {
-    pub fn new(path: &str) -> Option<PublisherConfig> {
+impl Config {
+    pub fn new(path: &str) -> Option<Config> {
         let config_file = File::open(path).ok()?;
-        PublisherConfig::new_from_file(config_file)
+        Config::new_from_file(config_file)
     }
 
-    pub fn new_from_file(config_file: impl Read) -> Option<PublisherConfig> {
+    pub fn new_from_file(config_file: impl Read) -> Option<Config> {
         let lines: Vec<String> = BufReader::new(config_file)
             .lines()
             .collect::<Result<Vec<_>, _>>()
@@ -36,7 +36,7 @@ impl PublisherConfig {
             })
             .collect::<Option<HashMap<_, _>>>()?;
 
-        Some(PublisherConfig {
+        Some(Config {
             server: config.remove("server")?,
             port: config.remove("port")?,
             client_id: config.remove("client_id")?,

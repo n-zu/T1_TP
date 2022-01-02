@@ -1,4 +1,4 @@
-TARGETS = client server common/packets common/threadpool
+TARGETS = mqtt_client common/packets common/threadpool common/config thermometer http_server
 SFLAGS ?= -num-clients 100 -num-messages 1000 -timeout 20s -global-timeout 180s -rampup-delay 1s -rampup-size 10 -publisher-qos 1
 
 all: fmt test clippy;
