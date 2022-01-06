@@ -64,10 +64,31 @@ impl Server {
             String::from_utf8_lossy(&buffer)
         );
 
+        let html = format!(
+            "
+            <!DOCTYPE html>
+            <html lang=\"en\">
+            <head>
+                <title>monitor</title>
+            </head>
+            <script>
+                setTimeout(function() {{
+                    window.location.reload(1);
+                }}, {});
+            </script>
+            <div style=\"display: flex;align-items: center;justify-content: center;min-height: 100vh;\">
+                <h1>{}</h1>
+            </div>
+            </html>
+            ",
+            2000,
+            message
+        );
+
         let response = format!(
             "HTTP/1.1 200 OK\r\nContent-Length: {}\r\n\r\n{}",
-            message.len(),
-            message
+            html.len(),
+            html
         );
 
         stream.write(response.as_bytes()).unwrap();
