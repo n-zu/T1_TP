@@ -11,7 +11,7 @@ mod observer;
 
 const MAX_TEMP: f32 = 100.0;
 const MIN_TEMP: f32 = 0.0;
-const VAR_TEMP: f32 = 1.0;
+const VAR_TEMP: f32 = 10.0;
 
 const KEEP_ALIVE: u16 = 0;
 const CLEAN_SESSION: bool = true;
@@ -45,7 +45,14 @@ fn get_client(config: &Config, connect: Connect) -> Client<ThermometerObserver> 
 fn get_temperature(temperature: Option<f32>) -> f32 {
     match temperature {
         None => thread_rng().gen::<f32>() * (MAX_TEMP - MIN_TEMP) + MIN_TEMP,
-        Some(t) => t + thread_rng().gen::<f32>() * VAR_TEMP * 2.0 - VAR_TEMP,
+        Some(t) => {
+            let r = t + thread_rng().gen::<f32>() * VAR_TEMP * 2.0 - VAR_TEMP;
+            match r {
+                t if t > MAX_TEMP => MAX_TEMP,
+                t if t < MIN_TEMP => MIN_TEMP,
+                _ => r,
+            }
+        },
     }
 }
 
