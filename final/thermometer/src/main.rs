@@ -5,7 +5,7 @@ use packets::{
     connect::Connect, connect::ConnectBuilder, publish::Publish, qos::QoSLevel, PacketResult,
 };
 use rand::prelude::*;
-use std::env;
+use std::{env, io::Read, thread};
 
 mod observer;
 
@@ -52,7 +52,7 @@ fn get_temperature(temperature: Option<f32>) -> f32 {
                 t if t < MIN_TEMP => MIN_TEMP,
                 _ => r,
             }
-        },
+        }
     }
 }
 
@@ -76,7 +76,6 @@ fn publish_temperature(client: &mut Client<ThermometerObserver>, config: &Config
         println!("- - - - - - -\n{:?}", publish.payload);
         client.publish(publish).expect("Could not publish");
         std::thread::sleep(std::time::Duration::from_millis(config.period));
-        // TODO: Shutdown
     }
 }
 
@@ -93,5 +92,9 @@ fn main() {
     println!("____________\n");
 
     println!("PUBLISH");
-    publish_temperature(&mut client, &config);
+    thread::spawn(move || publish_temperature(&mut client, &config));
+
+    println!("Presione [ENTER] para detener la ejecucion del servidor\n____________\n");
+    let mut buf = [0u8; 1];
+    std::io::stdin().read_exact(&mut buf).unwrap_or(());
 }
