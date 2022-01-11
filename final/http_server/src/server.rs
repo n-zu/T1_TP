@@ -1,26 +1,30 @@
 use config::config::Config;
 use std::{
     error::Error,
-    io::prelude::*,
-    net::{TcpListener, TcpStream},
-    sync::{mpsc::Receiver, Arc, Mutex},
+    fs,
+    net::{SocketAddr, TcpListener, TcpStream},
+    sync::{mpsc::Receiver, Arc, Mutex, RwLock},
+    time::Duration,
 };
-use tracing::{debug, info, instrument, error};
+use threadpool::ThreadPool;
+use tracing::{debug, error, info, instrument};
 
-use crate::{html, http_response};
+use crate::messages::{HttpRequest, HttpResponse, Request};
 
 pub(crate) type ServerResult<T> = Result<T, Box<dyn Error>>;
 
 pub struct Server {
     config: Config,
-    connections: Arc<Mutex<Vec<TcpStream>>>,
+    data: RwLock<String>,
+    pool: Mutex<ThreadPool>,
 }
 
 impl Server {
     pub fn new(config: &Config) -> Self {
         Server {
             config: config.clone(),
-            connections: Arc::new(Mutex::new(Vec::new())),
+            data: RwLock::new(String::from("")),
+            pool: Mutex::new(ThreadPool::new(8)),
         }
     }
 
@@ -30,14 +34,11 @@ impl Server {
 
         let server = self.clone();
 
-        let _connection_listener = std::thread::spawn(move || {
-            if let Err(e) = server.handle_connections() {
-                println!("Error interno: {}", e);
-            }
+        let _ = std::thread::spawn(move || {
+            server.update_data(receiver);
         });
-
-        let _message_listener = std::thread::spawn(move || {
-            if let Err(e) = self.handle_messages(receiver) {
+        let _connection_listener = std::thread::spawn(move || {
+            if let Err(e) = self.handle_connections() {
                 error!("Error interno: {}", e);
             }
         });
@@ -45,65 +46,90 @@ impl Server {
         Ok(())
     }
 
+    fn update_data(&self, receiver: Receiver<String>) {
+        loop {
+            let msg = receiver.recv().expect("Error de channel");
+            info!("Actualizando data: {}", msg);
+            *self
+                .data
+                .write()
+                .expect("Error actualizando el valor de data") = msg;
+        }
+    }
+
     #[instrument(skip(self) fields(ip = %self.config.server, port = %self.config.port))]
     fn handle_connections(self: Arc<Self>) -> ServerResult<()> {
-        let listener =
-            TcpListener::bind(&format!("{}:{}", self.config.server, self.config.port)).unwrap();
-
+        let listener = TcpListener::bind(&format!("{}:{}", self.config.server, self.config.port))?;
         info!("Escuchando conexiones");
 
-        let mut connections = self
-            .connections
-            .lock()
-            .map_err(|_| "Error inesperado: No se pudo obtener un lock")?;
-
-        for stream in listener.incoming().collect::<Result<Vec<TcpStream>, _>>()? {
+        for stream in listener.incoming() {
+            let stream = stream?;
+            let addr = stream.peer_addr()?;
             debug!("Nueva conexion: {}", stream.peer_addr().unwrap());
-            connections.push(stream);
+            stream.set_read_timeout(Some(Duration::from_secs(15)))?;
+            let server = self.clone();
+            self.pool.lock().unwrap().execute(move || {
+                server.handle_request(addr, stream).unwrap_or_else(|e| {
+                    error!("Error manejando la request: {}", e);
+                });
+            })?;
         }
 
         Ok(())
     }
 
-    fn handle_messages(self: Arc<Self>, reciever: Receiver<String>) -> ServerResult<()> {
-        loop {
-            let message = reciever.recv()?;
-
-            let mut connections = self
-                .connections
-                .lock()
-                .map_err(|_| "Error inesperado: No se pudo obtener un lock")?;
-
-            for stream in connections.iter() {
-                let _stream = stream.try_clone()?;
-                Self::post_message(_stream, &message)?;
-                stream.shutdown(std::net::Shutdown::Both)?;
+    #[instrument(skip(self, stream))]
+    fn handle_request(
+        self: Arc<Self>,
+        addr: SocketAddr,
+        mut stream: TcpStream,
+    ) -> ServerResult<()> {
+        let http_request = HttpRequest::read_from(&mut stream).unwrap();
+        let headers;
+        let body = match http_request.request() {
+            Request::Index => {
+                debug!("Procesando request de Index");
+                let body = fs::read_to_string("page/index.html")?;
+                headers = Some(
+                    "Content-Type: text/html charset=UTF-8\r\nCache-Control: max-age=3600\r\n",
+                );
+                body.as_bytes().to_owned()
             }
-
-            connections.clear();
-        }
-    }
-
-    #[instrument(skip(stream))]
-    fn post_message(mut stream: TcpStream, message: &str) -> ServerResult<()> {
-        let mut buffer = [0; 1024];
-        debug!("Posteando mensaje");
-
-        stream.read_exact(&mut buffer)?;
-
-        println!(
-            "\x1b[0;33m----------------\n\n{}\n----------------\x1b[0m",
-            String::from_utf8_lossy(&buffer)
+            Request::Data => {
+                debug!("Procesando request de Data");
+                let data = self.data.read().expect("Error leyendo data");
+                headers = None;
+                data.as_bytes().to_owned()
+            }
+            Request::Favicon => {
+                debug!("Procesando request de Favicon");
+                let body =
+                    fs::read("page/favicon.ico").map_err(|e| format!("Error de favicon: {}", e))?;
+                headers = Some("Content-Type: image/x-icon\r\nCache-Control: max-age=3600\r\n");
+                body
+            }
+            Request::Css(filename) => {
+                debug!("Procesando request de CSS: {}", filename);
+                let body = fs::read(format!("page/resources/css/{}", filename))
+                    .map_err(|e| format!("Error de css: {}", e))?;
+                headers = Some("Content-Type: text/css\r\nCache-Control: max-age=3600\r\n");
+                body
+            }
+            Request::Image(filename) => {
+                debug!("Procesando request de imagen: {}", filename);
+                let body = fs::read(format!("page/resources/image/{}", filename))
+                    .map_err(|e| format!("Error de imagen: {}", e))?;
+                headers = Some("Content-Type: image/png\r\nCache-Control: max-age=3600\r\n");
+                body
+            }
+        };
+        let response = HttpResponse::new(
+            crate::messages::HttpStatusCode::Ok,
+            crate::messages::HttpVersion::V1_1,
+            headers,
+            Some(body),
         );
-
-        let response = http_response!(html!(
-            200, // refresh rate
-            10,  // n-points
-            message
-        ));
-
-        stream.write_all(response.as_bytes())?;
-        stream.flush()?;
+        response.send_to(&mut stream).unwrap();
         Ok(())
     }
 }

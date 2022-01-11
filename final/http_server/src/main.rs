@@ -16,9 +16,9 @@ use std::{
         Arc,
     },
 };
-use tracing::{debug, instrument, Level};
+use tracing::{debug, error, info, instrument, Level};
 
-mod macros;
+mod messages;
 mod observer;
 mod server;
 
@@ -66,9 +66,7 @@ fn subscribe(client: &mut Client<Observer>, config: &Config) -> ServerResult<()>
     Ok(())
 }
 
-fn intialize_server() -> ServerResult<()> {
-    let _logger = Logger::new("logs", Level::INFO, Level::DEBUG);
-
+fn intialize_server() -> ServerResult<Client<Observer>> {
     let config = get_config("mqtt", 2)?;
     let http_config = get_config("http", 1)?;
 
@@ -84,15 +82,18 @@ fn intialize_server() -> ServerResult<()> {
 
     let server = Arc::new(Server::new(&http_config));
     server.run(receiver)?;
-    Ok(())
+    Ok(client)
 }
 
 fn main() {
-    if let Err(e) = intialize_server() {
-        println!("Error inicializando el servidor: {}", e);
-    }
+    let _logger = Logger::new("logs", Level::INFO, Level::DEBUG);
 
-    println!("Presione [ENTER] para detener la ejecucion del servidor");
-    let mut buf = [0u8; 1];
-    std::io::stdin().read_exact(&mut buf).unwrap_or(());
+    match intialize_server() {
+        Err(e) => error!("Error inicializando el servidor: {}", e),
+        Ok(_client) => {
+            info!("Presione [ENTER] para detener la ejecucion del servidor");
+            let mut buf = [0u8; 1];
+            std::io::stdin().read_exact(&mut buf).unwrap_or(());
+        }
+    }
 }

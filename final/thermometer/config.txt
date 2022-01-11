@@ -4,4 +4,4 @@ client_id=temp_publisher
 topic=temperature
 user=demo
 password=demo
-period=200
+period=2000
