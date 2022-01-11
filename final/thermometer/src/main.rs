@@ -52,7 +52,7 @@ fn get_temperature(temperature: Option<f32>) -> f32 {
                 t if t < MIN_TEMP => MIN_TEMP,
                 _ => r,
             }
-        },
+        }
     }
 }
 

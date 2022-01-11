@@ -18,7 +18,6 @@ use std::{
 };
 use tracing::{debug, instrument, Level};
 
-mod messages;
 mod observer;
 mod server;
 
