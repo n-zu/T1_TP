@@ -21,12 +21,12 @@ const MSG_INVALID_PACKET_ID: &str = "Packet identifier must be greater than zero
 #[derive(Debug, PartialEq, Clone, Serialize, Deserialize)]
 /// Publish packet structure for server/client side
 pub struct Publish {
-    pub packet_id: Option<u16>,
-    pub topic_name: String,
-    pub qos: QoSLevel,
-    pub retain_flag: bool,
-    pub dup_flag: bool,
-    pub payload: String,
+    packet_id: Option<u16>,
+    topic_name: String,
+    qos: QoSLevel,
+    retain_flag: bool,
+    dup_flag: bool,
+    payload: String,
 }
 
 impl Publish {

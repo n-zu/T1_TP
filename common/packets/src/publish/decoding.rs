@@ -43,14 +43,14 @@ impl MQTTDecoding for Publish {
     ///  bytes.push(remaining_data.len() as u8);
     ///  bytes.append(&mut remaining_data);
     ///  let mut stream = Cursor::new(bytes);
-    ///  let expected = Publish {
-    ///             packet_id: Option::from(10 as u16),
-    ///             topic_name: "a/b".to_string(),
-    ///             qos: QoSLevel::QoSLevel1,
-    ///             retain_flag: false,
-    ///             dup_flag: false,
-    ///             payload: "mensaje".to_string(),
-    ///         };
+    ///  let expected = Publish::new(
+    ///     false,
+    ///     QoSLevel::QoSLevel1,
+    ///     false,
+    ///     "a/b",
+    ///     "mensaje",
+    ///     Some(10),
+    ///  ).unwrap();
     ///  let result = Publish::read_from(&mut stream, control_byte).unwrap();
     ///  assert_eq!(expected, result);
     /// ```
