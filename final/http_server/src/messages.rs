@@ -218,7 +218,6 @@ impl HttpResponse {
         }
     }
     pub fn send_to<T: io::Write>(&self, stream: &mut T) -> HttpResult<()> {
-        let mut buff = vec![];
         let response = format!(
             "{} {} {}\r\nContent-Length: {}\r\n",
             String::from(self.version),
@@ -228,20 +227,15 @@ impl HttpResponse {
         );
 
         stream.write_all(response.as_bytes()).unwrap();
-        buff.append(&mut response.as_bytes().to_vec());
 
         let headers = self.headers.as_deref().unwrap_or_else(|| "".as_bytes());
         let body = self.body.as_deref().unwrap_or(&[]);
         stream.write_all(headers).unwrap();
         stream.write_all("\r\n".as_bytes()).unwrap();
-        buff.append(&mut headers.to_vec());
-        buff.append(&mut "\r\n".as_bytes().to_vec());
 
         stream.write_all(body).unwrap();
-        buff.append(&mut body.to_vec());
 
         stream.flush().unwrap();
-        println!("RESPONSE:\n{}", String::from_utf8_lossy(&buff[..]));
         Ok(())
     }
 }
