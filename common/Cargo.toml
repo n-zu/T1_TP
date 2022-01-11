@@ -1,0 +1,6 @@
+[workspace]
+members = [
+    "logger",
+    "threadpool",
+    "packets"
+]

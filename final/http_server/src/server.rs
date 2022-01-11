@@ -4,6 +4,7 @@ use std::{
     net::{TcpListener, TcpStream},
     sync::{mpsc::Receiver, Arc, Mutex},
 };
+use tracing::{debug, info, instrument};
 
 pub struct Server {
     config: Config,
@@ -18,7 +19,10 @@ impl Server {
         }
     }
 
-    pub fn run(self: Arc<Self>, reciever: Receiver<String>) {
+    #[instrument(skip(self, receiver) fields(ip = %self.config.server, port = %self.config.port))]
+    pub fn run(self: Arc<Self>, receiver: Receiver<String>) {
+        info!("Iniciando servidor");
+
         let server = self.clone();
 
         let _connection_listener = std::thread::spawn(move || {
@@ -26,19 +30,20 @@ impl Server {
         });
 
         let _message_listener = std::thread::spawn(move || {
-            self.handle_messages(reciever);
+            self.handle_messages(receiver);
         });
     }
 
+    #[instrument(skip(self) fields(ip = %self.config.server, port = %self.config.port))]
     fn handle_connections(self: Arc<Self>) {
         let listener =
             TcpListener::bind(&format!("{}:{}", self.config.server, self.config.port)).unwrap();
-        println!(
-            "_________\n\nListening on {}:{}\n_________",
-            self.config.server, self.config.port
-        );
+
+        info!("Escuchando conexiones");
+
         for stream in listener.incoming() {
             let stream = stream.unwrap();
+            debug!("Nueva conexion: {}", stream.peer_addr().unwrap());
             self.connections.lock().unwrap().push(stream);
         }
     }
@@ -55,8 +60,10 @@ impl Server {
         }
     }
 
+    #[instrument(skip(stream))]
     fn post_message(mut stream: TcpStream, message: &str) {
         let mut buffer = [0; 1024];
+        debug!("Posteando mensaje");
 
         stream.read(&mut buffer).unwrap();
         println!(

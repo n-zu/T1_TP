@@ -3,14 +3,13 @@ use std::io::Read;
 use tracing::info;
 
 use crate::config::FileConfig;
-use crate::logger::Logger;
+use logger::Logger;
 pub use crate::server::{Server, ServerController};
 pub use crate::traits::Config;
 
 mod client;
 mod clients_manager;
 mod config;
-mod logger;
 mod network_connection;
 mod server;
 mod test_helpers;

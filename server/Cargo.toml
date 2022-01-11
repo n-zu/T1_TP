@@ -8,6 +8,7 @@ edition = "2018"
 [dependencies]
 packets = { path = "../common/packets" }
 threadpool = { path = "../common/threadpool" }
+logger = { path = "../common/logger" }
 rand = "0.8.4"
 tracing = "0.1.29"
 tracing-appender = "0.2"
