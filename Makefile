@@ -1,4 +1,4 @@
-TARGETS = final/common/config final/http_server final/thermometer
+TARGETS = http_final/common/config http_final/http_server http_final/thermometer
 SFLAGS ?= -num-clients 100 -num-messages 1000 -timeout 20s -global-timeout 180s -rampup-delay 1s -rampup-size 10 -publisher-qos 1
 
 all: fmt test clippy;

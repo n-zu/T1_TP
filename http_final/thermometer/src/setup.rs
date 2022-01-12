@@ -6,10 +6,15 @@ use packets::PacketResult;
 use std::io::Read;
 use std::{env, thread};
 
+#[doc(hidden)]
 const KEEP_ALIVE: u16 = 0;
+#[doc(hidden)]
 const CLEAN_SESSION: bool = true;
+#[doc(hidden)]
 const CONNECT_TIME: u64 = 1000;
 
+/// Starts the loop that allows a thermometer to publish its measure to a
+/// MQTT broker
 pub fn init() {
     match make_client() {
         Ok((client, config)) => {
@@ -31,6 +36,8 @@ pub fn init() {
     std::io::stdin().read_exact(&mut buf).unwrap_or(());
 }
 
+/// Returns a valid Client and Config
+#[doc(hidden)]
 fn make_client() -> ClientResult<(Client<ThermometerObserver>, Config)> {
     let config = make_config();
     println!("CONFIG\n{:?}\n____________\n", config);
@@ -47,6 +54,8 @@ fn make_client() -> ClientResult<(Client<ThermometerObserver>, Config)> {
     Ok((client, config))
 }
 
+/// Returns a valid Config
+#[doc(hidden)]
 fn make_config() -> Config {
     let args: Vec<String> = env::args().collect();
     let mut path: &str = "./config.txt";
@@ -56,6 +65,8 @@ fn make_config() -> Config {
     Config::new(path).expect("Invalid config file")
 }
 
+/// Returns a valid CONNECT packet
+#[doc(hidden)]
 fn make_connect(config: &Config) -> PacketResult<Connect> {
     ConnectBuilder::new(&config.client_id, KEEP_ALIVE, CLEAN_SESSION)?
         .with_user_name(&config.user)?
@@ -63,6 +74,8 @@ fn make_connect(config: &Config) -> PacketResult<Connect> {
         .build()
 }
 
+/// Returns a valid Client given a config and a CONNECT packet
+#[doc(hidden)]
 fn get_client(config: &Config, connect: Connect) -> ClientResult<Client<ThermometerObserver>> {
     Ok(Client::new(
         &format!("{}:{}", config.server, config.port),
