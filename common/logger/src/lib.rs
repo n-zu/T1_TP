@@ -6,8 +6,6 @@ use tracing_subscriber::{
     Registry,
 };
 
-//trait Subscriber: tracing::Subscriber + Send + Sync + 'static {}
-
 const LOG_PREFIX: &str = "log.";
 
 /// Logger structs. Holds the subscriber guards.

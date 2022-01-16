@@ -1,12 +1,14 @@
 [package]
-name = "thermometer"
+name = "http_server"
 version = "0.1.0"
-edition = "2021"
+edition = "2018"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-rand = "0.8.0"
 packets = { path = "../../common/packets" }
+logger = { path = "../../common/logger" }
+tracing = "0.1.29"
 config = { path = "../common/config" }
+threadpool = { path = "../../common/threadpool" }
 mqtt_client = { path = "../../mqtt_client" }

@@ -1,6 +1,6 @@
 server=150.230.76.67
 port=1883
-client_id=temp_publisher
+client_id=temp_server
 topic=temperature
 user=demo
 password=demo

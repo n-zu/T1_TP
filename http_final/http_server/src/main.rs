@@ -1,4 +1,5 @@
 use config::config::Config;
+use logger::Logger;
 use mqtt_client::Client;
 use observer::Observer;
 use packets::{
@@ -15,8 +16,9 @@ use std::{
         Arc,
     },
 };
+use tracing::{debug, error, info, instrument, Level};
 
-mod macros;
+mod messages;
 mod observer;
 mod server;
 
@@ -24,13 +26,16 @@ const KEEP_ALIVE: u16 = 0;
 const CLEAN_SESSION: bool = true;
 const CONNECT_TIME: u64 = 1000;
 
-fn get_config(name: &str, arg_num: usize) -> ServerResult<Config> {
+#[instrument(skip(arg_num))]
+fn get_config(config_file: &str, arg_num: usize) -> ServerResult<Config> {
     let args: Vec<String> = env::args().collect();
-    let mut path: &str = &format!("./{}_config.txt", name);
+    let mut path: &str = &format!("./{}_config.txt", config_file);
     if args.len() > arg_num {
         path = &args[arg_num];
     }
-    Config::new(path).ok_or_else(|| "Invalid {} config file".into())
+    let config = Config::new(path).ok_or_else(|| "Invalid {} config file".into());
+    debug!("Config cargado");
+    config
 }
 
 fn get_connect(config: &Config) -> PacketResult<Connect> {
@@ -52,43 +57,43 @@ fn get_client(
     )?)
 }
 
+#[instrument(skip(client, config) fields(topic_filter = %config.topic))]
 fn subscribe(client: &mut Client<Observer>, config: &Config) -> ServerResult<()> {
     let topic_filter = TopicFilter::new(String::from(&config.topic), QoSLevel::QoSLevel1).unwrap();
     let subscribe = Subscribe::new(vec![topic_filter], 2);
-    println!("SUBSCRIBE\n{:?}\n____________\n", subscribe);
+    debug!("SUBSCRIBE");
     client.subscribe(subscribe)?;
     Ok(())
 }
 
-fn intialize_server() -> ServerResult<()> {
+fn intialize_server() -> ServerResult<Client<Observer>> {
     let config = get_config("mqtt", 2)?;
-    println!("MQTT CONFIG\n{:?}\n____________\n", config);
-    let _http_config = get_config("http", 1)?;
-    println!("HTTP CONFIG\n{:?}\n____________\n", _http_config);
+    let http_config = get_config("http", 1)?;
 
-    let connect = get_connect(&config)?;
-    println!("CONNECT\n{:?}\n____________\n", connect);
+    let connect = get_connect(&config).expect("Could not build connect packet");
 
-    let (sender, reciever): (Sender<String>, Receiver<String>) = mpsc::channel();
+    let (sender, receiver): (Sender<String>, Receiver<String>) = mpsc::channel();
     let observer = Observer::new(sender);
     let mut client = get_client(&config, connect, observer)?;
 
     std::thread::sleep(std::time::Duration::from_millis(CONNECT_TIME));
-    println!("____________\n");
 
     subscribe(&mut client, &config)?;
 
-    let server = Arc::new(Server::new(&_http_config));
-    server.run(reciever)?;
-    Ok(())
+    let server = Arc::new(Server::new(&http_config));
+    server.run(receiver)?;
+    Ok(client)
 }
 
 fn main() {
-    if let Err(e) = intialize_server() {
-        println!("Error inicializando el servidor: {}", e);
-    }
+    let _logger = Logger::new("logs", Level::INFO, Level::DEBUG);
 
-    println!("Presione [ENTER] para detener la ejecucion del servidor\n____________\n");
-    let mut buf = [0u8; 1];
-    std::io::stdin().read_exact(&mut buf).unwrap_or(());
+    match intialize_server() {
+        Err(e) => error!("Error inicializando el servidor: {}", e),
+        Ok(_client) => {
+            info!("Presione [ENTER] para detener la ejecucion del servidor");
+            let mut buf = [0u8; 1];
+            std::io::stdin().read_exact(&mut buf).unwrap_or(());
+        }
+    }
 }
