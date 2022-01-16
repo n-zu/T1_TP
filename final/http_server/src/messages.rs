@@ -1,15 +1,15 @@
 #![allow(dead_code)]
 
 use std::{
+    error::Error,
     io::{self},
     str::Lines,
 };
 
 type HttpResult<T> = Result<T, HttpError>;
+type HttpError = Box<dyn Error>;
 
-// TODO
-#[derive(Debug)]
-pub struct HttpError;
+const GET_METHOD: &str = "GET";
 
 #[derive(Debug, Clone, Copy)]
 pub enum HttpVersion {
@@ -98,20 +98,27 @@ pub struct HttpResponse {
 impl HttpRequest {
     pub fn read_from<T: io::Read>(mut stream: T) -> HttpResult<HttpRequest> {
         let mut buff = [0u8; 1024];
-        let _ = stream.read(&mut buff).unwrap();
+        let _ = stream.read(&mut buff)?;
         let tmp = String::from_utf8_lossy(&buff).replace("\r", "");
         let mut lines = tmp.lines();
-        let mut request_line = lines.next().unwrap().split_whitespace();
-        let method = request_line.next().unwrap();
-        if method != "GET" {
-            panic!("Error: metodo no es GET");
-        }
-        let request_uri = request_line.next().unwrap();
-        let request = HttpRequest::parse_request_uri(request_uri).unwrap();
-        let http_version = request_line.next().unwrap();
-        let version = HttpRequest::parse_http_version(http_version).unwrap();
-        let headers = HttpRequest::parse_headers(&mut lines).unwrap();
-        let body = HttpRequest::parse_body(&mut lines).unwrap();
+        let mut request_line = lines
+            .next()
+            .ok_or("Request tiene formato incorrecto")?
+            .split_whitespace();
+
+        let method = request_line.next().ok_or("No se pudo obtener método")?;
+        HttpRequest::validate_method(method)?;
+
+        let request_uri = request_line.next().ok_or("No se pudo obtener URI")?;
+        let request = HttpRequest::parse_request_uri(request_uri)?;
+
+        let http_version = request_line
+            .next()
+            .ok_or("No se pudo obtener versión HTTP")?;
+        let version = HttpRequest::parse_http_version(http_version)?;
+
+        let headers = HttpRequest::parse_headers(&mut lines)?;
+        let body = HttpRequest::parse_body(&mut lines)?;
 
         Ok(HttpRequest {
             request,
@@ -119,6 +126,13 @@ impl HttpRequest {
             headers,
             body,
         })
+    }
+
+    fn validate_method(method: &str) -> HttpResult<()> {
+        if method != GET_METHOD {
+            return Err(format!("Solo se soporta el método {}", GET_METHOD).into());
+        }
+        Ok(())
     }
 
     fn parse_headers(lines: &mut Lines) -> HttpResult<Option<String>> {
@@ -151,15 +165,14 @@ impl HttpRequest {
     fn parse_http_version(http_version: &str) -> HttpResult<HttpVersion> {
         match http_version {
             "HTTP/1.1" => Ok(HttpVersion::V1_1),
-            _ => panic!("Http version not supported: {}", http_version),
+            _ => Err(format!("Http version not supported: {}", http_version).into()),
         }
     }
 
     fn parse_request_uri(request_uri: &str) -> HttpResult<Request> {
         if !request_uri.contains('/') {
-            panic!("URI invalida: {}", request_uri);
-        }
-        if request_uri == "/" {
+            Err(format!("URI invalida: {}", request_uri).into())
+        } else if request_uri == "/" {
             Ok(Request::Index)
         } else if request_uri == "/data" {
             Ok(Request::Data)
@@ -172,7 +185,7 @@ impl HttpRequest {
             let filename = stripped;
             Ok(Request::Image(filename.to_owned()))
         } else {
-            panic!("URI invalida: {}", request_uri);
+            Err(format!("URI invalida: {}", request_uri).into())
         }
     }
 
@@ -226,16 +239,16 @@ impl HttpResponse {
             self.body_len()
         );
 
-        stream.write_all(response.as_bytes()).unwrap();
+        stream.write_all(response.as_bytes())?;
 
         let headers = self.headers.as_deref().unwrap_or_else(|| "".as_bytes());
         let body = self.body.as_deref().unwrap_or(&[]);
-        stream.write_all(headers).unwrap();
-        stream.write_all("\r\n".as_bytes()).unwrap();
+        stream.write_all(headers)?;
+        stream.write_all("\r\n".as_bytes())?;
 
-        stream.write_all(body).unwrap();
+        stream.write_all(body)?;
 
-        stream.flush().unwrap();
+        stream.flush()?;
         Ok(())
     }
 }

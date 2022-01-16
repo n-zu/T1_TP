@@ -33,9 +33,9 @@ fn get_config(config_file: &str, arg_num: usize) -> ServerResult<Config> {
     if args.len() > arg_num {
         path = &args[arg_num];
     }
-    let config = Config::new(path).ok_or_else(|| "Invalid {} config file".into());
+    let config = Config::new(path).ok_or("Invalid config file")?;
     debug!("Config cargado");
-    config
+    Ok(config)
 }
 
 fn get_connect(config: &Config) -> PacketResult<Connect> {
@@ -70,7 +70,7 @@ fn intialize_server() -> ServerResult<Client<Observer>> {
     let config = get_config("mqtt", 2)?;
     let http_config = get_config("http", 1)?;
 
-    let connect = get_connect(&config).expect("Could not build connect packet");
+    let connect = get_connect(&config)?;
 
     let (sender, receiver): (Sender<String>, Receiver<String>) = mpsc::channel();
     let observer = Observer::new(sender);
