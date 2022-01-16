@@ -14,6 +14,16 @@ use crate::messages::{HttpRequest, HttpResponse, Request};
 pub(crate) type ServerResult<T> = Result<T, Box<dyn Error>>;
 const LOCK_ERR: &str = "Error desbloqueando lock";
 
+// Crea un header del tipo especificado
+macro_rules! hdr {
+    ($x:expr) => {
+        Some(format!(
+            "Content-Type: {}\r\nCache-Control: max-age=3600\r\n",
+            $x
+        ))
+    };
+}
+
 pub struct Server {
     config: Config,
     data: RwLock<String>,
@@ -92,9 +102,7 @@ impl Server {
             Request::Index => {
                 debug!("Procesando request de Index");
                 let body = fs::read_to_string("page/index.html")?;
-                headers = Some(
-                    "Content-Type: text/html charset=UTF-8\r\nCache-Control: max-age=3600\r\n",
-                );
+                headers = hdr!("text/html");
                 body.as_bytes().to_owned()
             }
             Request::Data => {
@@ -107,21 +115,21 @@ impl Server {
                 debug!("Procesando request de Favicon");
                 let body =
                     fs::read("page/favicon.ico").map_err(|e| format!("Error de favicon: {}", e))?;
-                headers = Some("Content-Type: image/x-icon\r\nCache-Control: max-age=3600\r\n");
+                headers = hdr!("image/x-icon");
                 body
             }
             Request::Css(filename) => {
                 debug!("Procesando request de CSS: {}", filename);
                 let body = fs::read(format!("page/resources/css/{}", filename))
                     .map_err(|e| format!("Error de css: {}", e))?;
-                headers = Some("Content-Type: text/css\r\nCache-Control: max-age=3600\r\n");
+                headers = hdr!("text/css");
                 body
             }
             Request::Image(filename) => {
                 debug!("Procesando request de imagen: {}", filename);
                 let body = fs::read(format!("page/resources/image/{}", filename))
                     .map_err(|e| format!("Error de imagen: {}", e))?;
-                headers = Some("Content-Type: image/png\r\nCache-Control: max-age=3600\r\n");
+                headers = hdr!("image/png");
                 body
             }
         };
