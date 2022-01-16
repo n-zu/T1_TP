@@ -821,7 +821,7 @@ mod tests {
     }
 
     /*
-    // Tests previos de una funcionalidad no obligatoria. Al http_final decidimos enviar una copia por suscripción.
+    // Tests previos de una funcionalidad no obligatoria. Al final decidimos enviar una copia por suscripción.
     // [MQTT-3.3.5-1]. In addition, the Server MAY deliver further copies of the message, one for each
     // additional matching subscription and respecting the subscription’s QoS in each case.
 
