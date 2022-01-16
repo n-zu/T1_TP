@@ -15,7 +15,7 @@ impl ObserverTrait for Observer {
                     .lock()
                     .unwrap()
                     .send(payload.to_string())
-                    .unwrap();
+                    .expect("Error inesperado: No se pudo enviar mensaje por channel");
                 println!("RECIEVED: [{}]", payload);
             }
             _ => println!("[ {:?} ]", msg),
