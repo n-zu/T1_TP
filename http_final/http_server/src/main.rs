@@ -66,7 +66,7 @@ fn subscribe(client: &mut Client<Observer>, config: &Config) -> ServerResult<()>
     Ok(())
 }
 
-fn intialize_server() -> ServerResult<Client<Observer>> {
+fn initialize_server() -> ServerResult<Client<Observer>> {
     let config = get_config("mqtt", 2)?;
     let http_config = get_config("http", 1)?;
 
@@ -88,7 +88,7 @@ fn intialize_server() -> ServerResult<Client<Observer>> {
 fn main() {
     let _logger = Logger::new("logs", Level::INFO, Level::DEBUG);
 
-    match intialize_server() {
+    match initialize_server() {
         Err(e) => error!("Error inicializando el servidor: {}", e),
         Ok(_client) => {
             info!("Presione [ENTER] para detener la ejecucion del servidor");
