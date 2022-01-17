@@ -31,7 +31,7 @@ impl Thermometer {
             temperature = self.measure_temperature(Some(temperature));
             let publish = self.create_publish(temperature)?;
             println!("- - - - - - -\n{:}", publish.payload());
-            self.client.publish(publish).expect("Could not publish");
+            self.client.publish(publish)?;
             std::thread::sleep(std::time::Duration::from_millis(self.config.period));
         }
     }

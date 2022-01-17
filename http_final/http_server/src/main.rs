@@ -33,9 +33,9 @@ fn get_config(config_file: &str, arg_num: usize) -> ServerResult<Config> {
     if args.len() > arg_num {
         path = &args[arg_num];
     }
-    let config = Config::new(path).ok_or_else(|| "Invalid {} config file".into());
+    let config = Config::new(path).ok_or("Invalid config file")?;
     debug!("Config cargado");
-    config
+    Ok(config)
 }
 
 fn get_connect(config: &Config) -> PacketResult<Connect> {
@@ -59,18 +59,18 @@ fn get_client(
 
 #[instrument(skip(client, config) fields(topic_filter = %config.topic))]
 fn subscribe(client: &mut Client<Observer>, config: &Config) -> ServerResult<()> {
-    let topic_filter = TopicFilter::new(String::from(&config.topic), QoSLevel::QoSLevel1).unwrap();
+    let topic_filter = TopicFilter::new(String::from(&config.topic), QoSLevel::QoSLevel1)?;
     let subscribe = Subscribe::new(vec![topic_filter], 2);
     debug!("SUBSCRIBE");
     client.subscribe(subscribe)?;
     Ok(())
 }
 
-fn intialize_server() -> ServerResult<Client<Observer>> {
+fn initialize_server() -> ServerResult<Client<Observer>> {
     let config = get_config("mqtt", 2)?;
     let http_config = get_config("http", 1)?;
 
-    let connect = get_connect(&config).expect("Could not build connect packet");
+    let connect = get_connect(&config)?;
 
     let (sender, receiver): (Sender<String>, Receiver<String>) = mpsc::channel();
     let observer = Observer::new(sender);
@@ -88,7 +88,7 @@ fn intialize_server() -> ServerResult<Client<Observer>> {
 fn main() {
     let _logger = Logger::new("logs", Level::INFO, Level::DEBUG);
 
-    match intialize_server() {
+    match initialize_server() {
         Err(e) => error!("Error inicializando el servidor: {}", e),
         Ok(_client) => {
             info!("Presione [ENTER] para detener la ejecucion del servidor");

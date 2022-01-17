@@ -31,7 +31,7 @@ pub fn init() {
             return;
         }
     }
-    println!("Presione [ENTER] para detener la ejecucion del servidor\n____________\n");
+    println!("Presione [ENTER] para detener la ejecucion del cliente\n____________\n");
     let mut buf = [0u8; 1];
     std::io::stdin().read_exact(&mut buf).unwrap_or(());
 }
@@ -39,7 +39,8 @@ pub fn init() {
 /// Returns a valid Client and Config
 #[doc(hidden)]
 fn make_client() -> ClientResult<(Client<ThermometerObserver>, Config)> {
-    let config = make_config();
+    let config = make_config()?;
+
     println!("CONFIG\n{:?}\n____________\n", config);
 
     let connect = make_connect(&config)?;
@@ -56,13 +57,13 @@ fn make_client() -> ClientResult<(Client<ThermometerObserver>, Config)> {
 
 /// Returns a valid Config
 #[doc(hidden)]
-fn make_config() -> Config {
+fn make_config() -> ClientResult<Config> {
     let args: Vec<String> = env::args().collect();
     let mut path: &str = "./config.txt";
     if args.len() > 1 {
         path = &args[1];
     }
-    Config::new(path).expect("Invalid config file")
+    Config::new(path).ok_or_else(|| "Invalid config file".into())
 }
 
 /// Returns a valid CONNECT packet
