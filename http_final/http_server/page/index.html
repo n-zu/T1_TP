@@ -20,7 +20,6 @@
       body, p { margin:0; padding:0}
       
     </style>
-      
 
     <script type="text/javascript">
       window.onload = function() {
@@ -31,19 +30,23 @@
       }
 
       function updateTemp(newTemp) {
-        document.getElementById("temp1").innerText = newTemp;
-        document.getElementById("temp2").innerText = newTemp;
-        document.body.style.backgroundColor= getBackgroundColor(newTemp);
+        document.getElementById("temp1").innerText = format_number_to_temp(newTemp);
+        document.getElementById("temp2").innerText = format_number_to_temp(newTemp);
+        document.body.style.backgroundColor = getBackgroundColor(newTemp);
+      }
+
+      function format_number_to_temp(number_as_text) {
+        return (Math.round(number_as_text * 100) / 100).toFixed(1) + ' °C'
       }
 
       function httpGetAsync(url, callback) {
-          var xmlHttp = new XMLHttpRequest();
-          xmlHttp.onreadystatechange = function() { 
-              if (xmlHttp.readyState == 4 && xmlHttp.status == 200)
-                  callback(xmlHttp.responseText);
-          }
-          xmlHttp.open("GET", url, true);
-          xmlHttp.send(null);
+        const xmlHttp = new XMLHttpRequest();
+        xmlHttp.onreadystatechange = function () {
+          if (xmlHttp.readyState == 4 && xmlHttp.status == 200)
+            callback(xmlHttp.responseText);
+        }
+        xmlHttp.open("GET", url, true);
+        xmlHttp.send(null);
       }
       function getBackgroundColor(temp) {
         if (temp < 25) {
@@ -56,38 +59,41 @@
       }
 
       function plotGraph() {
-        let temp = document.getElementById('temp1').innerText;
-        let npoints = 100;
-        if(localStorage.points){
-          points = JSON.parse(localStorage.points).slice(1-npoints);
-          localStorage.points = JSON.stringify([...points, temp]);
+        let temperature = document.getElementById('temp1').innerText;
+        let n_points = 100;
+        if (localStorage.points) {
+          points = JSON.parse(localStorage.points).slice(1 - n_points);
+          localStorage.points = JSON.stringify([...points, temperature]);
         } else {
-            points = [];
-            localStorage.points = JSON.stringify([temp]);
+          points = [];
+          localStorage.points = JSON.stringify([temperature]);
         }
-        console.log(points);
-        points2 = points.map( p => ({y:parseFloat(p)}) );
+        data_points = points.map(p => ({y: parseFloat(p)}));
         chart = new CanvasJS.Chart("chartContainer", {
-            animationEnabled: false,
-            backgroundColor: 'transparent',
+          animationEnabled: false,
+          backgroundColor: 'transparent',
 
-            data: [{    
-                type: "line",
-                indexLabelFontSize: 16,
-                dataPoints: points2,
-                lineColor: 'white',
-                lineThickness: 2,
-            }],
-            axisX:{gridColor: "white", gridThickness: 0,tickLength: 0,lineThickness: 0,labelFormatter: function(){return " ";}},
-            axisY:{minimum: 0,maximum: 100, gridColor: "gray"},
+          data: [{
+            type: "line",
+            indexLabelFontSize: 16,
+            dataPoints: data_points,
+            markerSize: 8,
+            lineColor: 'white',
+            lineThickness: 2,
+          }],
+          axisX: {
+            gridColor: "white", gridThickness: 0, tickLength: 0, lineThickness: 0, labelFormatter: function () {
+              return " ";
+            }
+          },
+          axisY: {minimum: 0, maximum: 100, gridColor: "gray", title: "Temperature (°C)"},
         });
-        console.log(points2);
         chart.render();
         
         setTimeout(function() {
-            chart.options.animationEnabled=true;
-            chart.options.data[0].dataPoints.push({ y: temp});
-            chart.render();
+          chart.options.animationEnabled = true;
+          chart.options.data[0].dataPoints.push({y: temperature});
+          chart.render();
         }, 300);
       }
     </script>
