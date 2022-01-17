@@ -16,6 +16,7 @@ desktop.ini
 server/logs/*
 server/tests/files/dumps/*
 http_final/http_server/*/logs
+http_final/http_server/logs
 *.glade~
 *#*.glade#
 *.xml~
