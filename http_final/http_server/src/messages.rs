@@ -57,7 +57,7 @@ impl TryFrom<&str> for HttpVersion {
 impl HttpStatusCode {
     fn reason_phrase(&self) -> &str {
         match self {
-            HttpStatusCode::Ok => "200 OK",
+            HttpStatusCode::Ok => "OK",
             HttpStatusCode::NotFound => "Not Found",
             HttpStatusCode::InternalServerError => "Internal Server Error",
             HttpStatusCode::Other(_, reason_phrase) => reason_phrase,
@@ -219,6 +219,7 @@ impl HttpRequest {
 }
 
 impl HttpResponse {
+    /// Creates a new HTTP Response with the given parameters
     pub fn new<U, V>(
         code: HttpStatusCode,
         version: HttpVersion,
@@ -246,22 +247,24 @@ impl HttpResponse {
             0
         }
     }
+
+    /// Writes this response to the given stream
     pub fn send_to<T: io::Write>(&self, stream: &mut T) -> HttpResult<()> {
         let response = format!(
             "{} {} {}\r\nContent-Length: {}\r\n",
             String::from(self.version),
-            self.code.reason_phrase(),
             String::from(&self.code),
+            self.code.reason_phrase(),
             self.body_len()
         );
 
         stream.write_all(response.as_bytes())?;
 
-        let headers = self.headers.as_deref().unwrap_or_else(|| "".as_bytes());
-        let body = self.body.as_deref().unwrap_or(&[]);
+        let headers = self.headers.as_deref().unwrap_or(&[]);
         stream.write_all(headers)?;
         stream.write_all("\r\n".as_bytes())?;
 
+        let body = self.body.as_deref().unwrap_or(&[]);
         stream.write_all(body)?;
 
         stream.flush()?;
@@ -273,7 +276,7 @@ impl HttpResponse {
 mod tests {
     use crate::messages::HttpVersion;
 
-    use super::{HttpRequest, Request};
+    use super::{HttpRequest, HttpResponse, HttpStatusCode, Request};
 
     #[test]
     fn empty_request_invalid() {
@@ -284,19 +287,13 @@ mod tests {
     #[test]
     fn post_method_unsopported() {
         let request = HttpRequest::read_from(
-            "POST / HTTP/1.1\r\n
-        Host: foo.com\r\n
-        Content-Type: application/x-www-form-urlencoded\r\n
-        Content-Length: 13\r\n
-        \r\n
-        say=Hi&to=Mom"
-                .as_bytes(),
+            "POST / HTTP/1.1\r\nHost: foo.com\r\nContent-Type: application/x-www-form-urlencoded\r\nContent-Length: 13\r\n\r\nsay=Hi&to=Mom".as_bytes(),
         );
         assert!(request.is_err());
     }
 
     #[test]
-    fn invalid_uri() {
+    fn invalid_uri_request() {
         let request = HttpRequest::read_from("GET /index.html HTTP/1.1\r\n".as_bytes());
         assert!(request.is_err());
     }
@@ -348,5 +345,21 @@ mod tests {
         let body = request.body();
         assert_eq!(body.len(), 1);
         assert_eq!(body[0], "body");
+    }
+
+    #[test]
+    fn test_write_response() {
+        let response = HttpResponse::new(
+            HttpStatusCode::Ok,
+            HttpVersion::V1_1,
+            Some("header\r\n".as_bytes()),
+            Some("body".as_bytes()),
+        );
+        let mut stream = Vec::new();
+        response.send_to(&mut stream).unwrap();
+        assert_eq!(
+            stream,
+            "HTTP/1.1 200 OK\r\nContent-Length: 4\r\nheader\r\n\r\nbody".as_bytes()
+        );
     }
 }

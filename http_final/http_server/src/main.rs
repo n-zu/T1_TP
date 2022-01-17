@@ -59,7 +59,7 @@ fn get_client(
 
 #[instrument(skip(client, config) fields(topic_filter = %config.topic))]
 fn subscribe(client: &mut Client<Observer>, config: &Config) -> ServerResult<()> {
-    let topic_filter = TopicFilter::new(String::from(&config.topic), QoSLevel::QoSLevel1).unwrap();
+    let topic_filter = TopicFilter::new(String::from(&config.topic), QoSLevel::QoSLevel1)?;
     let subscribe = Subscribe::new(vec![topic_filter], 2);
     debug!("SUBSCRIBE");
     client.subscribe(subscribe)?;
