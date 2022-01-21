@@ -1,11 +1,6 @@
 #![allow(dead_code)]
 
-use std::{
-    convert::TryFrom,
-    error::Error,
-    io,
-    str::Lines,
-};
+use std::{convert::TryFrom, error::Error, io, str::Lines};
 
 type HttpResult<T> = Result<T, HttpError>;
 type HttpError = Box<dyn Error>;
@@ -81,7 +76,6 @@ impl TryFrom<&str> for HttpVersion {
 }
 
 impl HttpStatusCode {
-
     /// Returns the reason phrase associated to the status
     /// code, according to the HTTP protocol
     fn reason_phrase(&self) -> &str {

@@ -6,7 +6,7 @@ use packets::{
     connect::Connect, connect::ConnectBuilder, qos::QoSLevel, subscribe::Subscribe,
     topic_filter::TopicFilter, PacketResult,
 };
-use server::{Server, ServerResult, ServerGuard};
+use server::{Server, ServerGuard, ServerResult};
 use std::{
     env,
     io::Read,
@@ -85,7 +85,7 @@ fn initialize_server() -> ServerResult<Guards> {
     subscribe(&mut client, &config)?;
 
     let server = Arc::new(Server::new(&http_config));
-    let server_guard =server.run(receiver)?;
+    let server_guard = server.run(receiver)?;
     Ok((server_guard, client))
 }
 

@@ -1,12 +1,16 @@
 use config::config::Config;
-use thread_joiner::ThreadJoiner;
 use std::{
     error::Error,
-    fs,
+    fs, io,
     net::{SocketAddr, TcpListener, TcpStream},
-    sync::{mpsc::{Receiver, TryRecvError}, Arc, Mutex, RwLock, atomic::{AtomicBool, Ordering}},
-    time::Duration, io,
+    sync::{
+        atomic::{AtomicBool, Ordering},
+        mpsc::{Receiver, TryRecvError},
+        Arc, Mutex, RwLock,
+    },
+    time::Duration,
 };
+use thread_joiner::ThreadJoiner;
 use threadpool::ThreadPool;
 use tracing::{debug, error, info, instrument, warn};
 
@@ -35,7 +39,7 @@ pub struct Server {
 
 pub struct ServerGuard {
     thread_joiner: ThreadJoiner,
-    shutdown_bool: Arc<AtomicBool>
+    shutdown_bool: Arc<AtomicBool>,
 }
 
 impl Server {
@@ -52,7 +56,10 @@ impl Server {
         info!("Iniciando servidor");
 
         let shutdown_bool = Arc::new(AtomicBool::new(false));
-        let mut guard = ServerGuard { thread_joiner: ThreadJoiner::new(), shutdown_bool: shutdown_bool.clone() };
+        let mut guard = ServerGuard {
+            thread_joiner: ThreadJoiner::new(),
+            shutdown_bool: shutdown_bool.clone(),
+        };
         let server = self.clone();
         let bool = shutdown_bool.clone();
 
@@ -71,14 +78,18 @@ impl Server {
         Ok(guard)
     }
 
-    fn update_data(&self, receiver: Receiver<String>, shutdown_bool: Arc<AtomicBool>) -> ServerResult<()> {
+    fn update_data(
+        &self,
+        receiver: Receiver<String>,
+        shutdown_bool: Arc<AtomicBool>,
+    ) -> ServerResult<()> {
         while !shutdown_bool.load(Ordering::Relaxed) {
             match receiver.try_recv() {
                 Ok(msg) => {
                     info!("Actualizando data: {}", msg);
                     *self.data.write().map_err(|_| LOCK_ERR)? = msg;
-                },
-                Err(e) if e == TryRecvError::Empty => std::thread::sleep(SLEEP_TIME), 
+                }
+                Err(e) if e == TryRecvError::Empty => std::thread::sleep(SLEEP_TIME),
                 Err(_) => break,
             }
         }
@@ -103,12 +114,16 @@ impl Server {
                 Err(e) => {
                     return Err(Box::new(e));
                 }
-            }            
+            }
         }
         Ok(())
     }
 
-    fn handle_connection(self: &Arc<Self>, stream: TcpStream, addr: SocketAddr) -> ServerResult<()> {
+    fn handle_connection(
+        self: &Arc<Self>,
+        stream: TcpStream,
+        addr: SocketAddr,
+    ) -> ServerResult<()> {
         debug!("Nueva conexion: {}", stream.peer_addr()?);
         stream.set_read_timeout(Some(Duration::from_secs(15)))?;
         let server = self.clone();
