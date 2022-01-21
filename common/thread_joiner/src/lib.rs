@@ -46,7 +46,7 @@ impl ThreadJoiner {
         let joiner_thread_handle = thread::spawn(move || {
             ThreadJoiner::join_loop(receiver);
         });
-        trace!("Creado thread {:?}", joiner_thread_handle.thread().id());
+        trace!("Creado thread auxiliar de ThreadJoiner {:?}", joiner_thread_handle.thread().id());
 
         ThreadJoiner {
             finished_sender: sender,
@@ -103,6 +103,7 @@ impl ThreadJoiner {
         handle.join().unwrap_or_else(|e| {
             error!("{:?} - Thread joineado con panic: {:?}", id, e);
         });
+        trace!("Join thread {:?} finalizado", id);
     }
 }
 
@@ -115,7 +116,7 @@ impl Drop for ThreadJoiner {
             });
 
         let joiner_thread_id = self.joiner_thread_handle.as_ref().unwrap().thread().id();
-        trace!("Join thread {:?}", joiner_thread_id);
+        trace!("Join thread auxiliar de ThreadJoiner {:?}", joiner_thread_id);
         self.joiner_thread_handle
             .take()
             .expect("joiner_thread_handle es None")
@@ -138,10 +139,8 @@ impl ThreadGuard {
 impl Drop for ThreadGuard {
     fn drop(&mut self) {
         trace!("Drop de ThreadGuard: {:?}", self.id);
+
         self.sender
-            .send(Message::Finished(self.id))
-            .unwrap_or_else(|e| {
-                trace!("Posible error invocando al drop de ThreadGuard: {}. Probablemente {:?} ya fue joineado", e, self.id);
-            });
+            .send(Message::Finished(self.id)).unwrap_or(());
     }
 }

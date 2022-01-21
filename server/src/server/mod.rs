@@ -13,6 +13,7 @@ use std::{
     time::{Duration, SystemTime},
 };
 
+use thread_joiner::ThreadJoiner;
 use threadpool::ThreadPool;
 use tracing::{debug, error, info, instrument, trace, warn};
 
@@ -54,7 +55,6 @@ use crate::{
     clients_manager::{ClientsManager, ConnectInfo},
     network_connection::NetworkConnection,
     server::server_error::ServerErrorKind,
-    thread_joiner::ThreadJoiner,
     topic_handler::{Message, TopicHandler},
     traits::*,
 };

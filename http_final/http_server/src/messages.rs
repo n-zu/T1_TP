@@ -1,17 +1,13 @@
 #![allow(dead_code)]
 
-use std::{
-    convert::TryFrom,
-    error::Error,
-    io::{self},
-    str::Lines,
-};
+use std::{convert::TryFrom, error::Error, io, str::Lines};
 
 type HttpResult<T> = Result<T, HttpError>;
 type HttpError = Box<dyn Error>;
 
 const GET_METHOD: &str = "GET";
 
+/// HTTP version of a message (request or response)
 #[derive(Debug, Clone, Copy)]
 pub enum HttpVersion {
     V1_0,
@@ -19,6 +15,7 @@ pub enum HttpVersion {
     V2,
 }
 
+/// Status code of an HTTP message (request or response)
 pub enum HttpStatusCode {
     // 200
     Ok,
@@ -27,6 +24,30 @@ pub enum HttpStatusCode {
     // 500
     InternalServerError,
     Other(u16, String),
+}
+
+/// Relevant content of a GET request
+pub enum Request {
+    Index,
+    Data,
+    Favicon,
+    Css(String),
+    Image(String),
+}
+
+pub struct HttpResponse {
+    version: HttpVersion,
+    code: HttpStatusCode,
+    headers: Option<Vec<u8>>,
+    body: Option<Vec<u8>>,
+}
+
+/// Intended only for GET method
+pub struct HttpRequest {
+    request: Request,
+    version: HttpVersion,
+    headers: Vec<String>,
+    body: Vec<String>,
 }
 
 impl From<HttpVersion> for String {
@@ -55,6 +76,8 @@ impl TryFrom<&str> for HttpVersion {
 }
 
 impl HttpStatusCode {
+    /// Returns the reason phrase associated to the status
+    /// code, according to the HTTP protocol
     fn reason_phrase(&self) -> &str {
         match self {
             HttpStatusCode::Ok => "OK",
@@ -64,6 +87,7 @@ impl HttpStatusCode {
         }
     }
 }
+
 impl From<&HttpStatusCode> for String {
     fn from(code: &HttpStatusCode) -> Self {
         let code = match code {
@@ -85,14 +109,6 @@ impl From<HttpStatusCode> for u16 {
             HttpStatusCode::Other(n, _) => n,
         }
     }
-}
-
-pub enum Request {
-    Index,
-    Data,
-    Favicon,
-    Css(String),
-    Image(String),
 }
 
 impl TryFrom<&str> for Request {
@@ -117,21 +133,6 @@ impl TryFrom<&str> for Request {
             Err(format!("URI invalida: {}", request_uri).into())
         }
     }
-}
-
-/// Intended only for GET method
-pub struct HttpRequest {
-    request: Request,
-    version: HttpVersion,
-    headers: Vec<String>,
-    body: Vec<String>,
-}
-
-pub struct HttpResponse {
-    version: HttpVersion,
-    code: HttpStatusCode,
-    headers: Option<Vec<u8>>,
-    body: Option<Vec<u8>>,
 }
 
 impl HttpRequest {

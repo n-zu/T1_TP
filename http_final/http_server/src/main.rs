@@ -6,7 +6,7 @@ use packets::{
     connect::Connect, connect::ConnectBuilder, qos::QoSLevel, subscribe::Subscribe,
     topic_filter::TopicFilter, PacketResult,
 };
-use server::{Server, ServerResult};
+use server::{Server, ServerGuard, ServerResult};
 use std::{
     env,
     io::Read,
@@ -21,6 +21,10 @@ use tracing::{debug, error, info, instrument, Level};
 mod messages;
 mod observer;
 mod server;
+
+// Structures that cannot be dropped until the
+// server stops
+type Guards = (ServerGuard, Client<Observer>);
 
 const KEEP_ALIVE: u16 = 0;
 const CLEAN_SESSION: bool = true;
@@ -66,7 +70,7 @@ fn subscribe(client: &mut Client<Observer>, config: &Config) -> ServerResult<()>
     Ok(())
 }
 
-fn initialize_server() -> ServerResult<Client<Observer>> {
+fn initialize_server() -> ServerResult<Guards> {
     let config = get_config("mqtt", 2)?;
     let http_config = get_config("http", 1)?;
 
@@ -81,16 +85,16 @@ fn initialize_server() -> ServerResult<Client<Observer>> {
     subscribe(&mut client, &config)?;
 
     let server = Arc::new(Server::new(&http_config));
-    server.run(receiver)?;
-    Ok(client)
+    let server_guard = server.run(receiver)?;
+    Ok((server_guard, client))
 }
 
 fn main() {
-    let _logger = Logger::new("logs", Level::INFO, Level::DEBUG);
+    let _logger = Logger::new("logs", Level::INFO, Level::TRACE);
 
     match initialize_server() {
         Err(e) => error!("Error inicializando el servidor: {}", e),
-        Ok(_client) => {
+        Ok(_guards) => {
             info!("Presione [ENTER] para detener la ejecucion del servidor");
             let mut buf = [0u8; 1];
             std::io::stdin().read_exact(&mut buf).unwrap_or(());

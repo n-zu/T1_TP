@@ -13,7 +13,6 @@ mod config;
 mod network_connection;
 mod server;
 mod test_helpers;
-mod thread_joiner;
 mod topic_handler;
 pub mod traits;
 

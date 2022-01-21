@@ -11,4 +11,5 @@ logger = { path = "../../common/logger" }
 tracing = "0.1.29"
 config = { path = "../common/config" }
 threadpool = { path = "../../common/threadpool" }
+thread_joiner = { path = "../../common/thread_joiner" }
 mqtt_client = { path = "../../mqtt_client" }
