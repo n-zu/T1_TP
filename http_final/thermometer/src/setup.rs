@@ -31,7 +31,7 @@ pub fn init() {
             return;
         }
     }
-    println!("Presione [ENTER] para detener la ejecucion del servidor\n____________\n");
+    println!("Presione [ENTER] para detener la ejecucion del cliente\n____________\n");
     let mut buf = [0u8; 1];
     std::io::stdin().read_exact(&mut buf).unwrap_or(());
 }
