@@ -1,6 +1,6 @@
 use mqtt_client::{Message, Observer as ObserverTrait};
-use tracing::{error, info};
 use std::sync::{mpsc::Sender, Arc, Mutex};
+use tracing::{error, info};
 
 #[derive(Clone)]
 pub struct Observer {
@@ -19,8 +19,10 @@ impl ObserverTrait for Observer {
                     .expect("Error inesperado: No se pudo enviar mensaje por channel");
             }
             Message::Connected(Ok(_)) => info!("HttpServer conectado con MQTTServer"),
-            Message::Subscribed(Ok(suback)) => info!("HTTPServer suscripto a los topicos: {:?}", suback.topics()),
-            _ => error!("Mensaje invalido: {:?}", msg)
+            Message::Subscribed(Ok(suback)) => {
+                info!("HTTPServer suscripto a los topicos: {:?}", suback.topics())
+            }
+            _ => error!("Mensaje invalido: {:?}", msg),
         }
     }
 }
