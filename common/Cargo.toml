@@ -2,5 +2,6 @@
 members = [
     "logger",
     "threadpool",
-    "packets"
+    "packets",
+    "thread_joiner"
 ]

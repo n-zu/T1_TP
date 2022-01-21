@@ -1,13 +1,14 @@
 use config::config::Config;
+use thread_joiner::ThreadJoiner;
 use std::{
     error::Error,
     fs,
     net::{SocketAddr, TcpListener, TcpStream},
-    sync::{mpsc::Receiver, Arc, Mutex, RwLock},
-    time::Duration,
+    sync::{mpsc::{Receiver, TryRecvError}, Arc, Mutex, RwLock, atomic::{AtomicBool, Ordering}},
+    time::Duration, io,
 };
 use threadpool::ThreadPool;
-use tracing::{debug, error, info, instrument};
+use tracing::{debug, error, info, instrument, warn};
 
 use crate::messages::{HttpRequest, HttpResponse, Request};
 
@@ -24,10 +25,17 @@ macro_rules! hdr {
     };
 }
 
+const SLEEP_TIME: Duration = Duration::from_millis(100);
+
 pub struct Server {
     config: Config,
     data: RwLock<String>,
     pool: Mutex<ThreadPool>,
+}
+
+pub struct ServerGuard {
+    thread_joiner: ThreadJoiner,
+    shutdown_bool: Arc<AtomicBool>
 }
 
 impl Server {
@@ -40,53 +48,75 @@ impl Server {
     }
 
     #[instrument(skip(self, receiver) fields(ip = %self.config.server, port = %self.config.port))]
-    pub fn run(self: Arc<Self>, receiver: Receiver<String>) -> ServerResult<()> {
+    pub fn run(self: Arc<Self>, receiver: Receiver<String>) -> ServerResult<ServerGuard> {
         info!("Iniciando servidor");
 
+        let shutdown_bool = Arc::new(AtomicBool::new(false));
+        let mut guard = ServerGuard { thread_joiner: ThreadJoiner::new(), shutdown_bool: shutdown_bool.clone() };
         let server = self.clone();
+        let bool = shutdown_bool.clone();
 
-        let _ = std::thread::spawn(move || {
-            if let Err(e) = server.update_data(receiver) {
+        guard.thread_joiner.spawn(move || {
+            if let Err(e) = server.update_data(receiver, bool) {
                 error!("Error interno: {}", e);
             }
         });
 
-        let _connection_listener = std::thread::spawn(move || {
-            if let Err(e) = self.handle_connections() {
+        guard.thread_joiner.spawn(move || {
+            if let Err(e) = self.handle_connections(shutdown_bool) {
                 error!("Error interno: {}", e);
             }
         });
 
+        Ok(guard)
+    }
+
+    fn update_data(&self, receiver: Receiver<String>, shutdown_bool: Arc<AtomicBool>) -> ServerResult<()> {
+        while !shutdown_bool.load(Ordering::Relaxed) {
+            match receiver.try_recv() {
+                Ok(msg) => {
+                    info!("Actualizando data: {}", msg);
+                    *self.data.write().map_err(|_| LOCK_ERR)? = msg;
+                },
+                Err(e) if e == TryRecvError::Empty => std::thread::sleep(SLEEP_TIME), 
+                Err(_) => break,
+            }
+        }
         Ok(())
     }
 
-    fn update_data(&self, receiver: Receiver<String>) -> ServerResult<()> {
-        loop {
-            let msg = receiver.recv()?;
-            info!("Actualizando data: {}", msg);
-            *self.data.write().map_err(|_| LOCK_ERR)? = msg;
-        }
-        //Ok(())
-    }
-
     #[instrument(skip(self) fields(ip = %self.config.server, port = %self.config.port))]
-    fn handle_connections(self: Arc<Self>) -> ServerResult<()> {
+    fn handle_connections(self: &Arc<Self>, shutdown_bool: Arc<AtomicBool>) -> ServerResult<()> {
         let listener = TcpListener::bind(&format!("{}:{}", self.config.server, self.config.port))?;
+        listener.set_nonblocking(true)?;
+
         info!("Escuchando conexiones");
 
-        for stream in listener.incoming() {
-            let stream = stream?;
-            let addr = stream.peer_addr()?;
-            debug!("Nueva conexion: {}", stream.peer_addr()?);
-            stream.set_read_timeout(Some(Duration::from_secs(15)))?;
-            let server = self.clone();
-            self.pool.lock().map_err(|_| LOCK_ERR)?.execute(move || {
-                server.handle_request(addr, stream).unwrap_or_else(|e| {
-                    error!("Error manejando el request: {}", e);
-                });
-            })?;
+        while !shutdown_bool.load(Ordering::Relaxed) {
+            match listener.accept() {
+                Ok((stream, addr)) => {
+                    self.handle_connection(stream, addr)?;
+                }
+                Err(e) if e.kind() == io::ErrorKind::WouldBlock => {
+                    std::thread::sleep(SLEEP_TIME);
+                }
+                Err(e) => {
+                    return Err(Box::new(e));
+                }
+            }            
         }
+        Ok(())
+    }
 
+    fn handle_connection(self: &Arc<Self>, stream: TcpStream, addr: SocketAddr) -> ServerResult<()> {
+        debug!("Nueva conexion: {}", stream.peer_addr()?);
+        stream.set_read_timeout(Some(Duration::from_secs(15)))?;
+        let server = self.clone();
+        self.pool.lock().map_err(|_| LOCK_ERR)?.execute(move || {
+            server.handle_request(addr, stream).unwrap_or_else(|e| {
+                error!("Error manejando el request: {}", e);
+            });
+        })?;
         Ok(())
     }
 
@@ -141,5 +171,11 @@ impl Server {
         );
         response.send_to(&mut stream)?;
         Ok(())
+    }
+}
+
+impl Drop for ServerGuard {
+    fn drop(&mut self) {
+        self.shutdown_bool.store(true, Ordering::Relaxed)
     }
 }
