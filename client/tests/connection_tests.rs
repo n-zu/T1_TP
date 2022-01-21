@@ -5,8 +5,8 @@ use std::{
     time::Duration,
 };
 
-use client::{Client, Message};
 use common::*;
+use mqtt_client::{Client, Message};
 use packets::{
     connack::{Connack, ConnackReturnCode},
     connect::ConnectBuilder,

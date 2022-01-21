@@ -9,7 +9,7 @@ mod utils;
 
 use crate::interface::client_observer::ClientObserver;
 
-use crate::client::{Client, ClientError};
+use mqtt_client::{Client, ClientError};
 
 use gtk::gdk::keys::constants::Return;
 use gtk::gdk::EventKey;
