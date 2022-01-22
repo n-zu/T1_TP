@@ -4,7 +4,7 @@ use std::{
     sync::{Arc, Mutex},
 };
 
-use client::{Message, Observer};
+use mqtt_client::{Message, Observer};
 use packets::{
     connack::Connack,
     connect::Connect,

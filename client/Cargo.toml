@@ -7,6 +7,7 @@ edition = "2018"
 
 [dependencies]
 packets = { path = "../common/packets" }
+mqtt_client = { path = "../mqtt_client" }
 gtk = "0.14.3"
 threadpool = { path = "../common/threadpool" }
 rand = "0.8.4"

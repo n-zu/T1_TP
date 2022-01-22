@@ -1,7 +1,5 @@
-mod client;
-mod interface;
-mod observer;
 mod setup;
+mod interface;
 
 use gtk::{
     prelude::{ApplicationExt, ApplicationExtManual},

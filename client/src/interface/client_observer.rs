@@ -9,10 +9,8 @@ use packets::{puback::Puback, publish::Publish, suback::Suback};
 use std::rc::Rc;
 
 use crate::interface::publication_counter::PublicationCounter;
-use crate::{
-    client::ClientError,
-    observer::{Message, Observer},
-};
+use mqtt_client::{ClientError};
+use mqtt_client::{Observer, Message};
 
 use super::{
     subscription_list::SubscriptionList,

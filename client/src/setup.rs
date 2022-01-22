@@ -1,7 +1,8 @@
-use crate::interface::Controller;
 use gtk::gdk_pixbuf::PixbufLoader;
 use gtk::prelude::{BuilderExtManual, CssProviderExt, GtkWindowExt, PixbufLoaderExt, WidgetExt};
 use gtk::{gdk, Application, Builder, Window};
+
+use crate::interface::Controller;
 
 /// Loads CSS into the application
 pub fn load_css() {
