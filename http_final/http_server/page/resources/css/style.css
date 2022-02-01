@@ -1,357 +1,67 @@
-:root {
-  --dl-color-gray-500: #595959;
-  --dl-color-gray-700: #999999;
-  --dl-color-gray-900: #D9D9D9;
-  --dl-size-size-unit: 1rem;
-  --dl-color-danger-300: #A22020;
-  --dl-color-danger-500: #BF2626;
-  --dl-color-danger-700: #E14747;
-  --dl-color-gray-black: #121212ff;
-  --dl-color-gray-white: #FFFFFF;
-  --dl-space-space-unit: 1rem;
-  --dl-color-primary-100: #00318cff;
-  --dl-color-primary-300: #0074F0;
-  --dl-color-primary-500: #14A9FF;
-  --dl-color-primary-700: #78d7fdff;
-  --dl-color-primary-900: #baebffff;
-  --dl-color-success-300: #199033;
-  --dl-color-success-500: #32A94C;
-  --dl-color-success-700: #4CC366;
-  --dl-size-size-halfunit: 0.5rem;
-  --dl-radius-radius-round: 50%;
-  --dl-size-size-doubleunit: 2rem;
-  --dl-size-size-tripleunit: 3rem;
-  --dl-space-space-halfunit: 0.5rem;
-  --dl-radius-radius-radius2: 2px;
-  --dl-radius-radius-radius4: 4px;
-  --dl-radius-radius-radius8: 8px;
-  --dl-space-space-doubleunit: 2rem;
-  --dl-space-space-tripleunit: 3rem;
-}
-.teleport-show {
-  display: flex !important;
-}
-.button {
-  font-size: 13px;
-  font-family: Inter;
-  font-weight: 500;
-  text-transform: uppercase;
-  text-decoration: none;
-}
-.list {
-  width: 100%;
-  margin: 1em 0px 1em 0px;
-  display: block;
-  padding: 0px 0px 0px 1.5rem;
-  list-style-type: none;
-  list-style-position: outside;
-}
-.list-item {
-  display: list-item;
-}
-.input {
-  color: var(--dl-color-gray-black);
-  cursor: auto;
-  padding: 0.5rem 1rem;
-  font-family: Inter;
-  border-color: var(--dl-color-gray-black);
-  border-width: 1px;
-  border-radius: 4px;
-  background-color: var(--dl-color-gray-white);
-}
-.textarea {
-  color: var(--dl-color-gray-black);
-  cursor: auto;
-  padding: 0.5rem;
-  font-family: Inter;
-  border-color: var(--dl-color-gray-black);
-  border-width: 1px;
-  border-radius: 4px;
-  background-color: var(--dl-color-gray-white);
-}
-.heading {
-  font-size: 42px;
-  font-family: Inter;
-  font-weight: 500;
-  line-height: 1;
-  letter-spacing: -2px;
-  text-transform: none;
-  text-decoration: none;
-}
-.tooltip {
-  font-size: 12px;
-  font-family: Inter;
-  font-weight: 500;
-  text-transform: none;
-  text-decoration: none;
-}
-.subheading {
-  font-size: 20px;
-  font-family: Inter;
-  font-weight: 300;
-  line-height: 1.3;
-  letter-spacing: -0.5px;
-  text-transform: none;
-  text-decoration: none;
-}
-.content {
-  font-size: 16px;
-  font-family: Inter;
-  font-weight: 300;
-  line-height: 1.2;
-  letter-spacing: -0.5px;
-  text-transform: none;
-  text-decoration: none;
+* {
+  margin: 0;
+  padding: 0;
+  font-family: system-ui;
+  color: #fff;
 }
 
-
-.home-container {
-  width: 100%;
-  height: auto;
-  display: flex;
+body {
+  background-color: #f00;
   min-height: 100vh;
-  align-items: center;
-  flex-direction: column;
-  justify-content: center;
+  height: clamp(200px, 100vh, 1000px);
+  width: 100vw;
 }
-.home-title {
-  top: 61px;
-  color: #ffffff;
-  position: absolute;
-  font-size: 3rem;
-  align-self: center;
-  font-style: normal;
-  text-align: center;
-  font-family: Ubuntu;
-  font-weight: 700;
-}
-.home-powered {
-  right: 73px;
-  bottom: 5px;
-  position: absolute;
-  font-size: 2rem;
-  font-style: normal;
-  font-family: Ubuntu;
-  font-weight: 700;
-  margin-right: var(--dl-space-space-halfunit);
-  margin-bottom: var(--dl-space-space-unit);
-}
-.home-rustlogo {
-  right: 15px;
-  width: 50px;
-  bottom: 0px;
-  position: absolute;
-  object-fit: cover;
-  padding-right: var(--dl-space-space-unit);
-  padding-bottom: var(--dl-space-space-halfunit);
-  list-style-type: disc;
-  list-style-image: none;
-  list-style-position: outside;
-}
-.home-container1 {
-  flex: 0 0 auto;
-  width: 80%;
+
+header {
   display: flex;
-  align-items: center;
+  align-content: center;
   justify-content: center;
+  padding: 1.5em;
 }
-.home-container2 {
-  flex: 0 0 auto;
-  width: 15%;
-  height: auto;
+
+section {
   display: flex;
-  align-self: flex-end;
-  align-items: flex-start;
+    flex-direction: row;
+    align-content: center;
+    padding: 1.5em;
+}
+
+#temperature_container {
+  display: flex;
   flex-direction: column;
-  justify-content: center;
+  width: fit-content;
+  align-items: center;
+  font-size: 2.5em;
+  font-weight: bold;
 }
-.home-thermometer {
-  max-height: 50vh;
-  width: auto;
-  align-self: center;
-  object-fit: cover;
+
+#temperature_container img {
+  height: 70vh;
+  width: fit-content;
+  margin-bottom: 0.5em;
+  margin-right: 0.5em;
 }
-.home-temperature {
-  color: #ffffff;
-  font-size: 3em;
-  align-self: center;
-  font-style: normal;
-  font-family: Ubuntu;
-  font-weight: 700;
-  padding-top: 1rem;
-  padding-bottom: 0rem;
-}
-.home-container3 {
-  flex: 0 0 auto;
+
+#chart_container {
   width: 100%;
+}
+
+footer {
   display: flex;
-  position: relative;
-  align-self: center;
+  justify-content: flex-end;
+}
+#poweredby {
+  display: flex;
   align-items: center;
-  flex-direction: column;
-  justify-content: center;
 }
-.home-temperature2 {
-  display: none;
+#poweredby p {
+  color: #000;
+  font-weight: 700;
+  font-size: 1.5em;
 }
-.home-plot {
-  left: 66px;
-  width: 90%;
-  margin: auto;
-  position: absolute;
-  align-self: center;
-  object-fit: cover;
-  padding-left: 3rem;
-}
-@media(max-width: 991px) {
-  .home-title {
-    top: 0px;
-    margin-top: 1rem;
-  }
-  .home-powered {
-    display: none;
-  }
-  .home-rustlogo {
-    display: none;
-  }
-  .home-container1 {
-    width: 100%;
-    bottom: 0px;
-    height: auto;
-    margin: auto;
-    position: absolute;
-  }
-  .home-container2 {
-    top: -194px;
-    left: 0px;
-    display: none;
-    position: absolute;
-  }
-  .home-container3 {
-    bottom: 0px;
-    height: auto;
-    margin: auto;
-    position: absolute;
-    align-self: flex-end;
-    align-items: center;
-  }
-  .home-temperature2 {
-    color: #ffffff;
-    display: flex;
-    font-size: 2rem;
-    font-style: normal;
-    font-family: Ubuntu;
-    font-weight: 700;
-    padding-bottom: 0rem;
-  }
-  .home-plot {
-    width: 100%;
-    position: static;
-    padding-left: 0px;
-  }
-}
-@media(max-width: 767px) {
-  .home-powered {
-    display: none;
-  }
-  .home-rustlogo {
-    display: none;
-  }
-  .home-container1 {
-    width: 100%;
-    position: static;
-    align-self: center;
-    align-items: flex-end;
-  }
-  .home-container2 {
-    position: static;
-    align-self: flex-end;
-  }
-  .home-thermometer {
-    width: 200%;
-  }
-  .home-container3 {
-    left: 0px;
-    bottom: 0px;
-    position: absolute;
-  }
-  .home-plot {
-    width: 100%;
-    position: static;
-    align-self: center;
-  }
-}
-@media(max-width: 479px) {
-  .home-title {
-    top: 3rem;
-    margin: auto;
-  }
-  .home-powered {
-    display: none;
-  }
-  .home-rustlogo {
-    display: none;
-  }
-  .home-container1 {
-    width: 100%;
-    position: static;
-    align-self: center;
-    align-items: flex-end;
-    flex-direction: column;
-    justify-content: flex-end;
-  }
-  .home-container2 {
-    position: static;
-  }
-  .home-thermometer {
-    display: none;
-  }
-  .home-temperature {
-    display: none;
-  }
-  .home-container3 {
-    height: 40%;
-    position: static;
-    align-self: center;
-    align-items: center;
-    justify-content: center;
-  }
-  .home-temperature2 {
-    color: #ffffff;
-    display: flex;
-    font-size: 3rem;
-    font-style: normal;
-    align-items: center;
-    font-family: Ubuntu;
-    font-weight: 700;
-    padding-bottom: 0rem;
-  }
-  .home-plot {
-    display: none;
-    padding-left: 0rem;
-  }
-}
-html, body{height:100%;} 
-      #outer{
-      min-height:100%;
-      }
-            
-      body, p { margin:0; padding:0}
 
-      html {  line-height: 1.15;}body {  margin: 0;}* {  box-sizing: border-box;  border-width: 0;  border-style: solid;}p,li,ul,pre,div,h1,h2,h3,h4,h5,h6 {  margin: 0;  padding: 0;}button,input,optgroup,select,textarea {  font-family: inherit;  font-size: 100%;  line-height: 1.15;  margin: 0;}button,select {  text-transform: none;}button,[type="button"],[type="reset"],[type="submit"] {  -webkit-appearance: button;}button::-moz-focus-inner,[type="button"]::-moz-focus-inner,[type="reset"]::-moz-focus-inner,[type="submit"]::-moz-focus-inner {  border-style: none;  padding: 0;}button:-moz-focus,[type="button"]:-moz-focus,[type="reset"]:-moz-focus,[type="submit"]:-moz-focus {  outline: 1px dotted ButtonText;}a {  color: inherit;  text-decoration: inherit;}input {  padding: 2px 4px;}img {  display: block;}
-
-      html {
-        font-family: Inter, serif;
-        font-size: 16px;
-      }
-
-      body {
-        font-weight: 300;
-        font-style:normal;
-        text-decoration: none;
-        text-transform: none;
-        letter-spacing: -0.5px;
-        line-height: 1.2;
-        color: var(--dl-color-gray-black);
-        background-color: #a19285;
-      }
+#poweredby .rustlogo {
+  height: 2.5em;
+  margin-left: 0.5em;
+  margin-right: 1em;
+}
