@@ -170,9 +170,16 @@ impl Server {
                 headers = hdr!("text/css");
                 body
             }
+            Request::Js(filename) => {
+                debug!("Procesando request de Js: {}", filename);
+                let body = fs::read(format!("page/resources/js/{}", filename))
+                    .map_err(|e| format!("Error de js: {}", e))?;
+                headers = hdr!("text/javascript");
+                body
+            }
             Request::Image(filename) => {
                 debug!("Procesando request de imagen: {}", filename);
-                let body = fs::read(format!("page/resources/image/{}", filename))
+                let body = fs::read(format!("page/resources/img/{}", filename))
                     .map_err(|e| format!("Error de imagen: {}", e))?;
                 headers = hdr!("image/png");
                 body
