@@ -17,35 +17,37 @@
 
   </head>
   <body>
-    <div id="outer">
+    <main id="main">
 
-      <div class="home-container">
-        <span class="home-title"><span>Temperature Monitor</span></span>
-        <span class="home-powered">Powered by</span>
-        <img
-          alt="rustlogo"
-          src="resources/img/rustlogo.png"
-          class="home-rustlogo"
-        />
-        <div class="home-container1">
-          <div class="home-container2">
-            <img
+      <header>
+        <h1>Temperature Monitor</h1>
+      </header>
+
+      <section>
+
+        <div id="temperature_container">
+          <img
               alt="thermometer"
               src="resources/img/thermometer.png"
-              class="home-thermometer"
-            />
-            <span class="home-temperature" id="temp1"></span>
-          </div>
-          <div class="home-container3">
-            <span class="home-temperature2" id="temp2"></span>
-            <div
-              class="home-plot"
-              style="height: 50vh"
-              id="chartContainer"
-            ></div>
-          </div>
+          />
+          <span id="temperature"></span>
         </div>
-      </div>
-    </div>
+
+        <div id="chart_container"></div>
+
+      </section>
+
+      <footer>
+        <div id="poweredby">
+          <p>Powered by</p>
+          <img
+            alt="Rust (logo)"
+            src="resources/img/rustlogo.png"
+            class="rustlogo"
+          />
+        </div>
+      </footer>
+
+    </main>
   </body>
 </html>
