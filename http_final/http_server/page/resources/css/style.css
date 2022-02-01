@@ -6,7 +6,6 @@
 }
 
 body {
-  background-color: #f00;
   min-height: 100vh;
   height: clamp(200px, 100vh, 1000px);
   width: 100vw;
@@ -21,9 +20,9 @@ header {
 
 section {
   display: flex;
-    flex-direction: row;
-    align-content: center;
-    padding: 1.5em;
+  flex-direction: row;
+  align-content: center;
+  padding: 1.5em;
 }
 
 #temperature_container {
@@ -44,6 +43,7 @@ section {
 
 #chart_container {
   width: 100%;
+  height: calc(70vh + 0.5em);
 }
 
 footer {
@@ -64,4 +64,14 @@ footer {
   height: 2.5em;
   margin-left: 0.5em;
   margin-right: 1em;
+}
+
+@media only screen and (max-width: 1000px) {
+  section {
+    flex-direction: column;
+    align-items: center;
+  }
+  #temperature_container img {
+    display: none;
+  }
 }

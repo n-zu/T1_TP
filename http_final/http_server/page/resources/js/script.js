@@ -1,12 +1,14 @@
 // Variables
+// making them global so they can be accessed from the browser console
 var temperature = 0;
-var points = [];
+var n_points = 100;
 var chart;
+var mainLoop;
 
 // Set data-fetching loop
 // will update the temperature and graph on a fixed interval
 window.onload = function () {
-  setInterval(function () {
+  mainLoop = setInterval(function () {
     httpGetAsync("/data", updateTemp);
     plotGraph();
   }, 2000);
@@ -27,13 +29,13 @@ function updateTemp(newTemp) {
   temperature = newTemp;
   document.getElementById("temperature").innerText =
     format_number_to_temp(temperature);
-  document.querySelector("#main").style.backgroundColor =
-    getOverlappingColor(temperature);
+  document.body.style.backgroundColor = getBackGroundColor(temperature);
 }
 
-function getOverlappingColor(temp) {
-  const opacity = parseInt(255 - (temp * 255) / 100).toString(16);
-  return `#8fffff${opacity}`;
+// function that takes a number from 0 to 100 and returns a color
+function getBackGroundColor(temp) {
+    const n = parseInt(200-2*temp)
+  return `hsl(${n},70%,60%)`;
 }
 
 function format_number_to_temp(number_as_text) {
@@ -41,7 +43,6 @@ function format_number_to_temp(number_as_text) {
 }
 
 function plotGraph() {
-  const n_points = 100;
   const point = { y: parseFloat(temperature) };
 
   chart =
@@ -80,6 +81,8 @@ function plotGraph() {
   chart.options.data[0].dataPoints = [
     ...chart.options.data[0].dataPoints,
     point,
-  ].slice(-n_points);
+  ]
+    .slice(-n_points)
+    .map(({ y }, i) => ({ x: i, y: y }));
   chart.render();
 }
