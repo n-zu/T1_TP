@@ -32,6 +32,7 @@ pub enum Request {
     Data,
     Favicon,
     Css(String),
+    Js(String),
     Image(String),
 }
 
@@ -126,7 +127,10 @@ impl TryFrom<&str> for Request {
         } else if let Some(stripped) = request_uri.strip_prefix("/resources/css/") {
             let filename = stripped;
             Ok(Request::Css(filename.to_owned()))
-        } else if let Some(stripped) = request_uri.strip_prefix("/resources/image/") {
+        } else if let Some(stripped) = request_uri.strip_prefix("/resources/js/") {
+            let filename = stripped;
+            Ok(Request::Js(filename.to_owned()))
+        } else if let Some(stripped) = request_uri.strip_prefix("/resources/img/") {
             let filename = stripped;
             Ok(Request::Image(filename.to_owned()))
         } else {
@@ -139,7 +143,7 @@ impl HttpRequest {
     /// Reads an HTTP Request from the stream
     /// Only GET methods are supported
     /// HTTP version must be 1.1
-    /// Valid URIs are "/", "/data", "/resources/css/*", "/resources/image/*" and "/favicon.ico"
+    /// Valid URIs are "/", "/data", "/resources/css/*", "/resources/js/*", "/resources/img/*" and "/favicon.ico"
     pub fn read_from<T: io::Read>(mut stream: T) -> HttpResult<HttpRequest> {
         let mut buff = [0u8; 1024];
         let size = stream.read(&mut buff)?;

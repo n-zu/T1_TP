@@ -3,158 +3,50 @@
 <html lang="en">
   <head>
     <title>Temperature Monitor</title>
+    
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta charset="utf-8" />
     <meta property="twitter:card" content="summary_large_image" />
-
     <meta http-equiv="Cache-Control" content="max-age=3600" />
 
     <link rel="icon" type="image/x-icon" href="favicon.ico" />
-
-    <style media="all"> 
-      html, body{height:100%;} 
-      #outer{
-      min-height:100%;
-      }
-            
-      body, p { margin:0; padding:0}
-      
-    </style>
-
-    <script type="text/javascript">
-      window.onload = function() {
-        setInterval(function(){ 
-          httpGetAsync("/data", updateTemp);
-          plotGraph();
-        }, 2000);
-      }
-
-      function updateTemp(newTemp) {
-        document.getElementById("temp1").innerText = format_number_to_temp(newTemp);
-        document.getElementById("temp2").innerText = format_number_to_temp(newTemp);
-        document.body.style.backgroundColor = getBackgroundColor(newTemp);
-      }
-
-      function format_number_to_temp(number_as_text) {
-        return (Math.round(number_as_text * 100) / 100).toFixed(1) + ' °C'
-      }
-
-      function httpGetAsync(url, callback) {
-        const xmlHttp = new XMLHttpRequest();
-        xmlHttp.onreadystatechange = function () {
-          if (xmlHttp.readyState == 4 && xmlHttp.status == 200)
-            callback(xmlHttp.responseText);
-        }
-        xmlHttp.open("GET", url, true);
-        xmlHttp.send(null);
-      }
-      function getBackgroundColor(temp) {
-        if (temp < 25) {
-          return '#6BBCD1';
-        } else if (temp < 75) {
-          return '#FEB938';
-        } else {
-          return '#FF6b42';
-        }
-      }
-
-      function plotGraph() {
-        let temperature = document.getElementById('temp1').innerText;
-        let n_points = 100;
-        if (localStorage.points) {
-          points = JSON.parse(localStorage.points).slice(1 - n_points);
-          localStorage.points = JSON.stringify([...points, temperature]);
-        } else {
-          points = [];
-          localStorage.points = JSON.stringify([temperature]);
-        }
-        data_points = points.map(p => ({y: parseFloat(p)}));
-        chart = new CanvasJS.Chart("chartContainer", {
-          animationEnabled: false,
-          backgroundColor: 'transparent',
-
-          data: [{
-            type: "line",
-            indexLabelFontSize: 16,
-            dataPoints: data_points,
-            markerSize: 8,
-            lineColor: 'white',
-            lineThickness: 2,
-          }],
-          axisX: {
-            gridColor: "white", gridThickness: 0, tickLength: 0, lineThickness: 0, labelFormatter: function () {
-              return " ";
-            }
-          },
-          axisY: {minimum: 0, maximum: 100, gridColor: "gray", title: "Temperature (°C)"},
-        });
-        chart.render();
-        
-        setTimeout(function() {
-          chart.options.animationEnabled = true;
-          chart.options.data[0].dataPoints.push({y: temperature});
-          chart.render();
-        }, 300);
-      }
-    </script>
-    <style>
-      html {  line-height: 1.15;}body {  margin: 0;}* {  box-sizing: border-box;  border-width: 0;  border-style: solid;}p,li,ul,pre,div,h1,h2,h3,h4,h5,h6 {  margin: 0;  padding: 0;}button,input,optgroup,select,textarea {  font-family: inherit;  font-size: 100%;  line-height: 1.15;  margin: 0;}button,select {  text-transform: none;}button,[type="button"],[type="reset"],[type="submit"] {  -webkit-appearance: button;}button::-moz-focus-inner,[type="button"]::-moz-focus-inner,[type="reset"]::-moz-focus-inner,[type="submit"]::-moz-focus-inner {  border-style: none;  padding: 0;}button:-moz-focus,[type="button"]:-moz-focus,[type="reset"]:-moz-focus,[type="submit"]:-moz-focus {  outline: 1px dotted ButtonText;}a {  color: inherit;  text-decoration: inherit;}input {  padding: 2px 4px;}img {  display: block;}
-    </style>
-    <style>
-      html {
-        font-family: Inter, serif;
-        font-size: 16px;
-      }
-
-      body {
-        font-weight: 300;
-        font-style:normal;
-        text-decoration: none;
-        text-transform: none;
-        letter-spacing: -0.5px;
-        line-height: 1.2;
-        color: var(--dl-color-gray-black);
-        background-color: #a19285;
-      }
-    </style>
-    <link
-      rel="stylesheet"
-      href="https://fonts.googleapis.com/css2?family=Ubuntu:ital,wght@0,300;0,400;0,500;0,700;1,300;1,400;1,500;1,700&display=swap"
-    />
-    <link
-      rel="stylesheet"
-      href="https://fonts.googleapis.com/css2?family=Inter:wght@100;200;300;400;500;600;700;800;900&display=swap"
-    />
     <link rel="stylesheet" href="./resources/css/style.css" />
+    <script src="./resources/js/script.js" defer></script>
+    <script src="https://canvasjs.com/assets/script/canvasjs.min.js" defer></script>
+
   </head>
   <body>
-    <div id="outer">
-      <p>
-        <link href="./resources/css/home.css" rel="stylesheet" />
-        <div class="home-container">
-          <span class="home-title"><span>Temperature Monitor</span></span>
-          <span class="home-powered">Powered by</span>
+    <main id="main">
+
+      <header>
+        <h1>Temperature Monitor</h1>
+      </header>
+
+      <section>
+
+        <div id="temperature_container">
           <img
-            alt="rustlogo"
-            src="resources/image/rustlogo.png"
-            class="home-rustlogo"
+              alt="thermometer"
+              src="resources/img/thermometer.png"
           />
-          <div class="home-container1">
-            <div class="home-container2">
-              <img
-                alt="thermometer"
-                src="resources/image/thermometer.png"
-                class="home-thermometer"
-              />
-              <span class="home-temperature" id="temp1"></span>
-            </div>
-            <div class="home-container3">
-              <span class="home-temperature2" id="temp2"></span>
-              <div class="home-plot" style="height:50vh" id="chartContainer"></div>
-              <script src="https://canvasjs.com/assets/script/canvasjs.min.js"></script>
-            </div>
-          </div>
+          <span id="temperature"></span>
         </div>
-    </div>
+
+        <div id="chart_container"></div>
+
+      </section>
+
+      <footer>
+        <div id="poweredby">
+          <p>Powered by</p>
+          <img
+            alt="Rust (logo)"
+            src="resources/img/rustlogo.png"
+            class="rustlogo"
+          />
+        </div>
+      </footer>
+
+    </main>
   </body>
 </html>
