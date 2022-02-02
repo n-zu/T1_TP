@@ -1,7 +1,8 @@
 // Variables
 // making them global so they can be accessed from the browser console
-var temperature = 0;
-var n_points = 100;
+var temperature = undefined;
+var n_points_big = 100;
+var n_points_small = 30;
 var chart;
 var mainLoop;
 
@@ -34,7 +35,7 @@ function updateTemp(newTemp) {
 
 // function that takes a number from 0 to 100 and returns a color
 function getBackGroundColor(temp) {
-    const n = parseInt(200-2*temp)
+  const n = parseInt(200 - 2 * temp);
   return `hsl(${n},70%,60%)`;
 }
 
@@ -44,11 +45,12 @@ function format_number_to_temp(number_as_text) {
 
 function plotGraph() {
   const point = { y: parseFloat(temperature) };
+  const isBig = window.innerWidth > 1000;
 
   chart =
     chart ??
     new CanvasJS.Chart("chart_container", {
-      animationEnabled: false,
+      animationEnabled: true,
       backgroundColor: "transparent",
 
       data: [
@@ -74,7 +76,6 @@ function plotGraph() {
         minimum: 0,
         maximum: 100,
         gridColor: "gray",
-        title: "Temperature (°C)",
       },
     });
 
@@ -82,7 +83,10 @@ function plotGraph() {
     ...chart.options.data[0].dataPoints,
     point,
   ]
-    .slice(-n_points)
+    .slice(-(isBig ? n_points_big : n_points_small))
     .map(({ y }, i) => ({ x: i, y: y }));
+
+  chart.options.axisY.title = isBig ? "Temperature (°C)" : undefined;
+
   chart.render();
 }
