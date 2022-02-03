@@ -333,7 +333,7 @@ mod tests {
     #[test]
     fn valid_request_with_headers_and_body() {
         let request = HttpRequest::read_from(
-            "GET /resources/image/foto HTTP/1.1\r\nheader\r\n\r\nbody".as_bytes(),
+            "GET /resources/img/foto HTTP/1.1\r\nheader\r\n\r\nbody".as_bytes(),
         );
 
         assert!(request.is_ok());
