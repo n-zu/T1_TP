@@ -1,10 +1,12 @@
 // Variables
 // making them global so they can be accessed from the browser console
-var temperature = undefined;
-var n_points_big = 100;
-var n_points_small = 30;
-var chart;
-var mainLoop;
+let temperature = undefined;
+let n_points_big = 100;
+let n_points_small = 30;
+let chart;
+let mainLoop;
+
+const TIMEOUT = 2000;
 
 // Set data-fetching loop
 // will update the temperature and graph on a fixed interval
@@ -12,7 +14,7 @@ window.onload = function () {
   mainLoop = setInterval(function () {
     httpGetAsync("/data", updateTemp);
     plotGraph();
-  }, 2000);
+  }, TIMEOUT);
 };
 
 // Function to make an HTTP GET request
@@ -29,7 +31,7 @@ function httpGetAsync(url, callback) {
 function updateTemp(newTemp) {
   temperature = newTemp;
   document.getElementById("temperature").innerText =
-    format_number_to_temp(temperature);
+      formatNumberToTemp(temperature);
   document.body.style.backgroundColor = getBackGroundColor(temperature);
 }
 
@@ -39,17 +41,19 @@ function getBackGroundColor(temp) {
   return `hsl(${n},70%,60%)`;
 }
 
-function format_number_to_temp(number_as_text) {
+// Function that receives a number as a String, rounds it to 1 decimal
+// and appends a suffix "°C" to the final result
+function formatNumberToTemp(number_as_text) {
   return (Math.round(number_as_text * 100) / 100).toFixed(1) + " °C";
 }
 
 function plotGraph() {
-  const point = { y: parseFloat(temperature) };
+  const point = {y: parseFloat(temperature)};
   const isBig = window.innerWidth > 1000;
 
   chart =
-    chart ??
-    new CanvasJS.Chart("chart_container", {
+      chart ??
+      new CanvasJS.Chart("chart_container", {
       animationEnabled: true,
       backgroundColor: "transparent",
 
