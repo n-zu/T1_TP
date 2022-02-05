@@ -1,5 +1,3 @@
-#![allow(dead_code)]
-
 use super::*;
 use crate::{
     helpers::{build_control_byte, PacketType},
@@ -7,8 +5,6 @@ use crate::{
     traits::{MQTTBytes, MQTTEncoding},
 };
 
-#[doc(hidden)]
-const PINGRESP_PACKET_TYPE: u8 = 0b11010000;
 #[doc(hidden)]
 const RESERVED_BITS: u8 = 0b00000000;
 #[doc(hidden)]

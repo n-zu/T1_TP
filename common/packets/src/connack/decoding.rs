@@ -1,5 +1,3 @@
-#![allow(dead_code)]
-
 use std::io::Read;
 
 use super::*;
@@ -10,21 +8,9 @@ use crate::{
 };
 
 #[doc(hidden)]
-const CONNACK_CONTROL_TYPE: u8 = 0b10;
-#[doc(hidden)]
 const CONNACK_RESERVED_BITS: u8 = 0;
 #[doc(hidden)]
 const CONNACK_FIXED_REMAINING_LENGTH: u8 = 0b10;
-#[doc(hidden)]
-const CONNACK_UNACCEPTABLE_PROTOCOL: u8 = 1;
-#[doc(hidden)]
-const CONNACK_IDENTIFIER_REJECTED: u8 = 2;
-#[doc(hidden)]
-const CONNACK_SERVER_UNAVAILABLE: u8 = 3;
-#[doc(hidden)]
-const CONNACK_BAD_USER_NAME_OR_PASSWORD: u8 = 4;
-#[doc(hidden)]
-const CONNACK_NOT_AUTHORIZED: u8 = 5;
 
 impl MQTTDecoding for Connack {
     /// Return a Connack with valid state from a stream of bytes

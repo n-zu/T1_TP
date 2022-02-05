@@ -1,5 +1,3 @@
-#![allow(dead_code)]
-
 use super::*;
 use crate::{
     helpers::{build_control_byte, PacketType},
@@ -8,8 +6,6 @@ use crate::{
     topic_filter::TopicFilter,
     traits::{MQTTBytes, MQTTEncoding},
 };
-
-const FIXED_FLAGS: u8 = 2;
 
 impl MQTTEncoding for Subscribe {
     /// Returns the subscribe packet encoded bytes

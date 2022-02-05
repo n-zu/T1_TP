@@ -1,5 +1,3 @@
-#![allow(dead_code)]
-
 use crate::{
     helpers::{build_control_byte, PacketType},
     packet_error::{PacketError, PacketResult},
@@ -17,13 +15,9 @@ const QOS_SHIFT: u8 = 1;
 #[doc(hidden)]
 const DUP_FLAG: u8 = 0b00001000;
 #[doc(hidden)]
-const PUBLISH_PACKET_TYPE: u8 = 0b00110000;
-#[doc(hidden)]
 const SINGLE_LEVEL_WILDCARD: char = '+';
 #[doc(hidden)]
 const MULTI_LEVEL_WILDCARD: char = '#';
-#[doc(hidden)]
-const MSG_INVALID_PACKET_ID: &str = "Packet identifier must be greater than zero";
 
 impl MQTTEncoding for Publish {
     ///

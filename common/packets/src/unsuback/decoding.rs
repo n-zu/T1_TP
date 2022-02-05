@@ -1,20 +1,13 @@
-#![allow(unused)]
 use std::io::Read;
 
 use super::*;
 use crate::{
     helpers::{check_packet_type, check_reserved_bits, PacketType},
-    packet_error::{ErrorKind, PacketError, PacketResult},
+    packet_error::PacketResult,
     packet_reader,
     traits::MQTTDecoding,
 };
 
-#[doc(hidden)]
-const MSG_INVALID_RESERVED_BITS: &str = "Reserved bits are not equal to 0";
-#[doc(hidden)]
-const MSG_PACKET_TYPE_UNSUBACK: &str = "Packet type must be 11 for a Unsuback packet";
-#[doc(hidden)]
-const UNSUBACK_CONTROL_PACKET_TYPE: u8 = 11;
 #[doc(hidden)]
 const FIXED_REMAINING_LENGTH: usize = 2;
 
@@ -33,18 +26,6 @@ impl MQTTDecoding for Unsuback {
 }
 
 impl Unsuback {
-    #[doc(hidden)]
-    fn verify_control_packet_type(control_byte: &u8) -> PacketResult<()> {
-        let control_packet_type = (control_byte & 0b11110000) >> 4;
-        if control_packet_type != UNSUBACK_CONTROL_PACKET_TYPE {
-            return Err(PacketError::new_kind(
-                MSG_PACKET_TYPE_UNSUBACK,
-                ErrorKind::InvalidControlPacketType,
-            ));
-        }
-        Ok(())
-    }
-
     #[doc(hidden)]
     fn read_packet_id(bytes: &mut impl Read) -> u16 {
         let mut packet_id_buffer = [0u8; FIXED_REMAINING_LENGTH];

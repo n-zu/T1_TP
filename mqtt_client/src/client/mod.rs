@@ -53,7 +53,6 @@ pub(crate) const STOP_TIMEOUT: Duration = Duration::from_millis(200);
 pub(crate) const KEEP_ALIVE_SUBTRACTION: Duration = Duration::from_secs(2);
 
 impl<T: Observer> Client<T> {
-    #![allow(dead_code)]
     /// Creates a new Client which connects to the TCP Listener on the given address, by
     /// sending the given CONNECT packet.
     /// The client must be initialized with an Observer to receive the different

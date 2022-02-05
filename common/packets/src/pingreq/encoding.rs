@@ -1,5 +1,3 @@
-#![allow(dead_code)]
-
 use crate::{
     helpers::{build_control_byte, PacketType},
     traits::MQTTEncoding,
