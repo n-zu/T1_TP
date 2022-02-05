@@ -1,8 +1,6 @@
-#![allow(unused)]
 use std::io::Read;
 
 use crate::qos::QoSLevel;
-use crate::qos::QoSLevel::QoSLevel0;
 use crate::{
     helpers::{check_packet_type, check_reserved_bits, PacketType},
     packet_error::{ErrorKind, PacketError, PacketResult},

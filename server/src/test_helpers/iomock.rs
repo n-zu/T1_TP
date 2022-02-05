@@ -1,5 +1,3 @@
-#![allow(dead_code)]
-
 use std::{
     io::{self, Read},
     time::Duration,
@@ -77,10 +75,6 @@ impl IOMock {
             closed: false,
             buf: vec![],
         }
-    }
-
-    pub fn is_empty(&self) -> bool {
-        self.buf.is_empty()
     }
 }
 

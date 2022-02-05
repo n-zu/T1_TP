@@ -1,5 +1,3 @@
-#![allow(unused)]
-
 use crate::{
     helpers::{build_control_byte, PacketType},
     packet_error::{ErrorKind, PacketError, PacketResult},

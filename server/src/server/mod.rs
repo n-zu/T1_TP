@@ -1,5 +1,3 @@
-#![allow(dead_code)]
-
 use std::{
     convert::TryFrom,
     io::{self, Read, Write},

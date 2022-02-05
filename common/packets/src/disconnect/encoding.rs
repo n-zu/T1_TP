@@ -1,5 +1,3 @@
-#![allow(dead_code)]
-
 use crate::{
     helpers::{build_control_byte, PacketType},
     traits::{MQTTBytes, MQTTEncoding},
@@ -9,7 +7,6 @@ use super::*;
 
 #[doc(hidden)]
 const DISCONNECT_REMAINING_LENGTH: u8 = 0;
-const PACKET_TYPE_SHIFT: u8 = 4;
 
 impl MQTTEncoding for Disconnect {
     /// Encodes the Disconnect packet according to the

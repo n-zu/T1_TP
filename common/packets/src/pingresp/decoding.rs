@@ -1,5 +1,3 @@
-#![allow(dead_code)]
-
 use crate::{
     helpers::{check_packet_type, check_reserved_bits, PacketType},
     packet_error::{PacketError, PacketResult},

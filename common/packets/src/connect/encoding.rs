@@ -1,5 +1,3 @@
-#![allow(dead_code)]
-
 use crate::{
     helpers::{build_control_byte, PacketType},
     packet_error::{PacketError, PacketResult},
@@ -10,12 +8,6 @@ use crate::{
 
 use super::*;
 
-#[doc(hidden)]
-const CONTINUATION_SHIFT: u8 = 7;
-#[doc(hidden)]
-const ENCODED_LEN_MAX_BYTES: usize = 4;
-#[doc(hidden)]
-const PACKET_TYPE_SHIFT: u8 = 4;
 #[doc(hidden)]
 const USER_NAME_WITHOUT_PASSWORD_MSG: &str =
     "Se intento crear un paquete con user_name pero sin password";

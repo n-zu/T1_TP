@@ -1,14 +1,11 @@
-#![allow(unused)]
-
 use super::*;
 use crate::{
     helpers::{build_control_byte, PacketType},
-    packet_error::{ErrorKind, PacketError, PacketResult},
+    packet_error::PacketResult,
     traits::{MQTTBytes, MQTTEncoding},
 };
 
 #[doc(hidden)]
-const MSG_INVALID_PACKET_ID: &str = "Packet identifier must be greater than zero";
 const FIXED_REMAINING_LENGTH: u8 = 0b10;
 
 impl MQTTEncoding for Unsuback {
