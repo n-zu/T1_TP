@@ -26,7 +26,7 @@ Diapositivas explicativas del desarrollo y el funcionamiento la implementacion
 ## Comandos
 Algunos de los comandos disponibles en el Makefile son:
 * **make test:** ejecuta las pruebas de todo el proyecto
-* **make run-server:** abre el servidor HTTP y la [página web](localhost:3030)
+* **make run-server:** abre el servidor HTTP y la [página web](http://localhost:3030)
 * **make run-thermometer** abre el termómetro
 * **make**: ejecuta el linter, clippy y las pruebas de todo el proyecto
 
