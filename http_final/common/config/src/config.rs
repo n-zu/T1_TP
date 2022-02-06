@@ -2,6 +2,7 @@ use std::{
     collections::HashMap,
     fs::File,
     io::{BufRead, BufReader, Read},
+    time::Duration,
 };
 
 #[derive(Debug, Clone)]
@@ -12,7 +13,7 @@ pub struct Config {
     pub topic: String,
     pub user: String,
     pub password: String,
-    pub period: u64,
+    pub period: Duration,
 }
 
 const SEP: &str = "=";
@@ -43,7 +44,7 @@ impl Config {
             topic: config.remove("topic")?,
             user: config.remove("user")?,
             password: config.remove("password")?,
-            period: config.remove("period")?.parse().ok()?,
+            period: Duration::from_millis(config.remove("period")?.parse().ok()?),
         })
     }
 }
