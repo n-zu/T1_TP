@@ -1,9 +1,13 @@
 use crate::{ClientResult, Thermometer, ThermometerObserver};
 use config::config::Config;
-use mqtt_client::Client;
+use mqtt_client::{Client, Message};
 use packets::connect::{Connect, ConnectBuilder};
 use packets::PacketResult;
 use std::io::Read;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::mpsc::{channel, Receiver, Sender};
+use std::sync::Arc;
+use std::time::Duration;
 use std::{env, thread};
 
 #[doc(hidden)]
@@ -11,34 +15,33 @@ const KEEP_ALIVE: u16 = 0;
 #[doc(hidden)]
 const CLEAN_SESSION: bool = true;
 #[doc(hidden)]
-const CONNECT_TIME: u64 = 1000;
+const MQTT_TIMEOUT: Duration = Duration::from_secs(5);
 
 /// Starts the loop that allows a thermometer to publish its measure to a
 /// MQTT broker
-pub fn init() {
-    match make_client() {
-        Ok((client, config)) => {
-            let mut thermometer = Thermometer::new(client, config);
-            println!("Comenzando a enviar PUBLISH");
-            thread::spawn(move || {
-                if let Err(e) = thermometer.publish() {
-                    println!("Error publicando temperaturas: {:?}", e);
-                }
-            });
+pub fn init() -> ClientResult<()> {
+    let (client, config, receiver) = make_client()?;
+    let stop = Arc::new(AtomicBool::new(false));
+    let mut thermometer = Thermometer::new(client, config, receiver, stop.clone());
+    println!("Comenzando a enviar PUBLISH");
+
+    let handle = thread::spawn(move || {
+        if let Err(e) = thermometer.publish() {
+            println!("Error publicando temperaturas: {:?}", e);
         }
-        Err(e) => {
-            println!("Error inicializando termómetro: {:?}", e);
-            return;
-        }
-    }
+    });
+
     println!("Presione [ENTER] para detener la ejecucion del cliente\n____________\n");
     let mut buf = [0u8; 1];
     std::io::stdin().read_exact(&mut buf).unwrap_or(());
+    stop.store(true, Ordering::Relaxed);
+    let _ = handle.join();
+    Ok(())
 }
 
 /// Returns a valid Client and Config
 #[doc(hidden)]
-fn make_client() -> ClientResult<(Client<ThermometerObserver>, Config)> {
+fn make_client() -> ClientResult<(Client<ThermometerObserver>, Config, Receiver<Message>)> {
     let config = make_config()?;
 
     println!("CONFIG\n{:?}\n____________\n", config);
@@ -46,13 +49,16 @@ fn make_client() -> ClientResult<(Client<ThermometerObserver>, Config)> {
     let connect = make_connect(&config)?;
     println!("CONNECT\n{:?}\n____________\n", connect);
 
-    let client = get_client(&config, connect)?;
+    let (sender, receiver) = channel();
+    let client = get_client(&config, connect, sender)?;
 
-    // FIXME: habría que somehow ponerle para que espere a que se conecte con el observer
-    std::thread::sleep(std::time::Duration::from_millis(CONNECT_TIME));
     println!("____________\n");
 
-    Ok((client, config))
+    match receiver.recv_timeout(MQTT_TIMEOUT) {
+        Ok(Message::Connected(Ok(_))) => Ok((client, config, receiver)),
+        Err(e) => Err(Box::new(e)),
+        _ => Err("Error conectando al broker MQTT - se recibió respuesta inesperada".into()),
+    }
 }
 
 /// Returns a valid Config
@@ -77,10 +83,14 @@ fn make_connect(config: &Config) -> PacketResult<Connect> {
 
 /// Returns a valid Client given a config and a CONNECT packet
 #[doc(hidden)]
-fn get_client(config: &Config, connect: Connect) -> ClientResult<Client<ThermometerObserver>> {
+fn get_client(
+    config: &Config,
+    connect: Connect,
+    sender: Sender<Message>,
+) -> ClientResult<Client<ThermometerObserver>> {
     Ok(Client::new(
         &format!("{}:{}", config.server, config.port),
-        ThermometerObserver {},
+        ThermometerObserver::new(sender),
         connect,
     )?)
 }

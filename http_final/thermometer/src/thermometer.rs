@@ -1,6 +1,15 @@
+use std::{
+    sync::{
+        atomic::{AtomicBool, Ordering},
+        mpsc::Receiver,
+        Arc,
+    },
+    time,
+};
+
 use crate::{ClientResult, ThermometerObserver};
 use config::config::Config;
-use mqtt_client::Client;
+use mqtt_client::{Client, Message};
 use packets::publish::Publish;
 use packets::qos::QoSLevel;
 use packets::PacketResult;
@@ -16,24 +25,45 @@ const SEED_TEMP: Option<f32> = None;
 pub struct Thermometer {
     client: Client<ThermometerObserver>,
     config: Config,
+    receiver: Receiver<Message>,
+    stop: Arc<AtomicBool>,
 }
 
 impl Thermometer {
     /// Returns a new Thermometer
-    pub fn new(client: Client<ThermometerObserver>, config: Config) -> Thermometer {
-        Thermometer { client, config }
+    pub fn new(
+        client: Client<ThermometerObserver>,
+        config: Config,
+        receiver: Receiver<Message>,
+        stop: Arc<AtomicBool>,
+    ) -> Thermometer {
+        Thermometer {
+            client,
+            config,
+            receiver,
+            stop,
+        }
     }
 
     /// Publish the measured temperature to the MQTT Broker
     pub fn publish(&mut self) -> ClientResult<()> {
         let mut temperature = self.measure_temperature(SEED_TEMP);
-        loop {
+        while !self.stop.load(Ordering::Relaxed) {
             temperature = self.measure_temperature(Some(temperature));
             let publish = self.create_publish(temperature)?;
             println!("- - - - - - -\n{:}", publish.payload());
             self.client.publish(publish)?;
-            std::thread::sleep(std::time::Duration::from_millis(self.config.period));
+            let time_sent = time::Instant::now();
+            match self.receiver.recv_timeout(self.config.period) {
+                Ok(Message::Published(Ok(_))) => {
+                    std::thread::sleep(self.config.period - time_sent.elapsed());
+                }
+                _ => {
+                    return Err("Error publicando temperatura: No se recibió respuesta o se recibió respuesta inesperada".into());
+                }
+            }
         }
+        Ok(())
     }
 
     /// Algorithm that generates new temperatures based on the given temperature

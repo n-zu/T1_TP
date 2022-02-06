@@ -10,5 +10,7 @@ mod thermometer;
 type ClientResult<T> = Result<T, Box<dyn Error>>;
 
 fn main() {
-    setup::init();
+    if let Err(e) = setup::init() {
+        println!("Error en la ejecución del programa: {}", e);
+    }
 }
