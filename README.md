@@ -33,7 +33,7 @@ Algunos de los comandos disponibles en el Makefile son:
 ## Servidor de prueba
 Tenemos un servidor de prueba disponible abierto todo el día.
 Datos de conexión:
-* **IP:** 150.230.76.67
+* **IP:** 144.22.236.17
 * **Puerto:** 1883
 * **Usuario:** demo
 * **Clave:** demo
