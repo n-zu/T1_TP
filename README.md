@@ -1,6 +1,9 @@
 # MQTT Rústico
 Proyecto de la materia de Taller de Programación I - FIUBA - 2do Cuatrimestre 2021. Implementación del protocolo MQTT 3.1.1 en una aplicación cliente con interfaz gráfica y el respectivo servidor.
 
+[Consigna](https://taller-1-fiuba-rust.github.io/proyecto/anteriores/21C2/proyecto.html)
+Ver branch `http_final` para añadido en entrega final.
+
 ## Grupo Rostov FC
 * **Elián Foppiano** - [efoppiano](https://github.com/efoppiano)
 * **Facundo Mastricchio** - [FacuMastri](https://github.com/FacuMastri)
@@ -27,7 +30,7 @@ Algunos de los comandos disponibles en el Makefile son:
 ## Servidor de prueba
 Tenemos un servidor de prueba disponible abierto todo el día.
 Datos de conexión:
-* **IP:** 150.230.76.67
+* **IP:** 144.22.236.17
 * **Puerto:** 1883
 * **Usuario:** demo
 * **Clave:** demo
