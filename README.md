@@ -1,12 +1,12 @@
 # MQTT Rústico
 Proyecto de la materia de Taller de Programación I - FIUBA - 2do Cuatrimestre 2021. Implementación del protocolo MQTT 3.1.1 en una aplicación cliente con interfaz gráfica y el respectivo servidor.
 
-> [consigna original](https://taller-1-fiuba-rust.github.io/proyecto_2C2021.html) 
+> [consigna original](https://taller-1-fiuba-rust.github.io/proyecto/anteriores/21C2/proyecto.html) 
 
 ## Adición para el examen integrador
 Se agregó un cliente al servidor MQTT que simula ser un termómetro que publica las temperaturas detectadas a un tópico predeterminado. De esta manera, un servidor HTTP suscrito a este tópico muestra las temperaturas detectadas por medio de una página web.
 
-> [apendice final](https://taller-1-fiuba-rust.github.io/finales_2022_feb.html)
+> [apendice final](https://taller-1-fiuba-rust.github.io/proyecto/anteriores/21C2/finales_2022_feb_mar.html)
 
 ## Grupo Rostov FC
 * **Elián Foppiano** - [efoppiano](https://github.com/efoppiano)
