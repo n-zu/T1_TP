@@ -1,8 +1,7 @@
 # MQTT Rústico
 Proyecto de la materia de Taller de Programación I - FIUBA - 2do Cuatrimestre 2021. Implementación del protocolo MQTT 3.1.1 en una aplicación cliente con interfaz gráfica y el respectivo servidor.
 
-[Consigna](https://taller-1-fiuba-rust.github.io/proyecto/anteriores/21C2/proyecto.html)
-Ver branch `http_final` para añadido en entrega final.
+[Consigna](https://taller-1-fiuba-rust.github.io/proyecto/anteriores/21C2/proyecto.html). Ver branch `http_final` para añadido en entrega final.
 
 ## Grupo Rostov FC
 * **Elián Foppiano** - [efoppiano](https://github.com/efoppiano)
